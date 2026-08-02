@@ -19,6 +19,12 @@ versions track the game's release trains (0.1.0 = tooling that shipped Dawned 0.
     audit, data-access rules, bake workers) — docs/ARCHITECTURE.md
   - Roadmap A0–A6 synced to the game repo's phases; CLAUDE.md/AGENTS.md working agreements.
 
+### Changed
+- Folded owner decisions (2026-08-02): admin panel confirmed at `play.pathlands.cc/admin` with IP
+  allowlist off; password resets via this panel confirmed; zone editing gains **weather
+  probability sliders** and the Map Editor zone preview can force a weather state (weather is now
+  0.1.0 visual scope in the game — see game repo WORLD.md §4.6).
+
 ### Notes
 - No code yet by design — implementation starts at A0 once the game repo's P1 delivers the shared
   schema package.

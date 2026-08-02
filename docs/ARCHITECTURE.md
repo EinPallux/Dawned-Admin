@@ -18,8 +18,8 @@
   code* the game balances with), constants, map/chunk format codecs.
 
 ## 2. Process & Routing (on the VPS)
-`dawned-admin.service` (Node, port 8082) behind Caddy at `play.pathlands.cc/admin` (default; see
-game USER_QUESTIONS Q10). Serves the built SPA + `/api`. Local dev: `pnpm dev` (Vite + API,
+`dawned-admin.service` (Node, port 8082) behind Caddy at `play.pathlands.cc/admin` (decided
+2026-08-02; IP allowlist off for now). Serves the built SPA + `/api`. Local dev: `pnpm dev` (Vite + API,
 pointed at local Postgres from the game repo's dev setup).
 
 ## 3. AuthN/AuthZ

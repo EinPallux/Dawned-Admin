@@ -55,8 +55,9 @@ time-to-kill both directions vs. the COMBAT.md targets (the balance sanity tool)
 - **Vendors:** stock rows with price-override and barter builder; per-settlement assignment view.
 - **XP & curves:** editable tables (level rows) with chart preview + "playtime estimate" hint
   (kills+quests model); profession curves alongside.
-- **Zones (non-spatial fields):** ambience profile editor with color pickers + music/sfx set
-  dropdowns (spatial editing lives in the Map Editor; both views deep-link at each other).
+- **Zones (non-spatial fields):** ambience profile editor with color pickers, music/sfx set
+  dropdowns and weather probability sliders (clear/overcast/rain/storm weights per WORLD.md §4.6;
+  spatial editing lives in the Map Editor; both views deep-link at each other).
 - **NPCs:** identity/model/role bindings (vendor/quest refs), dialogue set editor (see §6 quest
   dialogue component — shared), routine summary (waypoints edited spatially in Map Editor).
 - **World settings:** typed key/value list (xpRate, inviteCode, motd, dayNightEnabled…) with

@@ -71,8 +71,9 @@ checks — not a game client).
 
 ### 2.4 Zones & POI Mode
 - **Zone polygons:** draw/edit vertices on the terrain; properties (name, level band, ambience
-  profile: fog color/density/light tint/music/sfx set — with instant viewport preview toggle,
-  safe-zone flag, settlement ref); overlap validation (every land point in exactly one zone).
+  profile: fog color/density/light tint/music/sfx set/weather weights — with instant viewport
+  preview toggle incl. forcing a weather state to eyeball rain/storm looks, safe-zone flag,
+  settlement ref); overlap validation (every land point in exactly one zone).
 - **POIs:** place discovery points (kind, radius, XP basis points, icon, name) with discover-radius
   ring preview.
 - **Interactables:** place chests (loot table ref), shrines, campfires, signposts (text), quest
