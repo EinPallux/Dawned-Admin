@@ -49,4 +49,6 @@ docs/         ADMIN_DESIGN.md · MAP_EDITOR.md · CONTENT_EDITORS.md · ARCHITEC
   float on a branch head.
 
 ## Current state
-Planning complete; no code yet. Next: **A0** after game P1 lands the shared schema.
+Planning complete; no code yet. **Game P1 is live (2026-08-02) — the shared schema, auth stack
+and accounts/characters tables exist in production, so A0 is unlocked and is the next phase
+here.** Not started; wait for the owner's go.

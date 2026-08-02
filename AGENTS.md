@@ -17,4 +17,5 @@ truth).
 - **Process:** follow ROADMAP.md A-phases (synced to game P-phases); `pnpm check` before done;
   CHANGELOG `[Unreleased]`; design questions go to the game repo's USER_QUESTIONS.md with a
   recommended default.
-- **State:** planning complete, no code yet; next = A0 (after game P1 ships the shared schema).
+- **State:** planning complete, no code yet. Game P1 is live (2026-08-02) → A0 is unlocked and
+  is the next phase here; not started.
