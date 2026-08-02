@@ -2,10 +2,11 @@
 
 > Every database-driven piece of Dawned gets a real editor: schema-driven forms (generated from
 > the shared zod schemas), draft/publish, duplication, search, and per-type helpers that make
-> authoring *pleasant*. Data contracts: game repo `docs/tech/DATABASE.md` §3; design sources in
+> authoring _pleasant_. Data contracts: game repo `docs/tech/DATABASE.md` §3; design sources in
 > game `docs/design/*`.
 
 ## 1. Shared Editor Framework
+
 - **List views:** virtualized tables per content type — columns: id, name, key fields, status
   (draft-dirty dot), updated by/at; filter bar + saved filters; bulk actions (duplicate, export
   JSON, delete-with-usage-check).
@@ -21,6 +22,7 @@
 - **Import/export:** JSON export/import per entity or filtered set (backup, bulk edits, sharing).
 
 ## 2. Item Editor
+
 Form: category/slot/rarity/ilvl/class-lock/stack/value + stats builder (attribute rows vs. the
 budget meter — a live bar showing spent vs. `statBudget` from the formula, over-budget = amber),
 weapon damage block (auto min/max from avg±12%), effect picker (Epic+ minor effects from the
@@ -31,6 +33,7 @@ Helpers: "create tier series" wizard (T1–T5 variants from a base), vendor-pric
 appearance list.
 
 ## 3. Enemy Editor
+
 Form: name/archetype/level band/rank/model (asset picker with anim-set validation — model must
 carry the archetype's required clips; mismatches listed), scale/tint, stat overrides vs. ƒ curve,
 aggro/leash radii, social tag, XP mult, gold range, **ability kit builder** (rows: ability,
@@ -40,6 +43,7 @@ Helper: "solo TTK calculator" — given a class/level per game formulas, shows e
 time-to-kill both directions vs. the COMBAT.md targets (the balance sanity tool).
 
 ## 4. Ability & Skill Node Editors
+
 - Ability editor: full COMBAT.md §4 field set grouped (cost/timing/targeting/effects/anim-vfx-sfx
   refs with existence validation); effect list builder with typed params; "tooltip preview"
   renders the player-facing tooltip from the description template + numbers live.
@@ -49,9 +53,10 @@ time-to-kill both directions vs. the COMBAT.md targets (the balance sanity tool)
   changes hot-reload (the live-tuning loop used from game phase P5 on).
 
 ## 5. Loot, Vendor, XP/Curve, Zone, NPC, World-Settings Editors
+
 - **Loot tables:** entry rows (item/table/gold, weight, qty, conditions) with nesting breadcrumbs
-  + cycle detection + **roll simulator** (1k/10k rolls → distribution table with rarity coloring —
-  the "does this feel right" tool).
+  - cycle detection + **roll simulator** (1k/10k rolls → distribution table with rarity coloring —
+    the "does this feel right" tool).
 - **Vendors:** stock rows with price-override and barter builder; per-settlement assignment view.
 - **XP & curves:** editable tables (level rows) with chart preview + "playtime estimate" hint
   (kills+quests model); profession curves alongside.
@@ -64,6 +69,7 @@ time-to-kill both directions vs. the COMBAT.md targets (the balance sanity tool)
   per-key descriptions and hot-reload badges.
 
 ## 6. Quest Editor (the second flagship)
+
 - **Structure canvas:** vertical step list (drag-reorder) — each step a card: type
   (KILL/COLLECT/DELIVER/TALK/EXPLORE/INTERACT/USE_AT), typed params via entity-ref pickers,
   tracker text with live counter preview, optional map-hint circle (mini-map picker), on-complete
@@ -83,10 +89,11 @@ time-to-kill both directions vs. the COMBAT.md targets (the balance sanity tool)
   seconds (used heavily in game P11).
 
 ## 7. Publish Semantics (per content type)
-| Type | Hot-reloadable? |
-|---|---|
-| Item/ability/node/enemy *numbers*, loot, vendors, curves, world settings, dialogue/quest text | ✅ live (`/ops/reload-content`) |
-| New entities (items, enemies, quests…) | ✅ live (clients fetch bundle on hash change) |
-| Enemy model/archetype swaps, zone ambience | ✅ live (clients apply next zone-load; note shown) |
-| Map bakes (terrain/placements/spawners/walkgrid) | ⚠ staged: live chunk-swap where safe, else "applies on restart" (publish dialog states which, per game ARCHITECTURE.md §5) |
-| Schema migrations | ❌ deploy path (UPDATE.sh), by design |
+
+| Type                                                                                          | Hot-reloadable?                                                                                                            |
+| --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Item/ability/node/enemy _numbers_, loot, vendors, curves, world settings, dialogue/quest text | ✅ live (`/ops/reload-content`)                                                                                            |
+| New entities (items, enemies, quests…)                                                        | ✅ live (clients fetch bundle on hash change)                                                                              |
+| Enemy model/archetype swaps, zone ambience                                                    | ✅ live (clients apply next zone-load; note shown)                                                                         |
+| Map bakes (terrain/placements/spawners/walkgrid)                                              | ⚠ staged: live chunk-swap where safe, else "applies on restart" (publish dialog states which, per game ARCHITECTURE.md §5) |
+| Schema migrations                                                                             | ❌ deploy path (UPDATE.sh), by design                                                                                      |

@@ -1,0 +1,63 @@
+{
+  "name": "dawned-admin",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Dawned-Admin — map editor, content database editors and live ops panel for the Dawned MMORPG",
+  "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "concurrently -n api,web -c blue,magenta \"pnpm dev:api\" \"pnpm dev:web\"",
+    "dev:api": "tsx watch src/server/index.ts",
+    "dev:web": "vite",
+    "build": "pnpm build:server && pnpm build:web",
+    "build:server": "tsc -b src/server",
+    "build:web": "vite build",
+    "start": "node --enable-source-maps dist/server/index.js",
+    "typecheck": "tsc -b --pretty",
+    "lint": "eslint . --max-warnings 0",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test"
+  },
+  "dependencies": {
+    "@dawned/shared": "github:EinPallux/Dawned#356b4d59419bcf1c144ab763b83284b9a04cd916&path:packages/shared",
+    "@fastify/cookie": "^11.0.2",
+    "@fastify/static": "^8.3.0",
+    "@fontsource/inter": "^5.2.8",
+    "@fontsource/jetbrains-mono": "^5.2.8",
+    "@tanstack/react-query": "^5.90.5",
+    "argon2": "^0.44.0",
+    "drizzle-orm": "0.45.2",
+    "fastify": "^5.6.2",
+    "pg": "8.22.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-router-dom": "^7.9.5",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@types/node": "^22.19.2",
+    "@types/pg": "8.20.3",
+    "@types/react": "^19.2.5",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.1",
+    "concurrently": "^9.2.1",
+    "eslint": "^9.39.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.9.0",
+    "playwright": "1.56.1",
+    "prettier": "^3.6.2",
+    "tsx": "^4.20.10",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.4",
+    "vite": "^7.2.4",
+    "vitest": "^3.2.4"
+  }
+}

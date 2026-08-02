@@ -5,6 +5,7 @@ first, every session. **Read the game repo's CLAUDE.md too** — Dawned (game) a
 (this) are one project in two repos, and the game repo's docs are the design source of truth.
 
 ## What this repo is
+
 The web control panel for the Dawned MMORPG: 3D **Map Editor**, **content database editors**
 (items, enemies, abilities, loot, vendors, quests, zones, curves), and **Live Ops** (players,
 moderation, server dashboard). Users: the owner + trusted GMs. It runs on the same VPS as the
@@ -12,13 +13,14 @@ game, shares its PostgreSQL, and consumes `@dawned/shared` (from the game repo, 
 dependency) for schema/validation/formulas — editors must never drift from the game.
 
 ## Non-negotiable rules
+
 1. **Drafts, then publish.** Editors write draft rows only; the live game changes exclusively via
    the validated publish pipeline (validate → diff review → bake → version → notify). No endpoint
    may mutate published/live content directly.
 2. **Narrow, audited player-data writes.** Player/character tables get typed, single-purpose,
    audited endpoints (grant item, reset password, ban…) — never a generic row editor.
 3. **Live actions go through the game's ops API** (localhost + shared secret) — this app never
-   reaches into game memory or simulates game logic itself (it *uses* shared formulas for
+   reaches into game memory or simulates game logic itself (it _uses_ shared formulas for
    previews/ƒ-suggests only).
 4. **Schema-driven forms.** UI forms are generated from the shared zod schemas + per-type
    enhancements. Adding a content field = shared schema change (game repo) + form enhancement
@@ -31,6 +33,7 @@ dependency) for schema/validation/formulas — editors must never drift from the
    fonts, no rounded-blob slop), 1-core VPS citizenship (niced workers, paginated queries).
 
 ## Repository map (planned — A0 creates it)
+
 ```
 src/client/   React SPA (modules: dashboard, map-editor, content, quests, live-ops, admin)
 src/server/   Fastify API (auth, content CRUD, publish workers, ops proxy, SSE)
@@ -39,6 +42,7 @@ docs/         ADMIN_DESIGN.md · MAP_EDITOR.md · CONTENT_EDITORS.md · ARCHITEC
 ```
 
 ## Process
+
 - Work inside the current A-phase (ROADMAP.md here; sync points to game P-phases matter — check
   both roadmaps before starting).
 - `pnpm check` green before claiming done; CHANGELOG.md `[Unreleased]` for user-visible changes;
@@ -49,6 +53,19 @@ docs/         ADMIN_DESIGN.md · MAP_EDITOR.md · CONTENT_EDITORS.md · ARCHITEC
   float on a branch head.
 
 ## Current state
-Planning complete; no code yet. **Game P1 is live (2026-08-02) — the shared schema, auth stack
-and accounts/characters tables exist in production, so A0 is unlocked and is the next phase
-here.** Not started; wait for the owner's go.
+
+**A0 — Foundation is built and verified in dev (2026-08-02)**: Vite/React/Fastify scaffold with
+`@dawned/shared` pinned as a SHA git dependency, panel auth against game accounts (gm/admin
+roles, admin sessions, CSRF, audit_log), the "Workshop" shell + Ctrl+K palette, Dashboard v1
+with the live server card, and the schema-form generator driving World Settings drafts
+(`content_world_settings`, draft rows only). 12 tests + a Playwright login smoke green
+(`node tools/smoke/admin-login.mjs`); dist layout matches the deployed `dawned-admin.service`.
+**Open: the owner's login check at play.pathlands.cc/admin after the next deploy (ROADMAP A0
+status) — then A0 closes and A1 (content editors + publish v1) is next.**
+
+### Running it locally
+
+```bash
+pnpm install && pnpm dev   # API :8082 + Vite :5174 → http://localhost:5174/admin/
+pnpm check                 # needs the game repo's migrated local Postgres
+```

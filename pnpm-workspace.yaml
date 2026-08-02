@@ -1,0 +1,11 @@
+# Single-package repo; this file exists for pnpm settings.
+packages:
+  - '.'
+
+# pnpm 10 blocks dependency build scripts unless allowlisted:
+# - @dawned/shared builds its dist via `prepare` when installed as a git dep
+# - argon2 / esbuild compile or fetch their native binaries on install
+onlyBuiltDependencies:
+  - '@dawned/shared'
+  - argon2
+  - esbuild

@@ -6,6 +6,7 @@
 > the game DB — `gm` gets Live Ops read + moderation; `admin` gets everything).
 
 ## 1. UX Principles
+
 1. **Never lose work:** every editor autosaves drafts (2 s debounce) with per-entity dirty
    markers; leaving a dirty view warns; crash recovery restores drafts.
 2. **The game is never edited live by accident:** all changes are drafts until an explicit
@@ -21,10 +22,12 @@
    tool shortcuts (Map Editor has a full keymap), palette everywhere.
 
 ## 2. Design System — "Workshop"
+
 Shares Dawned's anti-slop DNA (no serifs, no rounded-blob pills) but optimized for hours of tool
 use, not fantasy immersion:
+
 - **Theme:** dark-first (`#14161B` bg, `#1C1F26` panels, `#262B35` raised), 1 px hairline borders
-  (`#333A47`), gold accent reserved for *publish/live* actions (`#C9A34E`), blue for selection
+  (`#333A47`), gold accent reserved for _publish/live_ actions (`#C9A34E`), blue for selection
   (`#3E8FE8`), red zone for destructive/live (`#D8453A`). Light theme: post-0.1 backlog.
 - **Type:** Inter (UI) + JetBrains Mono (ids, coordinates, JSON). 13 px base, 12 px tables.
 - **Corners:** 2 px radius max (flat professional), the game's 45° corner-cut motif appears only
@@ -36,6 +39,7 @@ use, not fantasy immersion:
   pattern (list → selection → right-side inspector everywhere).
 
 ## 3. App Shell & Navigation
+
 ```
 ┌ Top bar: Dawned-Admin ▸ [env badge: PRODUCTION] · publish status · Ctrl+K · user ┐
 │ Left rail (icons+labels):                                                        │
@@ -45,6 +49,7 @@ use, not fantasy immersion:
 │  ⚙ Admin ▾ (Accounts & Roles, Publish History, Panel Settings)                   │
 └──────────────────────────────────────────────────────────────────────────────────┘
 ```
+
 *Zones are edited spatially in the Map Editor; the Content list view offers the non-spatial fields.
 Every module deep-links (`/content/items/item_weapon_sword_emberbrand`) — shareable in Discord.
 
@@ -54,6 +59,7 @@ publish flow), backups card (last nightly, size, verify status), recent audit tr
 quick actions (Announce, Reload Content, Open Map).
 
 ## 4. The Publish Flow (shared by all editors — the panel's spine)
+
 1. Badge shows `n drafts pending` → opens **Publish Review**.
 2. Validation runs (zod + cross-refs + map bake dry-run): errors block, warnings listed
    (e.g. "item has no loot table referencing it").
@@ -66,6 +72,7 @@ quick actions (Announce, Reload Content, Open Map).
    safe rollback path).
 
 ## 5. Live Ops Module
+
 - **Players:** online table (name, account, class, level, zone, position with "show on map",
   session length, violation counters) → inspector: character sheet, inventory (view + audited
   grant/remove), quests, teleport-to/bring actions (routed via ops API as GM commands), kick.
@@ -80,12 +87,14 @@ quick actions (Announce, Reload Content, Open Map).
   link (restores stay CLI-only on purpose — see game repo DEPLOYMENT.md).
 
 ## 6. Asset Browser (shared service, used by Map Editor + icon/model pickers)
+
 Grid of all pipeline-known assets: thumbnail (generated), name, pack, tags, tri-count, license
 badge; filter by category/pack/tag; detail = 3D preview orbit (three.js), collider view toggle,
 "used in n placements" back-references. Missing-license assets show a red badge (and are
 unplaceable — the ledger rule enforced visually).
 
 ## 7. Error/Empty/Loading States
+
 Every table/form/view designs its empty state (helpful: "No loot tables yet — create one or
 duplicate a template"), its loading skeleton, and its error state (with retry + copyable error
-id). The panel must feel *reliable* — it's the owner's daily driver for years.
+id). The panel must feel _reliable_ — it's the owner's daily driver for years.

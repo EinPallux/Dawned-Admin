@@ -5,6 +5,7 @@ read it first**, plus the game repo's CLAUDE.md (one project, two repos; game do
 truth).
 
 ## TL;DR
+
 - This repo = Dawned's admin panel: 3D Map Editor, content DB editors, quest editor, Live Ops.
   React 19 + Vite SPA · Fastify API · three.js viewport · shared Postgres · `@dawned/shared`
   (pnpm git dep from the game repo) for schema/zod/formulas.
@@ -17,5 +18,7 @@ truth).
 - **Process:** follow ROADMAP.md A-phases (synced to game P-phases); `pnpm check` before done;
   CHANGELOG `[Unreleased]`; design questions go to the game repo's USER_QUESTIONS.md with a
   recommended default.
-- **State:** planning complete, no code yet. Game P1 is live (2026-08-02) → A0 is unlocked and
-  is the next phase here; not started.
+- **State:** A0 built and verified in dev (2026-08-02) — scaffold, panel auth (gm/admin +
+  audit), Workshop shell + palette, live dashboard, schema-form World Settings drafts; tests
+  and the Playwright login smoke green. Open: owner login check at /admin after the next
+  deploy (ROADMAP A0 status), then A1 (content editors + publish v1).

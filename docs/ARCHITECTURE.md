@@ -5,6 +5,7 @@
 > `Dawned/docs/tech/{ARCHITECTURE,DATABASE,SECURITY,DEPLOYMENT,ASSET_PIPELINE}.md`.
 
 ## 1. Stack
+
 - **Frontend:** React 19 + Vite + TS strict; Zustand state; TanStack Query (server cache) +
   TanStack Table/Virtual (data grids); three.js viewport for the Map Editor & 3D previews
   (reusing the game's terrain/prop render modules); zod-driven schema forms (custom generator —
@@ -14,15 +15,17 @@
   sims) run in a worker thread with progress events (SSE).
 - **Shared contract:** `@dawned/shared` via pnpm git dependency
   (`"@dawned/shared": "github:EinPallux/Dawned#path:packages/shared"`, version-pinned to a tag per
-  release train). Drizzle tables, zod content schemas, formulas (ƒ-suggest buttons run *the same
-  code* the game balances with), constants, map/chunk format codecs.
+  release train). Drizzle tables, zod content schemas, formulas (ƒ-suggest buttons run _the same
+  code_ the game balances with), constants, map/chunk format codecs.
 
 ## 2. Process & Routing (on the VPS)
+
 `dawned-admin.service` (Node, port 8082) behind Caddy at `play.pathlands.cc/admin` (decided
 2026-08-02; IP allowlist off for now). Serves the built SPA + `/api`. Local dev: `pnpm dev` (Vite + API,
 pointed at local Postgres from the game repo's dev setup).
 
 ## 3. AuthN/AuthZ
+
 - Login with **game accounts** that hold `gm`/`admin` role (accounts table is shared truth);
   argon2id verify via the same shared auth util; admin session = httpOnly Secure SameSite=Strict
   cookie, 12 h sliding, server-side session rows (`sessions.kind='admin'`).
@@ -32,6 +35,7 @@ pointed at local Postgres from the game repo's dev setup).
 - CSRF: same-site strict + custom header check; rate limiting on login (shared limiter config).
 
 ## 4. Data Access Rules
+
 - Content: full CRUD on `content_*` **draft** rows; publish endpoint runs validation +
   cross-reference checks + bake, writes `content_publishes`, moves snapshots — the ONLY path to
   the live game's data.
@@ -43,16 +47,19 @@ pointed at local Postgres from the game repo's dev setup).
   thumbnails/asset index cache under `/var/lib/dawned/assets/`.
 
 ## 5. Map Editor Data Flow
+
 ```
 viewport edits → chunk-granular draft store (client, IndexedDB journal for crash recovery)
   → autosave PATCH /api/map/draft/chunks/:cx/:cy (2 s debounce, delta payloads)
   → Publish: POST /api/publish {kinds:[map,…]} → worker: validate → bake (changed chunks) →
      content_publishes++ → POST game /ops/reload-content → SSE progress → UI report
 ```
+
 Draft preview channel (play-test bridge) per MAP_EDITOR.md §5: admin API asks the game server to
 mount draft chunks in a GM-only shadow world; feature-flagged, evaluated at A3.
 
 ## 6. Performance Notes (1-core box citizenship)
+
 Bake/thumbnail workers run `nice`d and chunked (yield between chunks) so the game server's tick
 never starves; heavy queries paginate; SPA bundles code-split per module (Map Editor's three.js
 payload loads only when opened); viewport uses the game's instancing systems (editor overhead
@@ -60,6 +67,7 @@ budget: 60 FPS with full overlay stack on the reference dev machine, 30 FPS acce
 integrated GPUs).
 
 ## 7. Testing
+
 Vitest: schema-form generator (zod → form model), publish validator (fixture worlds with seeded
 errors), loot simulator math, chunk codec round-trips. Playwright: login → edit item → publish →
 verify bundle diff (against a dev game server) — the pipeline smoke that guards the whole reason

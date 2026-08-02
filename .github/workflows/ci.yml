@@ -1,0 +1,65 @@
+name: check
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # Auth + world-settings integration tests run against a real database,
+    # exactly like the VPS (game repo docs/tech/DATABASE.md).
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: dawned
+          POSTGRES_PASSWORD: dawned
+          POSTGRES_DB: dawned
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U dawned"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://dawned:dawned@127.0.0.1:5432/dawned
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # @dawned/shared is a pinned git dependency on the PRIVATE game repo,
+      # fetched as a GitHub tarball. The default GITHUB_TOKEN cannot read other
+      # repos — add a fine-grained PAT (Contents: Read-only on Dawned) as the
+      # DAWNED_SHARED_TOKEN repository secret.
+      - name: Authorize @dawned/shared fetch
+        run: |
+          if [ -z "${{ secrets.DAWNED_SHARED_TOKEN }}" ]; then
+            echo "::error::DAWNED_SHARED_TOKEN secret is missing — add a read-only PAT for EinPallux/Dawned"
+            exit 1
+          fi
+          echo "//codeload.github.com/:_authToken=${{ secrets.DAWNED_SHARED_TOKEN }}" > ~/.npmrc
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply game schema (migrations shipped in @dawned/shared)
+        run: node tools/ci/migrate.mjs
+
+      # typecheck + lint + format + tests (incl. DB integration)
+      - name: Check
+        run: pnpm check
+
+      - name: Build
+        run: pnpm build

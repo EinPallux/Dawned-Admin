@@ -1,7 +1,7 @@
 # Dawned-Admin — Map Editor Specification
 
-> The flagship module: a full in-browser 3D world editor for the Dawnlands. Requirement: *"highly
-> detailed, so the owner can improve the world as detailed as they want"* — and also able to
+> The flagship module: a full in-browser 3D world editor for the Dawnlands. Requirement: _"highly
+> detailed, so the owner can improve the world as detailed as they want"_ — and also able to
 > **clear layers and start fresh**. It edits the same chunk/placement/spawn data the game consumes
 > (formats: game repo `docs/tech/ASSET_PIPELINE.md` §6, tables: `docs/tech/DATABASE.md` §3).
 
@@ -26,13 +26,14 @@ checks — not a game client).
 ## 2. Modes & Tools
 
 ### 2.1 Terrain Mode
+
 - **Sculpt brushes:** Raise/Lower (strength, radius 1–64 m, falloff curves: smooth/linear/sharp),
   Smooth, Flatten (to sampled or typed height), Set Height, Terrace, Noise (perlin-jitter for
   natural breakup), Path (drag a spline → flattens + optionally paints a path layer with width) —
   hold `Ctrl` inverts, `[`/`]` radius, `Shift+[`/`]` strength.
 - **Texture painting:** 8 splat layers per zone-set (per game WORLD.md §6) with per-layer
   properties panel; paint with same brush system + slope/height **masks** (e.g. "only where slope
-  >30°"), fill-by-mask bucket, layer visibility solo.
+  > 30°"), fill-by-mask bucket, layer visibility solo.
 - **Water:** global sea level + per-chunk water override (ponds/rivers at height), river spline
   tool (width, flow direction for shader), swim-volume auto from water depth.
 - **Cliff helper:** overlay slopes >55° (auto-unwalkable) + one-click "dress selection with rock
@@ -45,6 +46,7 @@ checks — not a game client).
   props (they re-sit on the new heights with a "floaters report").
 
 ### 2.2 Props Mode (placement)
+
 - **Asset palette:** the Asset Browser docked (search/filter/collections); drag into viewport or
   click-to-stamp mode.
 - **Transform:** move/rotate/scale gizmos + numeric inspector; surface-snap (align-to-normal
@@ -61,6 +63,7 @@ checks — not a game client).
   fixable-list panel with select-and-snap-to-ground.
 
 ### 2.3 Spawns Mode
+
 - Place/edit **enemy spawners** (point/area; entries with weights/counts; rank override; respawn
   timer; camp-tag with visualized social-aggro link circles; patrol spline editor with per-node
   wait times), **resource nodes** (profession/tier picker with model auto-suggest per zone tier,
@@ -70,6 +73,7 @@ checks — not a game client).
 - "Simulate populate" preview: ghost-render one spawn resolution to eyeball camp compositions.
 
 ### 2.4 Zones & POI Mode
+
 - **Zone polygons:** draw/edit vertices on the terrain; properties (name, level band, ambience
   profile: fog color/density/light tint/music/sfx set/weather weights — with instant viewport
   preview toggle incl. forcing a weather state to eyeball rain/storm looks, safe-zone flag,
@@ -81,6 +85,7 @@ checks — not a game client).
 - **Shrine/fast-travel graph view:** all shrines + travel cost preview matrix.
 
 ## 3. Cross-cutting Editor Systems
+
 - **Undo/redo:** command-pattern journal (≥200 steps, grouped brush strokes), scoped per session,
   `Ctrl+Z/Ctrl+Shift+Z`, history panel with jump.
 - **Layers panel:** lock/hide per data layer (terrain, water, props, foliage, spawns, zones, POIs,
@@ -96,6 +101,7 @@ checks — not a game client).
   crash; explicit named checkpoints ("before redoing Dawnhaven harbor") restorable.
 
 ## 4. Validate → Bake → Publish (map-specific)
+
 Publish runs: zone coverage check, floaters/buried report gate, spawn refs exist, node tier vs.
 zone tier warnings, POI/shrine reachability (walkgrid flood-fill from spawn — unreachable content
 is an error), budget check per chunk; then bakes: walkability grid, chunk bins, placement JSONs,
@@ -104,6 +110,7 @@ bundle entry (game repo pipeline). Bake runs server-side (admin API worker, nice
 UI; typical incremental bake target <60 s (changed chunks only), full-map <10 min on the VPS.
 
 ## 5. Play-test Bridge
+
 "Play-test ▸" button: opens the game client (new tab) pointed at a **draft preview channel** —
 the game server can host one GM-only preview instance of draft map data (admin API asks it to
 load draft chunks in a shadow world, GM character teleports in). 0.1.0 scope: preview instance =
@@ -112,6 +119,7 @@ building (game P12) pleasant. Fallback if the shadow-world proves heavy in pract
 staging-clone flow (documented decision point at A3).
 
 ## 6. Keymap (defaults)
+
 `Q/W/E/R` select/move/rotate/scale · `B` brush mode toggle · `[ ]` size · `Shift+[ ]` strength ·
 `G` snap cycle · `F` frame · `H` hide sel · `Alt+H` unhide all · `Ctrl+D` duplicate ·
 `Del` delete · `Ctrl+Z/Y` undo/redo · `Ctrl+S` save draft · `1–9` camera slots · `T` top-down ·
@@ -119,6 +127,7 @@ staging-clone flow (documented decision point at A3).
 the game's settings).
 
 ## 7. Acceptance bar (A2/A3 DoD extract)
+
 The editor is done when the owner can, without touching code or docs: sculpt a new islet, paint
 it, scatter a forest, drop a bandit camp with a patrol, ring it with T2 nodes, zone it with custom
 fog + music, place a chest + vista + shrine, validate, publish — and stand on it in the live game
