@@ -7,7 +7,13 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import argon2 from 'argon2';
 import { and, eq, inArray } from 'drizzle-orm';
-import { accounts, auditLog, contentWorldSettings, sessions } from '@dawned/shared/schema';
+import {
+  accounts,
+  auditLog,
+  contentAbilities,
+  contentWorldSettings,
+  sessions,
+} from '@dawned/shared/schema';
 import { defaultWorldSettings } from '@dawned/shared';
 import { loadConfig } from './config.js';
 import { buildApp, type App } from './app.js';
@@ -28,6 +34,17 @@ const cleanup = async (): Promise<void> => {
   const ids = rows.map((row) => row.id);
   if (ids.length > 0) {
     await db.delete(auditLog).where(inArray(auditLog.actorAccountId, ids));
+    // Content rows saved by fixture admins reference them (updated_by FK) —
+    // the A1 suite's published fixture must go before the accounts can.
+    // Published copies carry NO updated_by (the pipeline inserts them fresh),
+    // so the zz fixture ids are removed explicitly too.
+    await db.delete(contentAbilities).where(inArray(contentAbilities.updatedBy, ids));
+    await db
+      .delete(contentAbilities)
+      .where(
+        inArray(contentAbilities.id, ['ability_mage_zz_test_bolt', 'ability_mage_zz_test_clash']),
+      );
+    await db.delete(contentWorldSettings).where(inArray(contentWorldSettings.updatedBy, ids));
     await db.delete(accounts).where(inArray(accounts.id, ids)); // sessions cascade
   }
   await db.delete(contentWorldSettings).where(eq(contentWorldSettings.status, 'draft'));
@@ -251,25 +268,26 @@ describe('ability drafts + publish v1 (A1)', () => {
     await ctx.dbHandle.db
       .delete(contentAbilities)
       .where(
-        inArray(contentAbilities.id, [
-          'ability_warrior_zz_test_blow',
-          'ability_warrior_zz_test_clash',
-        ]),
+        inArray(contentAbilities.id, ['ability_mage_zz_test_bolt', 'ability_mage_zz_test_clash']),
       );
   });
 
-  const TEST_ID = 'ability_warrior_zz_test_blow';
+  // Fixtures live on a MAGE slot: the real Warrior/Rogue kits are published
+  // content in the dev database, and colliding with them would couple this
+  // suite to live content. The collision test collides two zz drafts with
+  // each other, so it stays hermetic even after P6 ships mage rows.
+  const TEST_ID = 'ability_mage_zz_test_bolt';
   const def = {
     id: TEST_ID,
-    classId: 'warrior',
-    binding: { kind: 'slot', slot: 7 },
-    name: 'ZZ Test Blow',
+    classId: 'mage',
+    binding: { kind: 'slot', slot: 8 },
+    name: 'ZZ Test Bolt',
     unlockLevel: 1,
-    cost: { type: 'rage', amount: 25 },
+    cost: { type: 'mana', amount: 25 },
     cooldownMs: 9000,
-    targeting: { kind: 'melee_arc', angleDeg: 90, reach: 3 },
-    effects: [{ kind: 'damage', coef: 1.4, school: 'physical' }],
-    anim: { clip: 'Sword_Attack', clipSeconds: 1, durationMs: 600 },
+    targeting: { kind: 'projectile', speed: 28, radius: 0.25, maxRange: 30 },
+    effects: [{ kind: 'damage', coef: 1.4, school: 'magic' }],
+    anim: { clip: 'Spell_Simple_Shoot', clipSeconds: 0.5, durationMs: 600 },
   };
 
   it('rejects invalid defs with field-level messages', async () => {
@@ -278,7 +296,7 @@ describe('ability drafts + publish v1 (A1)', () => {
       url: `/api/abilities/${TEST_ID}`,
       cookies: session,
       headers: CSRF,
-      payload: { ...def, cost: { type: 'energy', amount: 25 } }, // energy on a warrior
+      payload: { ...def, cost: { type: 'energy', amount: 25 } }, // energy on a mage
     });
     expect(bad.statusCode).toBe(400);
     expect(bad.json<{ message: string }>().message).toContain('energy costs are Rogue-only');
@@ -337,7 +355,7 @@ describe('ability drafts + publish v1 (A1)', () => {
   it('publish refuses slot collisions across the would-be set', async () => {
     const clash = {
       ...def,
-      id: 'ability_warrior_zz_test_clash',
+      id: 'ability_mage_zz_test_clash',
       name: 'ZZ Clash',
     };
     await ctx.app.inject({
@@ -354,7 +372,7 @@ describe('ability drafts + publish v1 (A1)', () => {
       headers: CSRF,
     });
     expect(refused.statusCode).toBe(422);
-    expect(refused.json<{ problems: string[] }>().problems.join(' ')).toContain('slot warrior:7');
+    expect(refused.json<{ problems: string[] }>().problems.join(' ')).toContain('slot mage:8');
 
     // Clean up the clash draft so reruns stay deterministic.
     await ctx.app.inject({
