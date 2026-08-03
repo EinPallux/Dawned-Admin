@@ -24,6 +24,14 @@ versions track the game's release trains (0.1.0 = tooling that shipped Dawned 0.
   simply picks the rows up at next boot). Everything audited.
 - 3 new integration tests (draft validation messages, the save→diff→publish→
   prune round-trip, slot-collision refusal); 15 total green.
+- **The pipeline shipped its first real content**: all 28 P5 kit rows authored
+  through the panel API and published live (`tools/content/author-kits.mjs`);
+  the slot-collision cross-check caught a leaked test fixture on its first
+  live run — refusing the publish exactly as designed.
+- **Live-tune proof** (`tools/content/live-tune-proof.mjs`): re-runnable
+  end-to-end demonstration of the P5 DoD — a coefficient edited as a draft,
+  published, hot-reloaded into the running game, verified served, reverted
+  the same way. No restarts anywhere.
 
 ### Fixed — blank page at /admin in production (2026-08-03)
 

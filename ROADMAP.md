@@ -69,7 +69,7 @@ Publish History with revert; Asset Browser v1 (thumbnails via tools pipeline, li
 **DoD:** game P5 tunes Warrior ability numbers live through this panel; game P8's first 60 items
 are authored here start-to-finish (icons enforced unique); publish diff/revert demonstrated.
 
-**Status (2026-08-03): A1-a — Abilities editor + publish v1 live.**
+**Status (2026-08-03): A1-a — Abilities editor + publish v1 live; P5 DoD hook proven.**
 
 - [x] Abilities editor (Content → Abilities): class-grouped list with binding
       badges + draft markers, quick tuning fields over a shared-schema-validated
@@ -77,6 +77,15 @@ are authored here start-to-finish (icons enforced unique); publish diff/revert d
       is admin-role, audited; publish is all-or-nothing with slot-collision
       cross-checks and pokes the game's `/ops/reload-content` (live tuning
       without restart — the P5 DoD hook). 3 integration tests (15 total green).
+- [x] The pipeline shipped real content: all 28 P5 kit rows (Warrior + Rogue
+      slots, ×4-class basics) authored through the panel API and published live
+      (`tools/content/author-kits.mjs`); the slot-collision cross-check caught a
+      leaked test fixture on its first live run. The game's migration 0005
+      freezes that published output for deploys.
+- [x] **P5 DoD "live-tunable without restart" proven end-to-end**
+      (`tools/content/live-tune-proof.mjs`): Crushing Blow's coefficient bumped
+      via draft → publish → hot reload, the live game served the new number,
+      then reverted the same way — re-runnable any time.
 - [ ] Remaining A1 editors (items, enemies, loot, vendors, curves, zones…) land
       with their consuming game phases (P8 items, P9 enemies…); the shared
       editor framework generalizes from the abilities surface as they arrive.

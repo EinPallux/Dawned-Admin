@@ -18,7 +18,10 @@ truth).
 - **Process:** follow ROADMAP.md A-phases (synced to game P-phases); `pnpm check` before done;
   CHANGELOG `[Unreleased]`; design questions go to the game repo's USER_QUESTIONS.md with a
   recommended default.
-- **State:** A0 built and verified in dev (2026-08-02) — scaffold, panel auth (gm/admin +
+- **State (updated 2026-08-03):** A1-a live — the Abilities editor + publish v1 (drafts →
+  validate + slot-collision cross-check → transactional publish → game hot reload); it
+  authored/published the 28 P5 kit rows and the live-tune DoD is proven re-runnably
+  (`tools/content/live-tune-proof.mjs`). Earlier: A0 built and verified in dev (2026-08-02) — scaffold, panel auth (gm/admin +
   audit), Workshop shell + palette, live dashboard, schema-form World Settings drafts; tests
   and the Playwright login smoke green. Open: owner login check at /admin after the next
   deploy (ROADMAP A0 status), then A1 (content editors + publish v1).
