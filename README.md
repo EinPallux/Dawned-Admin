@@ -23,8 +23,9 @@ node tools/smoke/admin-login.mjs   # Playwright: login → dashboard → draft r
 
 Panel access needs a game account with the `gm` or `admin` role
 (`UPDATE accounts SET role='admin' WHERE name='you';` — role management UI arrives at A5).
-CI needs a `DAWNED_SHARED_TOKEN` repository secret (read-only PAT for the game repo) to fetch
-the pinned `@dawned/shared` git dependency.
+The game repo must be checked out as a SIBLING directory named `Dawned` (CI does this via the
+`DAWNED_SHARED_TOKEN` secret, a read-only PAT for the private game repo) and its shared package
+built (`pnpm --filter @dawned/shared build`) before installing here.
 
 ## Modules (0.1.0 scope)
 
@@ -47,7 +48,7 @@ the pinned `@dawned/shared` git dependency.
 ## Planned stack (rationale in docs/ARCHITECTURE.md)
 
 React 19 + Vite + TypeScript strict · three.js viewport (map editor) · Fastify 5 API ·
-shared schema/validation via **`@dawned/shared`** (pnpm git dependency on the game repo) ·
+shared schema/validation via **`@dawned/shared`** (file: dependency on the sibling game checkout) ·
 same PostgreSQL as the game · deployed on the same VPS behind Caddy (`/admin` by default).
 
 ## Relationship to the game repo

@@ -5,6 +5,18 @@ versions track the game's release trains (0.1.0 = tooling that shipped Dawned 0.
 
 ## [Unreleased]
 
+### Changed — deploy determinism (2026-08-03)
+
+- `@dawned/shared` is now a **sibling-checkout dependency**
+  (`file:../Dawned/packages/shared`) instead of a SHA-pinned GitHub git
+  dependency: pnpm resolves GitHub git deps to codeload tarballs, which private
+  repos cannot serve credential-less on the VPS — the panel build died there.
+  Dev machines, CI and the VPS all keep the repos side by side (the game repo's
+  deploy scripts provide a `Dawned → game` symlink and build shared first);
+  both repos deploy from `main` together, so the contract stays in lockstep.
+  CI now checks out the game repo as a sibling (same `DAWNED_SHARED_TOKEN`
+  secret, used for checkout instead of tarball auth).
+
 ### Added — Phase A0: foundation (built 2026-08-02; owner sign-off pending)
 
 - **The panel exists**: React 19 + Vite SPA and Fastify API in one repo, served under

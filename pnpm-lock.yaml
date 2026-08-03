@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@dawned/shared':
-        specifier: github:EinPallux/Dawned#356b4d59419bcf1c144ab763b83284b9a04cd916&path:packages/shared
-        version: https://codeload.github.com/EinPallux/Dawned/tar.gz/356b4d59419bcf1c144ab763b83284b9a04cd916#path:packages/shared(@types/pg@8.20.3)(pg@8.22.0)
+        specifier: file:../Dawned/packages/shared
+        version: file:../Dawned/packages/shared(@types/pg@8.20.3)(pg@8.22.0)
       '@fastify/cookie':
         specifier: ^11.0.2
         version: 11.1.2
@@ -191,9 +191,8 @@ packages:
     resolution: {integrity: sha512-Vj1jF3cPfxg7OAfoI7QnVKLoILlm2JF9pnVHrX8qx7AHMiYWT+NDAA7jChlNgRS4WTLc/fD1lXLmPixluj+3Gg==}
     engines: {node: '>=6.9.0'}
 
-  '@dawned/shared@https://codeload.github.com/EinPallux/Dawned/tar.gz/356b4d59419bcf1c144ab763b83284b9a04cd916#path:packages/shared':
-    resolution: {path: packages/shared, tarball: https://codeload.github.com/EinPallux/Dawned/tar.gz/356b4d59419bcf1c144ab763b83284b9a04cd916}
-    version: 0.0.0
+  '@dawned/shared@file:../Dawned/packages/shared':
+    resolution: {directory: ../Dawned/packages/shared, type: directory}
 
   '@epic-web/invariant@1.0.0':
     resolution: {integrity: sha512-lrTPqgvfFQtR/eY/qkIzp98OGdNJu0m5ji3q/nJI8v3SXkRKEnWiOxMmbvcSoAIzv/cGiuvRy57k4suKQSAdwA==}
@@ -2008,7 +2007,7 @@ snapshots:
       '@babel/helper-string-parser': 7.29.7
       '@babel/helper-validator-identifier': 7.29.7
 
-  '@dawned/shared@https://codeload.github.com/EinPallux/Dawned/tar.gz/356b4d59419bcf1c144ab763b83284b9a04cd916#path:packages/shared(@types/pg@8.20.3)(pg@8.22.0)':
+  '@dawned/shared@file:../Dawned/packages/shared(@types/pg@8.20.3)(pg@8.22.0)':
     dependencies:
       drizzle-orm: 0.45.2(@types/pg@8.20.3)(pg@8.22.0)
       zod: 4.4.3
