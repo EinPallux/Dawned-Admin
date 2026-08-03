@@ -11,6 +11,8 @@ export class ApiRequestError extends Error {
     readonly status: number,
     readonly code: string,
     message: string,
+    /** Raw error body — structured failures (publish problems) ride here. */
+    readonly payload: unknown = null,
   ) {
     super(message);
   }
@@ -31,12 +33,14 @@ export const api = async <T>(
   });
   if (!response.ok) {
     let error: ApiError = { error: 'unknown', message: `Request failed (${response.status}).` };
+    let raw: unknown = null;
     try {
-      error = (await response.json()) as ApiError;
+      raw = await response.json();
+      error = raw as ApiError;
     } catch {
       // non-JSON error body — keep the fallback
     }
-    throw new ApiRequestError(response.status, error.error, error.message);
+    throw new ApiRequestError(response.status, error.error, error.message, raw);
   }
   return response.json() as Promise<T>;
 };
@@ -49,3 +53,4 @@ export const apiPost = <T>(path: string, payload?: unknown): Promise<T> =>
   });
 export const apiPut = <T>(path: string, payload: unknown): Promise<T> =>
   api<T>(path, { method: 'PUT', body: JSON.stringify(payload) });
+export const apiDelete = <T>(path: string): Promise<T> => api<T>(path, { method: 'DELETE' });

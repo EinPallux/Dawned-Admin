@@ -236,3 +236,132 @@ describe('sessions', () => {
     expect(rows.every((row) => row.expiresAt > new Date(0))).toBe(true);
   });
 });
+
+describe('ability drafts + publish v1 (A1)', () => {
+  // One login for the whole suite — the auth rate limiter caps per-minute
+  // attempts, and every earlier suite already spent some of the budget.
+  let session: Record<string, string>;
+  beforeAll(async () => {
+    const cookie = sessionCookieOf(await login(ADMIN_NAME));
+    session = { dawned_admin_session: cookie };
+    // Idempotent reruns: drop BOTH statuses of the fixture ids — a published
+    // row from a previous run would make the identical draft prune on save.
+    const { inArray } = await import('drizzle-orm');
+    const { contentAbilities } = await import('@dawned/shared/schema');
+    await ctx.dbHandle.db
+      .delete(contentAbilities)
+      .where(
+        inArray(contentAbilities.id, [
+          'ability_warrior_zz_test_blow',
+          'ability_warrior_zz_test_clash',
+        ]),
+      );
+  });
+
+  const TEST_ID = 'ability_warrior_zz_test_blow';
+  const def = {
+    id: TEST_ID,
+    classId: 'warrior',
+    binding: { kind: 'slot', slot: 7 },
+    name: 'ZZ Test Blow',
+    unlockLevel: 1,
+    cost: { type: 'rage', amount: 25 },
+    cooldownMs: 9000,
+    targeting: { kind: 'melee_arc', angleDeg: 90, reach: 3 },
+    effects: [{ kind: 'damage', coef: 1.4, school: 'physical' }],
+    anim: { clip: 'Sword_Attack', clipSeconds: 1, durationMs: 600 },
+  };
+
+  it('rejects invalid defs with field-level messages', async () => {
+    const bad = await ctx.app.inject({
+      method: 'PUT',
+      url: `/api/abilities/${TEST_ID}`,
+      cookies: session,
+      headers: CSRF,
+      payload: { ...def, cost: { type: 'energy', amount: 25 } }, // energy on a warrior
+    });
+    expect(bad.statusCode).toBe(400);
+    expect(bad.json<{ message: string }>().message).toContain('energy costs are Rogue-only');
+  });
+
+  it('saves a draft, diffs it, publishes it, and prunes matching drafts', async () => {
+    const saved = await ctx.app.inject({
+      method: 'PUT',
+      url: `/api/abilities/${TEST_ID}`,
+      cookies: session,
+      headers: CSRF,
+      payload: def,
+    });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json<{ draft: { id: string } | null }>().draft?.id).toBe(TEST_ID);
+
+    const diff = await ctx.app.inject({
+      method: 'GET',
+      url: '/api/publish/abilities/diff',
+      cookies: session,
+    });
+    const entries = diff.json<{ entries: { id: string; kind: string }[] }>().entries;
+    expect(entries.some((entry) => entry.id === TEST_ID && entry.kind === 'added')).toBe(true);
+
+    // Publish: draft becomes the published row; the game-reload poke may fail
+    // in tests (no game server) — the publish itself must still land.
+    const published = await ctx.app.inject({
+      method: 'POST',
+      url: '/api/publish/abilities',
+      cookies: session,
+      headers: CSRF,
+    });
+    expect(published.statusCode).toBe(200);
+    expect(published.json<{ ok: boolean; published: number }>().ok).toBe(true);
+
+    const detail = await ctx.app.inject({
+      method: 'GET',
+      url: `/api/abilities/${TEST_ID}`,
+      cookies: session,
+    });
+    const body = detail.json<{ draft: unknown; published: { id: string } | null }>();
+    expect(body.draft).toBeNull();
+    expect(body.published?.id).toBe(TEST_ID);
+
+    // Re-saving the identical def prunes rather than creating a no-op draft.
+    const resaved = await ctx.app.inject({
+      method: 'PUT',
+      url: `/api/abilities/${TEST_ID}`,
+      cookies: session,
+      headers: CSRF,
+      payload: def,
+    });
+    expect(resaved.json<{ draft: unknown }>().draft).toBeNull();
+  });
+
+  it('publish refuses slot collisions across the would-be set', async () => {
+    const clash = {
+      ...def,
+      id: 'ability_warrior_zz_test_clash',
+      name: 'ZZ Clash',
+    };
+    await ctx.app.inject({
+      method: 'PUT',
+      url: `/api/abilities/${clash.id}`,
+      cookies: session,
+      headers: CSRF,
+      payload: clash, // same class+slot 7 as the published test ability
+    });
+    const refused = await ctx.app.inject({
+      method: 'POST',
+      url: '/api/publish/abilities',
+      cookies: session,
+      headers: CSRF,
+    });
+    expect(refused.statusCode).toBe(422);
+    expect(refused.json<{ problems: string[] }>().problems.join(' ')).toContain('slot warrior:7');
+
+    // Clean up the clash draft so reruns stay deterministic.
+    await ctx.app.inject({
+      method: 'DELETE',
+      url: `/api/abilities/${clash.id}/draft`,
+      cookies: session,
+      headers: CSRF,
+    });
+  });
+});

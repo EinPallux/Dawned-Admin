@@ -12,6 +12,7 @@ import { LoginScreen } from './LoginScreen.js';
 import { Shell } from './Shell.js';
 import { DashboardPage } from '../pages/DashboardPage.js';
 import { WorldSettingsPage } from '../pages/WorldSettingsPage.js';
+import { AbilitiesPage } from '../pages/AbilitiesPage.js';
 
 export const App = () => {
   const queryClient = useQueryClient();
@@ -53,6 +54,7 @@ export const App = () => {
         <Route element={<Shell user={user} />}>
           <Route index element={<DashboardPage />} />
           <Route path="content/world-settings" element={<WorldSettingsPage user={user} />} />
+          <Route path="content/abilities" element={<AbilitiesPage user={user} />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

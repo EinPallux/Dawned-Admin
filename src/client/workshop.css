@@ -534,3 +534,190 @@ code,
   color: var(--text-dim);
   padding: 20px 0;
 }
+
+/* --- Abilities editor (A1) ------------------------------------------------ */
+
+.abilities-page {
+  display: grid;
+  grid-template-columns: 230px minmax(0, 1fr) 260px;
+  gap: 12px;
+  align-items: start;
+}
+
+.abilities-page .panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.abilities-page .panel-head h2 {
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.abilities-group-title {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin: 10px 0 4px;
+}
+
+.abilities-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  background: none;
+  border: 1px solid transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.abilities-row:hover {
+  border-color: var(--hairline);
+}
+
+.abilities-row.is-active {
+  background: var(--raised);
+  border-color: var(--blue);
+}
+
+.abilities-row-binding {
+  font-size: 11px;
+  color: var(--text-dim);
+  min-width: 52px;
+}
+
+.abilities-row-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.abilities-row-draft {
+  width: 7px;
+  height: 7px;
+  background: var(--gold);
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+}
+
+.abilities-editor-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.abilities-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.abilities-quick-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.abilities-quick-field input {
+  width: 92px;
+  background: var(--bg);
+  border: 1px solid var(--hairline);
+  color: var(--text);
+  font: inherit;
+  padding: 4px 6px;
+}
+
+.abilities-json {
+  width: 100%;
+  min-height: 420px;
+  resize: vertical;
+}
+
+.abilities-json.is-invalid {
+  border-color: var(--red);
+}
+
+.abilities-errors {
+  margin-top: 8px;
+  padding-left: 16px;
+  color: var(--red);
+  font-size: 12px;
+}
+
+.abilities-save-error {
+  margin-top: 8px;
+  color: var(--red);
+  font-size: 12px;
+}
+
+.abilities-pending {
+  font-size: 11px;
+  color: var(--gold);
+}
+
+.abilities-diff-row {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  font-size: 12px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.abilities-diff-kind {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.abilities-diff-kind.is-added {
+  color: var(--green);
+}
+
+.abilities-diff-kind.is-changed {
+  color: var(--gold);
+}
+
+.abilities-diff-id {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.abilities-diff-paths {
+  color: var(--text-dim);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.abilities-publish-button {
+  width: 100%;
+  margin-top: 10px;
+}
+
+.abilities-publish-result {
+  margin-top: 10px;
+  font-size: 12px;
+}
+
+.abilities-publish-result.is-error {
+  color: var(--red);
+}
+
+.abilities-reload-note {
+  color: var(--text-dim);
+}
