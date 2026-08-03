@@ -28,6 +28,20 @@
 2026-08-02; IP allowlist off for now). Serves the built SPA + `/api`. Local dev: `pnpm dev` (Vite + API,
 pointed at local Postgres from the game repo's dev setup).
 
+**The `/admin` prefix is Caddy's, not ours.** The game repo's Caddyfile proxies with
+`handle_path /admin*` — the prefix is **stripped** before requests reach the service, so the
+server mounts the API at `/api/*` and static files at `/` while the browser-facing build uses
+base `/admin/` (vite.config.ts). Both sides of that contract are enforced: the game repo pins the
+Caddyfile in a vitest (`packages/server/src/deploy-contract.test.ts`), and this repo's
+`node tools/smoke/admin-prod-serve.mjs` boots the built panel in `NODE_ENV=production` behind a
+replica of the real Caddy block (prefix strip + the actual CSP parsed from the sibling checkout's
+`deploy/Caddyfile`) and drives a Chromium through load + login. Run it after touching serving,
+Caddy, CSP or the Vite build config — the dev stack cannot catch this class of bug (Vite serves
+assets itself, applies no CSP, and its proxy hides prefix mistakes; the A0 deploy shipped a blank
+page and CSP-refused fonts that way). Production serving also sets caching the same way the game
+does: hashed `/assets/*` immutable, `index.html` (and the SPA fallback) `no-cache`, and fonts are
+emitted as files — never `data:` URIs — because the CSP declares `font-src 'self'`.
+
 ## 3. AuthN/AuthZ
 
 - Login with **game accounts** that hold `gm`/`admin` role (accounts table is shared truth);

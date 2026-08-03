@@ -17,6 +17,11 @@ export default defineConfig({
     outDir: 'dist/client',
     emptyOutDir: true,
     sourcemap: true,
+    // Never inline assets as data: URIs — the production CSP declares
+    // font-src 'self' (game repo deploy/Caddyfile), and data:-inlined Inter
+    // subsets were silently refused there (system-font fallback, console full
+    // of CSP violations). Files are same-origin and cacheable instead.
+    assetsInlineLimit: 0,
   },
   server: {
     port: 5174,

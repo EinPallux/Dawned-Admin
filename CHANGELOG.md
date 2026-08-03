@@ -5,6 +5,26 @@ versions track the game's release trains (0.1.0 = tooling that shipped Dawned 0.
 
 ## [Unreleased]
 
+### Fixed — blank page at /admin in production (2026-08-03)
+
+- The deployed panel rendered a **blank white page**: the game repo's Caddyfile proxied
+  `/admin` with `handle` (prefix kept) while the panel is built against stripped paths
+  (`handle_path`), so the SPA fallback answered `/admin/assets/*.js` with `index.html` and the
+  browser refused the bundle on MIME. Fixed in the game repo's `deploy/Caddyfile`
+  (`handle_path /admin*`, now pinned by a vitest there).
+- Fonts now ship as same-origin files instead of `data:`-inlined CSS URIs
+  (`assetsInlineLimit: 0`): the production CSP (`font-src 'self'`) silently refused the inlined
+  Inter subsets — dev never showed it because Vite applies no CSP.
+- Production static serving got real cache headers: hashed `/assets/*` immutable for a year,
+  `index.html`/SPA fallback `no-cache` (a cached index after a deploy references bundles that no
+  longer exist — the same rule the game's Caddyfile enforces), and the deep-link fallback now
+  answers `HEAD` like `GET`.
+- **New smoke — `node tools/smoke/admin-prod-serve.mjs`**: boots the built panel in
+  `NODE_ENV=production` behind a replica of the real Caddy `/admin` block (prefix strip + the
+  actual CSP parsed from the sibling game checkout) and drives Chromium through load, asset
+  MIME/caching checks, font loading and a full login. The dev stack structurally cannot catch
+  this bug class; this closes the gap the A0 deploy fell through.
+
 ### Changed — deploy determinism (2026-08-03)
 
 - `@dawned/shared` is now a **sibling-checkout dependency**

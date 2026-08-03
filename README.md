@@ -19,6 +19,9 @@ pnpm install
 pnpm dev            # API on :8082 + Vite on :5174 → http://localhost:5174/admin/
 pnpm check          # typecheck + lint + format + tests (needs local Postgres)
 node tools/smoke/admin-login.mjs   # Playwright: login → dashboard → draft round-trip
+pnpm build && node tools/smoke/admin-prod-serve.mjs   # serve dist/ exactly like the VPS
+                                   # (prefix strip + real CSP) — run after touching
+                                   # serving, Caddy, CSP or the Vite build config
 ```
 
 Panel access needs a game account with the `gm` or `admin` role

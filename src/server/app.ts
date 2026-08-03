@@ -211,10 +211,34 @@ export const buildApp = async (config: Config): Promise<App> => {
   // dist layout: dist/server/app.js (this file) beside dist/client/ (the SPA).
   const clientDist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../client');
   if (config.NODE_ENV === 'production') {
-    await app.register(fastifyStatic, { root: clientDist, index: ['index.html'] });
-    // Deep links (/content/world-settings) resolve to the SPA, API 404s stay JSON.
+    await app.register(fastifyStatic, {
+      root: clientDist,
+      index: ['index.html'],
+      // Content-hashed bundles under /assets/ never change; index.html must
+      // never be cached or a deploy leaves browsers holding an index that
+      // references bundles which no longer exist (same rule as the game's
+      // Caddyfile — a stale index is the next unexplained blank page).
+      // cacheControl:false keeps the plugin's own max-age=0 default from
+      // overwriting what setHeaders decides.
+      cacheControl: false,
+      setHeaders: (res, filePath) => {
+        res.setHeader(
+          'cache-control',
+          filePath.includes(`${path.sep}assets${path.sep}`)
+            ? 'public, max-age=31536000, immutable'
+            : 'no-cache',
+        );
+      },
+    });
+    // Deep links (/content/world-settings) resolve to the SPA, API 404s stay
+    // JSON. sendFile routes through fastifyStatic, so setHeaders above applies.
+    // HEAD gets the same fallback GET does — link checkers and proxies probe
+    // deep links with it.
     app.setNotFoundHandler((request, reply) => {
-      if (request.method === 'GET' && !request.url.startsWith('/api/')) {
+      if (
+        (request.method === 'GET' || request.method === 'HEAD') &&
+        !request.url.startsWith('/api/')
+      ) {
         return reply.sendFile('index.html');
       }
       return reply.code(404).send({ error: 'not_found', message: 'No such route.' });

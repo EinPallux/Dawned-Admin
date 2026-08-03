@@ -47,6 +47,13 @@ status; a schema-form renders and round-trips a `world_settings` edit as a draft
 - [x] Deploy: dist layout matches the existing `dawned-admin.service` (game repo deploy) and
       the Caddy `/admin` strip; env contract follows `/etc/dawned/admin.env` as written by
       DEPLOY.sh; game deploy scripts gained the PAT bridge for the private git dependency.
+- [x] Production serving fixed + locked (2026-08-03): the first deploy served a blank page —
+      Caddy proxied `/admin` without stripping the prefix (`handle` vs `handle_path`; fixed in
+      the game repo's Caddyfile, pinned by its deploy-contract vitest) — and the CSP refused
+      the `data:`-inlined Inter subsets (fonts now build as files, `assetsInlineLimit: 0`).
+      New `node tools/smoke/admin-prod-serve.mjs` serves `dist/` exactly like the VPS (prefix
+      strip + real CSP from the sibling Caddyfile) and walks load → MIME/cache checks → login
+      in Chromium, so serving bugs can't reach a deploy unseen again.
 - [ ] **Owner DoD check:** log in at play.pathlands.cc/admin after the next deploy (needs an
       `admin`-role account — set via `UPDATE accounts SET role='admin' WHERE name='…'`),
       confirm the live server card and a world-settings draft round-trip. Then A0 closes.
