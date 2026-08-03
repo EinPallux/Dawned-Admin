@@ -27,7 +27,9 @@ export const api = async <T>(
     method: options.method ?? 'GET',
     ...(options.body !== undefined ? { body: options.body } : {}),
     headers: {
-      'content-type': 'application/json',
+      // content-type only WITH a body: Fastify rejects an empty JSON body
+      // outright, which broke body-less POSTs (publish).
+      ...(options.body !== undefined ? { 'content-type': 'application/json' } : {}),
       'x-dawned-admin': '1',
     },
   });
