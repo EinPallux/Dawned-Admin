@@ -9,8 +9,8 @@ first, every session. **Read the game repo's CLAUDE.md too** — Dawned (game) a
 The web control panel for the Dawned MMORPG: 3D **Map Editor**, **content database editors**
 (items, enemies, abilities, loot, vendors, quests, zones, curves), and **Live Ops** (players,
 moderation, server dashboard). Users: the owner + trusted GMs. It runs on the same VPS as the
-game, shares its PostgreSQL, and consumes `@dawned/shared` (from the game repo, via pnpm git
-dependency) for schema/validation/formulas — editors must never drift from the game.
+game, shares its PostgreSQL, and consumes `@dawned/shared` from the sibling game checkout
+(`file:../Dawned/packages/shared`) for schema/validation/formulas — editors must never drift from the game.
 
 ## Non-negotiable rules
 
@@ -49,13 +49,13 @@ docs/         ADMIN_DESIGN.md · MAP_EDITOR.md · CONTENT_EDITORS.md · ARCHITEC
   update docs touched by the change.
 - Open design questions → the **game repo's** USER_QUESTIONS.md (single inbox for the owner),
   with a recommended default.
-- `@dawned/shared` version bumps are deliberate (pinned ref updates, noted in CHANGELOG) — never
-  float on a branch head.
+- `@dawned/shared` comes from the sibling game checkout (both repos deploy from `main`
+  together); after game-side shared changes, rebuild it there and rerun `pnpm install` here.
 
 ## Current state
 
 **A0 — Foundation is built and verified in dev (2026-08-02)**: Vite/React/Fastify scaffold with
-`@dawned/shared` pinned as a SHA git dependency, panel auth against game accounts (gm/admin
+`@dawned/shared` consumed from the sibling game checkout, panel auth against game accounts (gm/admin
 roles, admin sessions, CSRF, audit_log), the "Workshop" shell + Ctrl+K palette, Dashboard v1
 with the live server card, and the schema-form generator driving World Settings drafts
 (`content_world_settings`, draft rows only). 12 tests + a Playwright login smoke green

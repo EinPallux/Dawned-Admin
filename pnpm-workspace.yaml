@@ -3,9 +3,9 @@ packages:
   - '.'
 
 # pnpm 10 blocks dependency build scripts unless allowlisted:
-# - @dawned/shared builds its dist via `prepare` when installed as a git dep
-# - argon2 / esbuild compile or fetch their native binaries on install
+# argon2 / esbuild compile or fetch their native binaries on install.
+# (@dawned/shared arrives as file:../Dawned/packages/shared with dist prebuilt
+# by the game repo — no build script needed here.)
 onlyBuiltDependencies:
-  - '@dawned/shared'
   - argon2
   - esbuild

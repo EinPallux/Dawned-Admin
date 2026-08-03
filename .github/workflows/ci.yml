@@ -29,27 +29,38 @@ jobs:
     env:
       DATABASE_URL: postgres://dawned:dawned@127.0.0.1:5432/dawned
 
+    defaults:
+      run:
+        working-directory: Dawned-Admin
+
     steps:
+      # Sibling layout, exactly like dev machines and the VPS: @dawned/shared is
+      # consumed as file:../Dawned/packages/shared from the game checkout.
       - uses: actions/checkout@v4
+        with:
+          path: Dawned-Admin
+
+      # The game repo is private — DAWNED_SHARED_TOKEN is a fine-grained PAT
+      # with Contents: Read-only on EinPallux/Dawned.
+      - uses: actions/checkout@v4
+        with:
+          repository: EinPallux/Dawned
+          token: ${{ secrets.DAWNED_SHARED_TOKEN }}
+          path: Dawned
 
       - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: Dawned-Admin/package.json
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
 
-      # @dawned/shared is a pinned git dependency on the PRIVATE game repo,
-      # fetched as a GitHub tarball. The default GITHUB_TOKEN cannot read other
-      # repos — add a fine-grained PAT (Contents: Read-only on Dawned) as the
-      # DAWNED_SHARED_TOKEN repository secret.
-      - name: Authorize @dawned/shared fetch
+      - name: Build @dawned/shared (game repo)
+        working-directory: Dawned
         run: |
-          if [ -z "${{ secrets.DAWNED_SHARED_TOKEN }}" ]; then
-            echo "::error::DAWNED_SHARED_TOKEN secret is missing — add a read-only PAT for EinPallux/Dawned"
-            exit 1
-          fi
-          echo "//codeload.github.com/:_authToken=${{ secrets.DAWNED_SHARED_TOKEN }}" > ~/.npmrc
+          pnpm install --frozen-lockfile
+          pnpm --filter @dawned/shared build
 
       - name: Install
         run: pnpm install --frozen-lockfile

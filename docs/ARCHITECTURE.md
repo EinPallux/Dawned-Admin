@@ -13,10 +13,14 @@
 - **Backend:** Fastify 5 (TS) — REST JSON API (`/api/*`), session auth, publish/bake workers,
   ops-API proxy; Drizzle against the shared schema; long tasks (map bake, thumbnail gen, roll
   sims) run in a worker thread with progress events (SSE).
-- **Shared contract:** `@dawned/shared` via pnpm git dependency
-  (`"@dawned/shared": "github:EinPallux/Dawned#path:packages/shared"`, version-pinned to a tag per
-  release train). Drizzle tables, zod content schemas, formulas (ƒ-suggest buttons run _the same
-  code_ the game balances with), constants, map/chunk format codecs.
+- **Shared contract:** `@dawned/shared` as a SIBLING-checkout dependency
+  (`"@dawned/shared": "file:../Dawned/packages/shared"`) — dev machines, CI and the VPS all keep
+  the two repos side by side (the VPS gets a `Dawned → game` symlink from the deploy scripts), and
+  both deploy from `main` together, so the shared contract moves in lockstep with zero network
+  fetches or tokens. (Revised from the original SHA-pinned git dependency: pnpm resolves GitHub
+  git deps to codeload tarballs, which private repos can't serve credential-less on the VPS —
+  found in the A0 deploy.) Drizzle tables, zod content schemas, formulas (ƒ-suggest buttons run
+  _the same code_ the game balances with), constants, map/chunk format codecs.
 
 ## 2. Process & Routing (on the VPS)
 

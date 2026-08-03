@@ -8,7 +8,7 @@ truth).
 
 - This repo = Dawned's admin panel: 3D Map Editor, content DB editors, quest editor, Live Ops.
   React 19 + Vite SPA · Fastify API · three.js viewport · shared Postgres · `@dawned/shared`
-  (pnpm git dep from the game repo) for schema/zod/formulas.
+  (file: dep on the sibling `../Dawned` checkout) for schema/zod/formulas.
 - **Hard rules:** drafts→validated publish pipeline only (never mutate live content directly) ·
   player-data writes are narrow typed audited endpoints · live actions only via the game's
   localhost ops API · forms generated from shared zod schemas · autosave/undo/confirm-gates on
