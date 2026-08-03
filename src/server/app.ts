@@ -165,7 +165,7 @@ export const buildApp = async (config: Config): Promise<App> => {
       game,
       metrics,
       publish: {
-        activeVersion: 'dev-1',
+        activeVersion: 'dev-2',
         draftsPending: draftRows[0]?.count ?? 0,
       },
     };
