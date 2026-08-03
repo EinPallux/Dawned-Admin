@@ -60,8 +60,14 @@ roles, admin sessions, CSRF, audit_log), the "Workshop" shell + Ctrl+K palette, 
 with the live server card, and the schema-form generator driving World Settings drafts
 (`content_world_settings`, draft rows only). 12 tests + a Playwright login smoke green
 (`node tools/smoke/admin-login.mjs`); dist layout matches the deployed `dawned-admin.service`.
-**Open: the owner's login check at play.pathlands.cc/admin after the next deploy (ROADMAP A0
-status) — then A0 closes and A1 (content editors + publish v1) is next.**
+**A1-a — the Abilities editor + publish pipeline v1 is live (2026-08-03, alongside game P5)**:
+Content → Abilities (class-grouped drafts, quick tuning fields over shared-schema-validated
+JSON, Ctrl+S, prune-on-match), publish v1 (diff review → validate-all + slot-collision
+cross-check → transactional copy → `/ops/reload-content` hot reload), 15 tests green. It
+shipped the 28 P5 kit rows (`tools/content/author-kits.mjs`) and the P5 "live-tunable without
+restart" DoD is proven re-runnably (`tools/content/live-tune-proof.mjs`). **Open: the owner's
+login check at play.pathlands.cc/admin after the next deploy (ROADMAP A0 status); remaining A1
+editors land with their consuming game phases (P8 items, P9 enemies…).**
 
 ### Running it locally
 

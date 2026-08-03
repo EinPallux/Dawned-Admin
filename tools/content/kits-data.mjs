@@ -1,0 +1,441 @@
+/**
+ * P5 class kits as content (CLASSES.md §1 Warrior, §3 Rogue) plus the four
+ * basic combo chains migrated from @dawned/shared BASIC_COMBOS (COMBAT.md §3
+ * as-built note). clipSeconds are the REAL baked UAL durations. Authored
+ * through the admin API by author-kits.mjs — the editor path end to end.
+ *
+ * Deviations from the doc table (flagged there at P5-E):
+ * - Fan of Knives grants its combo point unconditionally (the schema has no
+ *   "if ≥2 hit" conditional yet — revisit with P6's effect conditions).
+ */
+
+const warrior = [
+  {
+    id: 'ability_warrior_crushing_blow',
+    classId: 'warrior',
+    binding: { kind: 'slot', slot: 1 },
+    name: 'Crushing Blow',
+    description: 'A heavy overhand strike for #{1} damage that builds stagger.',
+    unlockLevel: 1,
+    cost: { type: 'rage', amount: 25 },
+    cooldownMs: 0,
+    targeting: { kind: 'melee_arc', angleDeg: 90, reach: 3 },
+    effects: [{ kind: 'damage', coef: 1.6, school: 'physical', staggerBonus: 20 }],
+    anim: { clip: 'Sword_Attack', clipSeconds: 1.533, durationMs: 650, contactFraction: 0.55 },
+    sfx: 'impact_heavy',
+  },
+  {
+    id: 'ability_warrior_shield_bash',
+    classId: 'warrior',
+    binding: { kind: 'slot', slot: 2 },
+    name: 'Shield Bash',
+    description: 'Slam the shield forward: #{1} damage, stuns and interrupts.',
+    unlockLevel: 3,
+    cost: { type: 'rage', amount: 20 },
+    cooldownMs: 10000,
+    targeting: { kind: 'melee_arc', angleDeg: 60, reach: 2.5 },
+    effects: [
+      { kind: 'damage', coef: 0.8, school: 'physical' },
+      { kind: 'stun', durationMs: 1500 },
+      { kind: 'interrupt' },
+    ],
+    anim: { clip: 'Shield_OneShot', clipSeconds: 0.833, durationMs: 500, contactFraction: 0.5 },
+    sfx: 'impact',
+  },
+  {
+    id: 'ability_warrior_charge',
+    classId: 'warrior',
+    binding: { kind: 'slot', slot: 3 },
+    name: 'Charge',
+    description: 'Rush 12 m forward — #{1} damage on impact, slows, builds Rage.',
+    unlockLevel: 6,
+    cost: { type: 'none', amount: 0 },
+    cooldownMs: 12000,
+    targeting: { kind: 'dash', distance: 12, speed: 24, stopOnHit: true },
+    effects: [
+      { kind: 'damage', coef: 0.5, school: 'physical' },
+      {
+        kind: 'apply_effect',
+        target: 'hit',
+        effectId: 'slow_charge',
+        durationMs: 3000,
+        stacksMax: 1,
+        mods: { moveSpeedPct: -30 },
+      },
+      { kind: 'resource', resource: 'rage', amount: 15 },
+    ],
+    anim: { clip: 'Shield_Dash', clipSeconds: 1.1, durationMs: 500, contactFraction: 0.9 },
+    sfx: 'dodge',
+  },
+  {
+    id: 'ability_warrior_rending_slash',
+    classId: 'warrior',
+    binding: { kind: 'slot', slot: 4 },
+    name: 'Rending Slash',
+    description: 'Tear armor open: #{1} damage plus a deep bleed.',
+    unlockLevel: 10,
+    cost: { type: 'rage', amount: 30 },
+    cooldownMs: 8000,
+    targeting: { kind: 'melee_arc', angleDeg: 90, reach: 3 },
+    effects: [
+      { kind: 'damage', coef: 0.9, school: 'physical' },
+      {
+        kind: 'apply_effect',
+        target: 'hit',
+        effectId: 'bleed_rending',
+        durationMs: 9000,
+        stacksMax: 1,
+        mods: {
+          periodic: { kind: 'damage', coefTotal: 0.9, school: 'physical', tickEveryMs: 1500 },
+        },
+      },
+    ],
+    anim: { clip: 'Sword_Regular_B', clipSeconds: 0.533, durationMs: 550, contactFraction: 0.55 },
+    sfx: 'impact',
+  },
+  {
+    id: 'ability_warrior_taunting_shout',
+    classId: 'warrior',
+    binding: { kind: 'slot', slot: 5 },
+    name: 'Taunting Shout',
+    description: 'Bellow a challenge: nearby enemies attack YOU and hit softer.',
+    unlockLevel: 14,
+    cost: { type: 'none', amount: 0 },
+    cooldownMs: 15000,
+    targeting: { kind: 'pbaoe', radius: 8, ticks: { count: 1, everyMs: 500 } },
+    effects: [
+      { kind: 'taunt', durationMs: 3000 },
+      {
+        kind: 'apply_effect',
+        target: 'hit',
+        effectId: 'debuff_taunting_shout',
+        durationMs: 6000,
+        stacksMax: 1,
+        mods: { damageDealtPct: -10 },
+      },
+    ],
+    anim: { clip: 'Counter_Angry', clipSeconds: 2, durationMs: 700, contactFraction: 0.4 },
+    threatMult: 2.5,
+    sfx: 'hurt',
+  },
+  {
+    id: 'ability_warrior_whirlwind',
+    classId: 'warrior',
+    binding: { kind: 'slot', slot: 6 },
+    name: 'Whirlwind',
+    description: 'Spin twice, hitting everything around you for #{1} per spin.',
+    unlockLevel: 18,
+    cost: { type: 'rage', amount: 40 },
+    cooldownMs: 12000,
+    targeting: { kind: 'pbaoe', radius: 4, ticks: { count: 2, everyMs: 500 } },
+    effects: [{ kind: 'damage', coef: 1.1, school: 'physical' }],
+    anim: {
+      clip: 'Sword_Heavy_Combo',
+      clipSeconds: 4.333,
+      durationMs: 1000,
+      contactFraction: 0.4,
+      moveSpeedMult: 0.7,
+    },
+    sfx: 'impact',
+  },
+  {
+    id: 'ability_warrior_shield_wall',
+    classId: 'warrior',
+    binding: { kind: 'slot', slot: 7 },
+    name: 'Shield Wall',
+    description: 'Brace behind the shield: half damage, immovable, for 6 s.',
+    unlockLevel: 22,
+    cost: { type: 'none', amount: 0 },
+    cooldownMs: 45000,
+    onGcd: false,
+    targeting: { kind: 'self' },
+    effects: [
+      {
+        kind: 'apply_effect',
+        target: 'self',
+        effectId: 'buff_shield_wall',
+        durationMs: 6000,
+        stacksMax: 1,
+        mods: { damageTakenPct: -50, knockbackImmune: true },
+      },
+    ],
+    anim: { clip: 'Idle_Shield_Loop', clipSeconds: 2.5, durationMs: 600, contactFraction: 0.3 },
+    sfx: 'dodge',
+  },
+  {
+    id: 'ability_warrior_earthshatter',
+    classId: 'warrior',
+    binding: { kind: 'slot', slot: 8 },
+    name: 'Earthshatter',
+    description: 'ULTIMATE: shatter the ground — massive cone damage, knockdown.',
+    unlockLevel: 25,
+    cost: { type: 'rage', amount: 50 },
+    cooldownMs: 60000,
+    targeting: { kind: 'cone', angleDeg: 120, reach: 6 },
+    effects: [
+      { kind: 'damage', coef: 2.5, school: 'physical', staggerBonus: 100 },
+      { kind: 'knockdown', durationMs: 2000 },
+    ],
+    anim: { clip: 'Melee_Hook', clipSeconds: 0.467, durationMs: 800, contactFraction: 0.6 },
+    sfx: 'impact_crit',
+  },
+];
+
+const rogue = [
+  {
+    id: 'ability_rogue_twin_strike',
+    classId: 'rogue',
+    binding: { kind: 'slot', slot: 1 },
+    name: 'Twin Strike',
+    description: 'Both daggers at once: 2 × #{1} damage. Awards a combo point.',
+    unlockLevel: 1,
+    cost: { type: 'energy', amount: 25 },
+    cooldownMs: 0,
+    comboPointGain: 1,
+    targeting: { kind: 'melee_arc', angleDeg: 70, reach: 2.5 },
+    effects: [
+      { kind: 'damage', coef: 0.6, school: 'physical', hits: 2 },
+      { kind: 'resource', resource: 'energy', amount: 0, comboPoints: 1 },
+    ],
+    anim: { clip: 'Sword_Regular_A', clipSeconds: 0.433, durationMs: 500, contactFraction: 0.55 },
+    sfx: 'impact',
+  },
+  {
+    id: 'ability_rogue_shadowstep',
+    classId: 'rogue',
+    binding: { kind: 'slot', slot: 2 },
+    name: 'Shadowstep',
+    description: 'Vanish and reappear behind your target. Next attack +20%.',
+    unlockLevel: 3,
+    cost: { type: 'energy', amount: 20 },
+    cooldownMs: 10000,
+    comboPointGain: 1,
+    targeting: { kind: 'blink_behind', maxRange: 12 },
+    effects: [
+      { kind: 'resource', resource: 'energy', amount: 0, comboPoints: 1 },
+      {
+        kind: 'apply_effect',
+        target: 'self',
+        effectId: 'buff_shadowstep',
+        durationMs: 6000,
+        stacksMax: 1,
+        mods: { nextAttackPct: 20 },
+      },
+    ],
+    anim: { clip: 'Sword_Dash', clipSeconds: 1.567, durationMs: 450, contactFraction: 0.5 },
+    sfx: 'dodge',
+  },
+  {
+    id: 'ability_rogue_eviscerate',
+    classId: 'rogue',
+    binding: { kind: 'slot', slot: 3 },
+    name: 'Eviscerate',
+    description: 'FINISHER: #{1} damage plus #{2} per combo point spent.',
+    unlockLevel: 6,
+    cost: { type: 'energy', amount: 30 },
+    cooldownMs: 0,
+    comboFinisher: true,
+    targeting: { kind: 'melee_arc', angleDeg: 60, reach: 2.5 },
+    effects: [{ kind: 'damage', coef: 0.9, school: 'physical', coefPerComboPoint: 0.5 }],
+    anim: {
+      clip: 'Sword_Attack_Standing',
+      clipSeconds: 1.533,
+      durationMs: 600,
+      contactFraction: 0.55,
+    },
+    sfx: 'impact_crit',
+  },
+  {
+    id: 'ability_rogue_fan_of_knives',
+    classId: 'rogue',
+    binding: { kind: 'slot', slot: 4 },
+    name: 'Fan of Knives',
+    description: 'A fan of thrown steel: #{1} damage to everything in front.',
+    unlockLevel: 10,
+    cost: { type: 'energy', amount: 30 },
+    cooldownMs: 8000,
+    comboPointGain: 1,
+    targeting: { kind: 'cone', angleDeg: 90, reach: 8, visual: 'knives' },
+    effects: [
+      { kind: 'damage', coef: 0.7, school: 'physical' },
+      { kind: 'resource', resource: 'energy', amount: 0, comboPoints: 1 },
+    ],
+    anim: { clip: 'OverhandThrow', clipSeconds: 1.333, durationMs: 600, contactFraction: 0.5 },
+    sfx: 'bolt',
+  },
+  {
+    id: 'ability_rogue_crippling_strike',
+    classId: 'rogue',
+    binding: { kind: 'slot', slot: 5 },
+    name: 'Crippling Strike',
+    description: 'Hamstring the target: #{1} damage and a heavy slow.',
+    unlockLevel: 14,
+    cost: { type: 'energy', amount: 20 },
+    cooldownMs: 6000,
+    comboPointGain: 1,
+    targeting: { kind: 'melee_arc', angleDeg: 70, reach: 2.5 },
+    effects: [
+      { kind: 'damage', coef: 0.7, school: 'physical' },
+      {
+        kind: 'apply_effect',
+        target: 'hit',
+        effectId: 'slow_crippling',
+        durationMs: 5000,
+        stacksMax: 1,
+        mods: { moveSpeedPct: -40 },
+      },
+      { kind: 'resource', resource: 'energy', amount: 0, comboPoints: 1 },
+    ],
+    anim: { clip: 'Sword_Regular_C', clipSeconds: 2, durationMs: 550, contactFraction: 0.55 },
+    sfx: 'impact',
+  },
+  {
+    id: 'ability_rogue_poisoned_blades',
+    classId: 'rogue',
+    binding: { kind: 'slot', slot: 6 },
+    name: 'Poisoned Blades',
+    description: 'Coat both blades: attacks apply stacking poison for 12 s.',
+    unlockLevel: 18,
+    cost: { type: 'energy', amount: 25 },
+    cooldownMs: 20000,
+    targeting: { kind: 'self' },
+    effects: [
+      {
+        kind: 'apply_effect',
+        target: 'self',
+        effectId: 'buff_poisoned_blades',
+        durationMs: 12000,
+        stacksMax: 1,
+        mods: {
+          onHitApply: {
+            effectId: 'poison_blades',
+            durationMs: 6000,
+            stacksMax: 3,
+            periodic: { kind: 'damage', coefTotal: 0.25, school: 'physical', tickEveryMs: 1500 },
+          },
+        },
+      },
+    ],
+    anim: { clip: 'Sword_Enter', clipSeconds: 1.3, durationMs: 700, contactFraction: 0.5 },
+    sfx: 'dodge',
+  },
+  {
+    id: 'ability_rogue_smoke_veil',
+    classId: 'rogue',
+    binding: { kind: 'slot', slot: 7 },
+    name: 'Smoke Veil',
+    description: 'Drop into smoke: enemies lose you, you move faster, strike harder.',
+    unlockLevel: 22,
+    cost: { type: 'energy', amount: 25 },
+    cooldownMs: 40000,
+    onGcd: false,
+    targeting: { kind: 'self' },
+    effects: [
+      {
+        kind: 'apply_effect',
+        target: 'self',
+        effectId: 'buff_smoke_veil',
+        durationMs: 3000,
+        stacksMax: 1,
+        mods: { threatDrop: true, moveSpeedPct: 30, nextAttackPct: 30 },
+      },
+    ],
+    anim: { clip: 'Roll', clipSeconds: 1.467, durationMs: 500, contactFraction: 0.4 },
+    sfx: 'dodge',
+  },
+  {
+    id: 'ability_rogue_death_mark',
+    classId: 'rogue',
+    binding: { kind: 'slot', slot: 8 },
+    name: 'Death Mark',
+    description:
+      'ULTIMATE: mark a victim — they take more from you; a marked kill refunds everything.',
+    unlockLevel: 25,
+    cost: { type: 'energy', amount: 40 },
+    cooldownMs: 60000,
+    targeting: { kind: 'single', maxRange: 15 },
+    effects: [
+      { kind: 'damage', coef: 1.5, school: 'physical' },
+      {
+        kind: 'mark',
+        durationMs: 8000,
+        damageFromCasterPct: 20,
+        onKill: { energy: 50, resetCooldownOf: 'ability_rogue_shadowstep' },
+      },
+    ],
+    anim: { clip: 'OverhandThrow', clipSeconds: 1.333, durationMs: 400, contactFraction: 0.5 },
+    sfx: 'impact_crit',
+  },
+];
+
+/** Basic combo chains (COMBAT.md §3) — migrated from shared BASIC_COMBOS. */
+const basicStep = (classId, step, overrides) => ({
+  id: `ability_${classId}_basic_${step}`,
+  classId,
+  binding: { kind: 'basic', step },
+  unlockLevel: 1,
+  cost: { type: 'none', amount: 0 },
+  cooldownMs: 0,
+  ...overrides,
+});
+
+const basics = [
+  ...[
+    { step: 1, coef: 0.55, clip: 'Sword_Regular_A', clipSeconds: 0.433, durationMs: 450 },
+    { step: 2, coef: 0.55, clip: 'Sword_Regular_B', clipSeconds: 0.533, durationMs: 500 },
+    { step: 3, coef: 0.85, clip: 'Sword_Regular_C', clipSeconds: 2, durationMs: 750 },
+  ].map(({ step, coef, clip, clipSeconds, durationMs }) =>
+    basicStep('warrior', step, {
+      name: `Sword Combo ${step}`,
+      targeting:
+        step === 3
+          ? { kind: 'melee_arc', angleDeg: 120, reach: 2.6 }
+          : { kind: 'melee_arc', angleDeg: 70, reach: 2.6 },
+      effects: [
+        { kind: 'damage', coef, school: 'physical', staggerBonus: step === 3 ? 12 : 0 },
+        { kind: 'resource', resource: 'rage', amount: 4 },
+      ],
+      anim: { clip, clipSeconds, durationMs, contactFraction: 0.55 },
+    }),
+  ),
+  ...[
+    { step: 1, coef: 0.45, clip: 'Sword_Regular_A', clipSeconds: 0.433, durationMs: 400 },
+    { step: 2, coef: 0.45, clip: 'Sword_Regular_B', clipSeconds: 0.533, durationMs: 450 },
+    { step: 3, coef: 0.7, clip: 'Sword_Regular_C', clipSeconds: 2, durationMs: 650 },
+  ].map(({ step, coef, clip, clipSeconds, durationMs }) =>
+    basicStep('rogue', step, {
+      name: `Dagger Flurry ${step}`,
+      comboPointGain: step === 3 ? 1 : 0,
+      targeting: { kind: 'melee_arc', angleDeg: 70, reach: 2.3 },
+      effects:
+        step === 3
+          ? [
+              { kind: 'damage', coef, school: 'physical', staggerBonus: 8 },
+              { kind: 'resource', resource: 'energy', amount: 0, comboPoints: 1 },
+            ]
+          : [{ kind: 'damage', coef, school: 'physical' }],
+      anim: { clip, clipSeconds, durationMs, contactFraction: 0.55 },
+    }),
+  ),
+  ...['mage', 'cleric'].flatMap((classId) =>
+    [
+      { step: 1, coef: 0.5, durationMs: 500 },
+      { step: 2, coef: 0.5, durationMs: 500 },
+      { step: 3, coef: 0.75, durationMs: 650 },
+    ].map(({ step, coef, durationMs }) =>
+      basicStep(classId, step, {
+        name: `${classId === 'mage' ? 'Arc Bolt' : 'Holy Spark'} ${step}`,
+        targeting: { kind: 'projectile', speed: 28, radius: 0.25, maxRange: 30 },
+        effects: [{ kind: 'damage', coef, school: 'magic', staggerBonus: step === 3 ? 10 : 0 }],
+        anim: {
+          clip: 'Spell_Simple_Shoot',
+          clipSeconds: 0.5,
+          durationMs,
+          contactFraction: 0.6,
+        },
+      }),
+    ),
+  ),
+];
+
+export const KIT_DEFS = [...warrior, ...rogue, ...basics];

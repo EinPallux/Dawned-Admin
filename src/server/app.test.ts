@@ -7,7 +7,13 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import argon2 from 'argon2';
 import { and, eq, inArray } from 'drizzle-orm';
-import { accounts, auditLog, contentWorldSettings, sessions } from '@dawned/shared/schema';
+import {
+  accounts,
+  auditLog,
+  contentAbilities,
+  contentWorldSettings,
+  sessions,
+} from '@dawned/shared/schema';
 import { defaultWorldSettings } from '@dawned/shared';
 import { loadConfig } from './config.js';
 import { buildApp, type App } from './app.js';
@@ -28,6 +34,17 @@ const cleanup = async (): Promise<void> => {
   const ids = rows.map((row) => row.id);
   if (ids.length > 0) {
     await db.delete(auditLog).where(inArray(auditLog.actorAccountId, ids));
+    // Content rows saved by fixture admins reference them (updated_by FK) —
+    // the A1 suite's published fixture must go before the accounts can.
+    // Published copies carry NO updated_by (the pipeline inserts them fresh),
+    // so the zz fixture ids are removed explicitly too.
+    await db.delete(contentAbilities).where(inArray(contentAbilities.updatedBy, ids));
+    await db
+      .delete(contentAbilities)
+      .where(
+        inArray(contentAbilities.id, ['ability_mage_zz_test_bolt', 'ability_mage_zz_test_clash']),
+      );
+    await db.delete(contentWorldSettings).where(inArray(contentWorldSettings.updatedBy, ids));
     await db.delete(accounts).where(inArray(accounts.id, ids)); // sessions cascade
   }
   await db.delete(contentWorldSettings).where(eq(contentWorldSettings.status, 'draft'));
@@ -234,5 +251,135 @@ describe('sessions', () => {
     const rows = await ctx.dbHandle.db.select().from(sessions).where(eq(sessions.kind, 'admin'));
     // Other tests' sessions may exist; ours must be gone (verified via 401 above).
     expect(rows.every((row) => row.expiresAt > new Date(0))).toBe(true);
+  });
+});
+
+describe('ability drafts + publish v1 (A1)', () => {
+  // One login for the whole suite — the auth rate limiter caps per-minute
+  // attempts, and every earlier suite already spent some of the budget.
+  let session: Record<string, string>;
+  beforeAll(async () => {
+    const cookie = sessionCookieOf(await login(ADMIN_NAME));
+    session = { dawned_admin_session: cookie };
+    // Idempotent reruns: drop BOTH statuses of the fixture ids — a published
+    // row from a previous run would make the identical draft prune on save.
+    const { inArray } = await import('drizzle-orm');
+    const { contentAbilities } = await import('@dawned/shared/schema');
+    await ctx.dbHandle.db
+      .delete(contentAbilities)
+      .where(
+        inArray(contentAbilities.id, ['ability_mage_zz_test_bolt', 'ability_mage_zz_test_clash']),
+      );
+  });
+
+  // Fixtures live on a MAGE slot: the real Warrior/Rogue kits are published
+  // content in the dev database, and colliding with them would couple this
+  // suite to live content. The collision test collides two zz drafts with
+  // each other, so it stays hermetic even after P6 ships mage rows.
+  const TEST_ID = 'ability_mage_zz_test_bolt';
+  const def = {
+    id: TEST_ID,
+    classId: 'mage',
+    binding: { kind: 'slot', slot: 8 },
+    name: 'ZZ Test Bolt',
+    unlockLevel: 1,
+    cost: { type: 'mana', amount: 25 },
+    cooldownMs: 9000,
+    targeting: { kind: 'projectile', speed: 28, radius: 0.25, maxRange: 30 },
+    effects: [{ kind: 'damage', coef: 1.4, school: 'magic' }],
+    anim: { clip: 'Spell_Simple_Shoot', clipSeconds: 0.5, durationMs: 600 },
+  };
+
+  it('rejects invalid defs with field-level messages', async () => {
+    const bad = await ctx.app.inject({
+      method: 'PUT',
+      url: `/api/abilities/${TEST_ID}`,
+      cookies: session,
+      headers: CSRF,
+      payload: { ...def, cost: { type: 'energy', amount: 25 } }, // energy on a mage
+    });
+    expect(bad.statusCode).toBe(400);
+    expect(bad.json<{ message: string }>().message).toContain('energy costs are Rogue-only');
+  });
+
+  it('saves a draft, diffs it, publishes it, and prunes matching drafts', async () => {
+    const saved = await ctx.app.inject({
+      method: 'PUT',
+      url: `/api/abilities/${TEST_ID}`,
+      cookies: session,
+      headers: CSRF,
+      payload: def,
+    });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json<{ draft: { id: string } | null }>().draft?.id).toBe(TEST_ID);
+
+    const diff = await ctx.app.inject({
+      method: 'GET',
+      url: '/api/publish/abilities/diff',
+      cookies: session,
+    });
+    const entries = diff.json<{ entries: { id: string; kind: string }[] }>().entries;
+    expect(entries.some((entry) => entry.id === TEST_ID && entry.kind === 'added')).toBe(true);
+
+    // Publish: draft becomes the published row; the game-reload poke may fail
+    // in tests (no game server) — the publish itself must still land.
+    const published = await ctx.app.inject({
+      method: 'POST',
+      url: '/api/publish/abilities',
+      cookies: session,
+      headers: CSRF,
+    });
+    expect(published.statusCode).toBe(200);
+    expect(published.json<{ ok: boolean; published: number }>().ok).toBe(true);
+
+    const detail = await ctx.app.inject({
+      method: 'GET',
+      url: `/api/abilities/${TEST_ID}`,
+      cookies: session,
+    });
+    const body = detail.json<{ draft: unknown; published: { id: string } | null }>();
+    expect(body.draft).toBeNull();
+    expect(body.published?.id).toBe(TEST_ID);
+
+    // Re-saving the identical def prunes rather than creating a no-op draft.
+    const resaved = await ctx.app.inject({
+      method: 'PUT',
+      url: `/api/abilities/${TEST_ID}`,
+      cookies: session,
+      headers: CSRF,
+      payload: def,
+    });
+    expect(resaved.json<{ draft: unknown }>().draft).toBeNull();
+  });
+
+  it('publish refuses slot collisions across the would-be set', async () => {
+    const clash = {
+      ...def,
+      id: 'ability_mage_zz_test_clash',
+      name: 'ZZ Clash',
+    };
+    await ctx.app.inject({
+      method: 'PUT',
+      url: `/api/abilities/${clash.id}`,
+      cookies: session,
+      headers: CSRF,
+      payload: clash, // same class+slot 7 as the published test ability
+    });
+    const refused = await ctx.app.inject({
+      method: 'POST',
+      url: '/api/publish/abilities',
+      cookies: session,
+      headers: CSRF,
+    });
+    expect(refused.statusCode).toBe(422);
+    expect(refused.json<{ problems: string[] }>().problems.join(' ')).toContain('slot mage:8');
+
+    // Clean up the clash draft so reruns stay deterministic.
+    await ctx.app.inject({
+      method: 'DELETE',
+      url: `/api/abilities/${clash.id}/draft`,
+      cookies: session,
+      headers: CSRF,
+    });
   });
 });

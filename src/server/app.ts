@@ -22,7 +22,7 @@ import fastifyStatic from '@fastify/static';
 import { z } from 'zod';
 import { eq, sql } from 'drizzle-orm';
 import { contentWorldSettings } from '@dawned/shared/schema';
-import { worldSettingsSchema } from '@dawned/shared';
+import { abilityDefSchema, worldSettingsSchema } from '@dawned/shared';
 import type { AdminUser, DashboardData } from '../shared-ext/api-types.js';
 import type { Config } from './config.js';
 import { createDb, assertSchemaPresent, type DbHandle } from './db.js';
@@ -30,6 +30,14 @@ import { AdminAuth, SESSION_COOKIE, roleAtLeast } from './auth.js';
 import { createAuditWriter, type AuditWriter } from './audit.js';
 import { probeGame, probeMetrics } from './game-status.js';
 import { readWorldSettings, saveWorldSettingsDraft } from './world-settings.js';
+import {
+  diffAbilities,
+  discardAbilityDraft,
+  listAbilities,
+  publishAbilities,
+  readAbility,
+  saveAbilityDraft,
+} from './abilities.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -205,6 +213,82 @@ export const buildApp = async (config: Config): Promise<App> => {
       });
     }
     return data;
+  });
+
+  // --- ability content editor (A1) -------------------------------------------
+  app.get('/api/abilities', async (request, reply) => {
+    if (!requireRole(request, reply, 'gm')) return;
+    return { abilities: await listAbilities(dbHandle.db) };
+  });
+
+  app.get('/api/abilities/:id', async (request, reply) => {
+    if (!requireRole(request, reply, 'gm')) return;
+    const { id } = request.params as { id: string };
+    return readAbility(dbHandle.db, id);
+  });
+
+  /** Save a DRAFT (rule 1 — published rows only move through publish). */
+  app.put('/api/abilities/:id', async (request, reply) => {
+    const admin = requireRole(request, reply, 'admin');
+    if (!admin) return;
+    const { id } = request.params as { id: string };
+    const parsed = abilityDefSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        error: 'validation',
+        message: parsed.error.issues
+          .map((issue) => `${issue.path.join('.') || '<root>'}: ${issue.message}`)
+          .join('; '),
+      });
+    }
+    if (parsed.data.id !== id) {
+      return reply.code(400).send({ error: 'bad_request', message: 'Body id must match the URL.' });
+    }
+    const { pruned } = await saveAbilityDraft(dbHandle.db, parsed.data, admin.accountId);
+    await audit({
+      actorAccountId: admin.accountId,
+      action: 'abilities.save_draft',
+      args: { id, pruned },
+      target: id,
+      result: 'ok',
+    });
+    return readAbility(dbHandle.db, id);
+  });
+
+  app.delete('/api/abilities/:id/draft', async (request, reply) => {
+    const admin = requireRole(request, reply, 'admin');
+    if (!admin) return;
+    const { id } = request.params as { id: string };
+    const removed = await discardAbilityDraft(dbHandle.db, id);
+    if (removed) {
+      await audit({
+        actorAccountId: admin.accountId,
+        action: 'abilities.discard_draft',
+        target: id,
+        result: 'ok',
+      });
+    }
+    return { removed };
+  });
+
+  // --- publish pipeline v1 (abilities) ---------------------------------------
+  app.get('/api/publish/abilities/diff', async (request, reply) => {
+    if (!requireRole(request, reply, 'gm')) return;
+    return { entries: await diffAbilities(dbHandle.db) };
+  });
+
+  app.post('/api/publish/abilities', async (request, reply) => {
+    const admin = requireRole(request, reply, 'admin');
+    if (!admin) return;
+    const result = await publishAbilities(dbHandle.db, config);
+    await audit({
+      actorAccountId: admin.accountId,
+      action: 'abilities.publish',
+      args: { published: result.published, problems: result.problems },
+      result: result.ok ? 'ok' : 'denied',
+    });
+    if (!result.ok) return reply.code(422).send(result);
+    return result;
   });
 
   // --- static SPA (production build) ----------------------------------------

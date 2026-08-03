@@ -52,6 +52,14 @@ export const Shell = ({ user }: { user: AdminUser }) => {
         },
       },
       {
+        id: 'nav-abilities',
+        label: 'Go to Abilities',
+        hint: 'nav',
+        run: () => {
+          void navigate('/content/abilities');
+        },
+      },
+      {
         id: 'open-game',
         label: 'Open the game',
         hint: 'link',
@@ -132,6 +140,9 @@ export const Shell = ({ user }: { user: AdminUser }) => {
         <div className="rail-group">Content</div>
         <NavLink to="/content/world-settings" className={railLink}>
           World Settings
+        </NavLink>
+        <NavLink to="/content/abilities" className={railLink}>
+          Abilities
         </NavLink>
         <div className="rail-item is-disabled" title="Arrives with phase A1">
           Items <span className="phase">A1</span>

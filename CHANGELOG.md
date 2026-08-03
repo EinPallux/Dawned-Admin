@@ -5,6 +5,34 @@ versions track the game's release trains (0.1.0 = tooling that shipped Dawned 0.
 
 ## [Unreleased]
 
+### Added — Abilities editor + publish pipeline v1 (2026-08-03, A1 begins)
+
+- **Content → Abilities**: the panel's first full content editor. Every ability
+  grouped by class with slot/basic/RMB bindings and draft markers; the selected
+  def opens with its hot tuning numbers (cost, cooldown, cast, unlock, swing)
+  lifted into quick fields and the complete definition as JSON validated live
+  by the SHARED `abilityDefSchema` — the exact validator the game server boots
+  with, so the editor can never drift from the game. Saves write DRAFTS only
+  (Ctrl+S), drafts identical to the published row are pruned, and drafts can
+  be discarded per ability.
+- **Publish v1**: the pending-changes panel diffs every draft against its
+  published row (changed field paths), then validate + publish copies the
+  whole draft set live in one transaction — any invalid draft or class/slot
+  collision refuses the entire publish. On success the panel pokes the game's
+  new `/ops/reload-content`, so ability numbers apply to the LIVE server
+  without a restart (the response reports reload state; an unreachable game
+  simply picks the rows up at next boot). Everything audited.
+- 3 new integration tests (draft validation messages, the save→diff→publish→
+  prune round-trip, slot-collision refusal); 15 total green.
+- **The pipeline shipped its first real content**: all 28 P5 kit rows authored
+  through the panel API and published live (`tools/content/author-kits.mjs`);
+  the slot-collision cross-check caught a leaked test fixture on its first
+  live run — refusing the publish exactly as designed.
+- **Live-tune proof** (`tools/content/live-tune-proof.mjs`): re-runnable
+  end-to-end demonstration of the P5 DoD — a coefficient edited as a draft,
+  published, hot-reloaded into the running game, verified served, reverted
+  the same way. No restarts anywhere.
+
 ### Fixed — blank page at /admin in production (2026-08-03)
 
 - The deployed panel rendered a **blank white page**: the game repo's Caddyfile proxied
