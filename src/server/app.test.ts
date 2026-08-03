@@ -42,7 +42,11 @@ const cleanup = async (): Promise<void> => {
     await db
       .delete(contentAbilities)
       .where(
-        inArray(contentAbilities.id, ['ability_mage_zz_test_bolt', 'ability_mage_zz_test_clash']),
+        inArray(contentAbilities.id, [
+          'ability_mage_zz_test_bolt',
+          'ability_mage_zz_test_clash',
+          'ability_mage_zz_test_clash2',
+        ]),
       );
     await db.delete(contentWorldSettings).where(inArray(contentWorldSettings.updatedBy, ids));
     await db.delete(accounts).where(inArray(accounts.id, ids)); // sessions cascade
@@ -268,19 +272,26 @@ describe('ability drafts + publish v1 (A1)', () => {
     await ctx.dbHandle.db
       .delete(contentAbilities)
       .where(
-        inArray(contentAbilities.id, ['ability_mage_zz_test_bolt', 'ability_mage_zz_test_clash']),
+        inArray(contentAbilities.id, [
+          'ability_mage_zz_test_bolt',
+          'ability_mage_zz_test_clash',
+          'ability_mage_zz_test_clash2',
+        ]),
       );
   });
 
-  // Fixtures live on a MAGE slot: the real Warrior/Rogue kits are published
-  // content in the dev database, and colliding with them would couple this
-  // suite to live content. The collision test collides two zz drafts with
-  // each other, so it stays hermetic even after P6 ships mage rows.
+  // Since P6 the kit seed migrations fill EVERY class×slot pair (all four
+  // classes, slots 1–8) with published content, in dev and CI alike — no slot
+  // is ever free for a fixture. The happy-path fixture is therefore rmb-bound:
+  // rmb rows are outside the slot cross-check and none exist as content
+  // (stances are engine-level), so it publishes cleanly without touching live
+  // rows. The collision test saves TWO zz drafts on the same slot so they
+  // collide with each other no matter what real content owns that slot.
   const TEST_ID = 'ability_mage_zz_test_bolt';
   const def = {
     id: TEST_ID,
     classId: 'mage',
-    binding: { kind: 'slot', slot: 8 },
+    binding: { kind: 'rmb' },
     name: 'ZZ Test Bolt',
     unlockLevel: 1,
     cost: { type: 'mana', amount: 25 },
@@ -353,18 +364,26 @@ describe('ability drafts + publish v1 (A1)', () => {
   });
 
   it('publish refuses slot collisions across the would-be set', async () => {
-    const clash = {
-      ...def,
-      id: 'ability_mage_zz_test_clash',
-      name: 'ZZ Clash',
-    };
-    await ctx.app.inject({
-      method: 'PUT',
-      url: `/api/abilities/${clash.id}`,
-      cookies: session,
-      headers: CSRF,
-      payload: clash, // same class+slot 7 as the published test ability
-    });
+    // Both drafts claim mage:8, so they collide with each other (and with the
+    // seeded kit row that owns the slot) — the refusal never depends on which.
+    const clashes = ['ability_mage_zz_test_clash', 'ability_mage_zz_test_clash2'].map(
+      (id, index) => ({
+        ...def,
+        id,
+        name: `ZZ Clash ${index + 1}`,
+        binding: { kind: 'slot', slot: 8 },
+      }),
+    );
+    for (const clash of clashes) {
+      const saved = await ctx.app.inject({
+        method: 'PUT',
+        url: `/api/abilities/${clash.id}`,
+        cookies: session,
+        headers: CSRF,
+        payload: clash,
+      });
+      expect(saved.statusCode).toBe(200);
+    }
     const refused = await ctx.app.inject({
       method: 'POST',
       url: '/api/publish/abilities',
@@ -374,12 +393,14 @@ describe('ability drafts + publish v1 (A1)', () => {
     expect(refused.statusCode).toBe(422);
     expect(refused.json<{ problems: string[] }>().problems.join(' ')).toContain('slot mage:8');
 
-    // Clean up the clash draft so reruns stay deterministic.
-    await ctx.app.inject({
-      method: 'DELETE',
-      url: `/api/abilities/${clash.id}/draft`,
-      cookies: session,
-      headers: CSRF,
-    });
+    // Clean up the clash drafts so reruns stay deterministic.
+    for (const clash of clashes) {
+      await ctx.app.inject({
+        method: 'DELETE',
+        url: `/api/abilities/${clash.id}/draft`,
+        cookies: session,
+        headers: CSRF,
+      });
+    }
   });
 });
