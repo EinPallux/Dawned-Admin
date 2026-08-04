@@ -92,11 +92,12 @@ so an identical draft could never prune. 25 tests green. The whole P8 catalogue 
 live through this surface — 62 items, 5 loot tables, 5 Dawnhaven vendors and the shore/
 weald enemy loot bindings (`tools/content/author-items.mjs`, numbers derived from the
 shared budget formulas) — and the game froze the published result into its seed
-migration 0012. **Current: game P8 is built and in owner playtest — two fix rounds have
-landed since (character sheet + build-id/cache work, then the dodge roll, invisible
-vendors and weapon grip; the game is on protocol v11). Nothing in those rounds changed a
-content schema, so the panel is unaffected: no editor work is pending. The remaining A1
-editors follow their consuming game phases (P9 enemies…).**
+migration 0012. **Current: game P0–P8 are all closed and owner-verified (2026-08-04, after two
+fix rounds — the game is on protocol v11); nothing in those rounds changed a content
+schema, so the panel needed no editor work. The game is now in P9 — Enemies & AI Depth,
+whose sync point here is the A1 Enemies editor (enemy defs + their weighted ability rows,
+spawners/camps) — build it alongside P9's content step, on the same publish rail as
+abilities/progression/items.**
 Note for the next `@dawned/shared` rebuild here: the game bumped `PROTOCOL_VERSION` to 11
 (the snapshot self block now carries the dodge roll). The panel does not speak the game
 protocol, so this is informational — but `pnpm install` after a game-side shared change is

@@ -40,8 +40,8 @@ truth).
   green. The whole P8 catalogue was authored here and published — 62 items, 5 loot tables,
   5 Dawnhaven vendors, plus the shore/weald enemy loot bindings
   (`tools/content/author-items.mjs`) — and the game froze the result into its seed
-  migration 0012. Current: game P8 is built and in owner playtest — two fix rounds have
-  landed since (character sheet + build-id/cache work, then the dodge roll, invisible
-  vendors and weapon grip; the game is on protocol v11). Neither round touched a content
-  schema, so no editor work is pending here; remaining A1 editors follow their consuming
-  phases (P9 enemies…).
+  migration 0012. Current: game P0–P8 are all closed and owner-verified (2026-08-04, after two
+  fix rounds; the game is on protocol v11) — neither round touched a content schema, so no
+  editor work followed. The game is in P9 — Enemies & AI Depth; the sync point here is the
+  **A1 Enemies editor** (enemy defs + weighted ability rows, spawners/camps) on the same
+  publish rail as abilities/progression/items.
