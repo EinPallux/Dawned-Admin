@@ -26,6 +26,7 @@ import {
   ARCHETYPE_MOTION,
   enemyDefSchema,
   enemyStats,
+  missingClips,
   pickEnemyAbility,
   playerStats,
   selectableEnemyAbilities,
@@ -277,6 +278,19 @@ export const crossCheck = (
     }
     if (def.archetype === 'charger' && !def.abilities.some((a) => a.kind === 'charge_rect')) {
       warnings.push(`${def.id}: charger with no charge_rect ability behaves like a grunt`);
+    }
+    // A clip the rig does not own is SILENT: the swing still lands, it just
+    // animates nothing. That shipped once (the P5 Spore Lobber asked a mushnub
+    // for `Punch`), and only a screenshot would ever have caught it.
+    const absent = missingClips(
+      def.modelRef,
+      def.abilities.map((ability) => ability.clip),
+    );
+    if (absent.length > 0) {
+      problems.push(
+        `${def.id}: ${def.modelRef} has no clip named ${absent.join(', ')} — ` +
+          `that attack would animate nothing`,
+      );
     }
   }
 

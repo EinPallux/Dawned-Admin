@@ -19,8 +19,10 @@ type AbilityInput = z.input<typeof enemyAbilitySchema>;
 type EnemyInput = z.input<typeof enemyDefSchema>;
 type SpawnerInput = z.input<typeof spawnerDefSchema>;
 
+// `Bite_Front` is a clip the default fixture model (mushnub, walker family)
+// actually owns — the cross-check refuses invented names, as it should.
 const ability = (over: Partial<AbilityInput> & { id: string }): EnemyAbilityDef =>
-  enemyAbilitySchema.parse({ kind: 'melee_arc', clip: 'Attack', ...over });
+  enemyAbilitySchema.parse({ kind: 'melee_arc', clip: 'Bite_Front', ...over });
 
 const enemy = (over: Partial<EnemyInput> & { id: string }): EnemyDef =>
   enemyDefSchema.parse({
@@ -96,6 +98,24 @@ describe('publish cross-checks', () => {
     expect(result.problems).toEqual([]);
     expect(result.warnings.join(' ')).toMatch(/no phases/);
     expect(result.warnings.join(' ')).toMatch(/arenaRadius/);
+  });
+
+  it('refuses a clip the model does not own (it would animate nothing)', () => {
+    const silent = enemy({
+      id: 'enemy_silent',
+      modelRef: 'enemies_mushnub',
+      // Mushnubs are in the walker rig family: they bite, they do not punch.
+      abilities: [ability({ id: 'swat', clip: 'Punch' })],
+    });
+    expect(crossCheck(map([silent]), new Map(), new Set()).problems.join(' ')).toMatch(
+      /no clip named Punch/,
+    );
+    const fine = enemy({
+      id: 'enemy_biter',
+      modelRef: 'enemies_mushnub',
+      abilities: [ability({ id: 'chomp', clip: 'Bite_Front' })],
+    });
+    expect(crossCheck(map([fine]), new Map(), new Set()).problems).toEqual([]);
   });
 
   it('warns when an archetype cannot do what its name promises', () => {

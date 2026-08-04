@@ -31,6 +31,15 @@ versions track the game's release trains (0.1.0 = tooling that shipped Dawned 0.
   with no charge). Row-level problems are refused at SAVE rather than held
   until publish — an editor should learn a charge cannot overshoot while
   looking at that charge.
+- **Publish now refuses a clip the model does not own.** The Quaternius rig
+  families use non-interchangeable clip names, and asking a rig for a clip it
+  lacks is silent — the attack lands and animates nothing (the P5 Spore
+  Lobber's panic swat had been doing exactly that). The game's shared build
+  records which clips each baked model owns; the cross-check reads it.
+- **`tools/content/author-bestiary.mjs`** authors the whole P9 bestiary through
+  these endpoints — 17 enemies, 20 spawners — and prints the TTK table for every
+  published enemy afterwards, so a content change is never merged without
+  someone having looked at what it does to the fights.
 - **Fixed before it shipped**: the rotation preview used a plain LCG whose
   long-run distribution is fine but whose first twelve values from a small seed
   are badly unrepresentative (3/12 where 7 were expected). Sitting directly
