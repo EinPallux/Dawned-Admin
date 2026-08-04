@@ -42,6 +42,10 @@ truth).
   (`tools/content/author-items.mjs`) — and the game froze the result into its seed
   migration 0012. Current: game P0–P8 are all closed and owner-verified (2026-08-04, after two
   fix rounds; the game is on protocol v11) — neither round touched a content schema, so no
-  editor work followed. The game is in P9 — Enemies & AI Depth; the sync point here is the
-  **A1 Enemies editor** (enemy defs + weighted ability rows, spawners/camps) on the same
-  publish rail as abilities/progression/items.
+  editor work followed. The game is in P9 — Enemies & AI Depth.
+  **A1-d — Enemies is live** (2026-08-04): bestiary + spawners on one publish rail, level-
+  banded list with rank badges, and a time-to-kill simulator that runs the game's own
+  `selectableEnemyAbilities` so the previewed rotation is the fought rotation (both sides
+  of the trade, range-aware, boss-window aware). Publish blocks on unresolvable spawner
+  refs and unpublished loot; boss-with-no-phases and archetype mismatches warn only.
+  41 tests green.

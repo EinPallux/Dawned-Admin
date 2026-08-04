@@ -875,3 +875,65 @@ code,
   flex-wrap: wrap;
   margin-bottom: 8px;
 }
+
+/* --- enemies editor (A1-d) ------------------------------------------------ */
+/* The TTK controls sit inside the meter panel, so they inherit its 12 px body
+   and only need to lay themselves out on one line that wraps on a narrow rail. */
+.enemies-sim-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+  margin: 8px 0;
+}
+.enemies-sim-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+}
+.enemies-sim-controls input {
+  width: 72px;
+  background: var(--bg);
+  border: 1px solid var(--hairline);
+  color: var(--text-bright);
+  padding: 3px 6px;
+  font: inherit;
+  font-size: 12px;
+}
+.enemies-rotation {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 6px;
+  font-size: 11px;
+}
+.enemies-rotation td {
+  padding: 2px 6px 2px 0;
+  border-bottom: 1px solid var(--hairline);
+  white-space: nowrap;
+}
+.enemies-rotation td:nth-child(3),
+.enemies-rotation td:nth-child(4) {
+  text-align: right;
+}
+.enemies-rotation-preview {
+  margin-top: 6px;
+  word-break: break-word;
+}
+/* Rank badge: an elite or a boss must be findable in a long list at a glance. */
+.enemies-rank {
+  margin-left: 6px;
+  padding: 0 4px;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: var(--bg);
+  background: var(--gold);
+}
+.enemies-archetype {
+  margin-left: auto;
+  padding-left: 8px;
+  font-size: 10px;
+}

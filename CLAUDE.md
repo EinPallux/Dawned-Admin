@@ -94,10 +94,16 @@ weald enemy loot bindings (`tools/content/author-items.mjs`, numbers derived fro
 shared budget formulas) — and the game froze the published result into its seed
 migration 0012. **Current: game P0–P8 are all closed and owner-verified (2026-08-04, after two
 fix rounds — the game is on protocol v11); nothing in those rounds changed a content
-schema, so the panel needed no editor work. The game is now in P9 — Enemies & AI Depth,
-whose sync point here is the A1 Enemies editor (enemy defs + their weighted ability rows,
-spawners/camps) — build it alongside P9's content step, on the same publish rail as
-abilities/progression/items.**
+schema, so the panel needed no editor work. The game is now in P9 — Enemies & AI Depth.**
+**A1-d — the Enemies editor is live** (2026-08-04, alongside game P9): Content → Enemies
+with bestiary + spawners on one publish rail (they reference each other), the level-banded
+list with rank badges, and the **time-to-kill simulator** — it runs the game's OWN
+`selectableEnemyAbilities`, so the rotation it previews is the rotation that will be
+fought. It answers both directions of the trade, hides abilities unusable at the tested
+range, sees a boss's whole unlocked kit rather than phase 0, and names the COMBAT.md §12
+60–120 s boss window when a fight misses it. Publish blocks on unresolvable spawner refs
+and unpublished loot; judgement calls (a boss with no phases or arena, a `ranged` row with
+nothing ranged) warn without blocking. 41 tests green.
 Note for the next `@dawned/shared` rebuild here: the game bumped `PROTOCOL_VERSION` to 11
 (the snapshot self block now carries the dodge roll). The panel does not speak the game
 protocol, so this is informational — but `pnpm install` after a game-side shared change is

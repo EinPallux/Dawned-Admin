@@ -68,6 +68,14 @@ export const Shell = ({ user }: { user: AdminUser }) => {
         },
       },
       {
+        id: 'nav-enemies',
+        label: 'Go to Enemies (bestiary, spawners, TTK)',
+        hint: 'nav',
+        run: () => {
+          void navigate('/content/enemies');
+        },
+      },
+      {
         id: 'nav-items',
         label: 'Go to Items (items, loot tables, vendors)',
         hint: 'nav',
@@ -163,12 +171,12 @@ export const Shell = ({ user }: { user: AdminUser }) => {
         <NavLink to="/content/progression" className={railLink}>
           Progression
         </NavLink>
+        <NavLink to="/content/enemies" className={railLink}>
+          Enemies
+        </NavLink>
         <NavLink to="/content/items" className={railLink}>
           Items
         </NavLink>
-        <div className="rail-item is-disabled" title="Arrives with phase A1">
-          Enemies <span className="phase">A1</span>
-        </div>
         <div className="rail-item is-disabled" title="Arrives with phase A3">
           Quests <span className="phase">A3</span>
         </div>

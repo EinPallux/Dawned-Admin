@@ -498,6 +498,25 @@ export const simulateTtk = (request: TtkRequest): TtkReport => {
 };
 
 /**
+ * Seeded RNG for the preview — the same mixer the loot simulator uses.
+ *
+ * NOT a plain LCG: `seed = seed * 1103515245 + 12345` has a fine long-run
+ * distribution but a badly unrepresentative HEAD from a small seed (from
+ * 12345 its first twelve values land 3/12 below 0.6 where 7 are expected).
+ * A twelve-pick preview reads exactly that head, so an LCG would show a
+ * rotation that contradicts the weight table printed right above it — and an
+ * editor would rightly distrust one of the two. mulberry32 mixes the seed
+ * before its first output, so a short sequence is representative.
+ */
+const mulberry32 = (seed: number) => () => {
+  seed = (seed + 0x6d2b79f5) | 0;
+  let t = seed;
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
+
+/**
  * A concrete rotation the enemy WOULD roll, for the editor's "show me" button.
  * Uses the shared weighted pick with a seeded sequence so the preview is
  * reproducible — an editor comparing two tunings needs the same rolls.
@@ -510,11 +529,10 @@ export const previewRotation = (def: EnemyDef, distance: number, picks: number):
     onCooldown: () => false,
     spent: () => false,
   });
+  const roll = mulberry32(12345);
   const out: string[] = [];
-  let seed = 12345;
   for (let i = 0; i < picks; i++) {
-    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
-    const ability = pickEnemyAbility(ready, seed / 0x7fffffff);
+    const ability = pickEnemyAbility(ready, roll());
     out.push(ability?.id ?? '—');
   }
   return out;

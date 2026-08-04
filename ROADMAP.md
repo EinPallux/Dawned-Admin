@@ -71,9 +71,9 @@ are authored here start-to-finish (icons enforced unique); publish diff/revert d
 **Status (2026-08-04): A1-a abilities, A1-b progression and A1-c items/loot/vendors are live;
 the P5 DoD hook is proven. The whole P8 catalogue — 62 items, 5 loot tables, 5 vendors and the
 enemy loot bindings — was authored and published through the A1-c surface. Game P0–P8 are all
-closed and owner-verified; **A1-d — the Enemies editor is next**, alongside game P9 (enemy defs
-with their weighted ability rows and a TTK calculator, plus spawners/camps), on the same publish
-rail.**
+closed and owner-verified; **A1-d — the Enemies editor is live** (2026-08-04, alongside game P9):
+bestiary + spawners on one rail, with a time-to-kill simulator that runs the game's own ability
+selection rules.**
 
 - [x] Abilities editor (Content → Abilities): class-grouped list with binding
       badges + draft markers, quick tuning fields over a shared-schema-validated

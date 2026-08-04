@@ -233,4 +233,18 @@ describe('rotation preview', () => {
     expect(previewRotation(def, 2, 12)).toEqual(first);
     expect(new Set(first).size).toBe(2); // both actually show up
   });
+
+  it('reflects the weights it is shown next to', () => {
+    // The preview sits directly under the weight table. If its short sequence
+    // is unrepresentative the two contradict each other and the editor cannot
+    // tell which is lying — the reason this uses a mixed RNG, not a raw LCG.
+    const def = enemy({
+      id: 'enemy_weighted',
+      abilities: [ability({ id: 'common', weight: 3 }), ability({ id: 'rare', weight: 1 })],
+    });
+    const picks = previewRotation(def, 2, 40);
+    const commonShare = picks.filter((id) => id === 'common').length / picks.length;
+    expect(commonShare).toBeGreaterThan(0.6); // true share is 0.75
+    expect(commonShare).toBeLessThan(0.9);
+  });
 });
