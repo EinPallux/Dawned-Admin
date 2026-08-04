@@ -54,20 +54,22 @@ docs/         ADMIN_DESIGN.md · MAP_EDITOR.md · CONTENT_EDITORS.md · ARCHITEC
 
 ## Current state
 
-**A0 — Foundation is built and verified in dev (2026-08-02)**: Vite/React/Fastify scaffold with
-`@dawned/shared` consumed from the sibling game checkout, panel auth against game accounts (gm/admin
-roles, admin sessions, CSRF, audit_log), the "Workshop" shell + Ctrl+K palette, Dashboard v1
-with the live server card, and the schema-form generator driving World Settings drafts
-(`content_world_settings`, draft rows only). 12 tests + a Playwright login smoke green
-(`node tools/smoke/admin-login.mjs`); dist layout matches the deployed `dawned-admin.service`.
-**A1-a — the Abilities editor + publish pipeline v1 is live (2026-08-03, alongside game P5)**:
-Content → Abilities (class-grouped drafts, quick tuning fields over shared-schema-validated
-JSON, Ctrl+S, prune-on-match), publish v1 (diff review → validate-all + slot-collision
-cross-check → transactional copy → `/ops/reload-content` hot reload), 15 tests green. It
-shipped the 28 P5 kit rows (`tools/content/author-kits.mjs`) and the P5 "live-tunable without
-restart" DoD is proven re-runnably (`tools/content/live-tune-proof.mjs`). **Open: the owner's
-login check at play.pathlands.cc/admin after the next deploy (ROADMAP A0 status); remaining A1
-editors land with their consuming game phases (P8 items, P9 enemies…).**
+**A0 — Foundation is ✅ closed (owner logged in at play.pathlands.cc/admin, 2026-08-04)**:
+Vite/React/Fastify scaffold with `@dawned/shared` consumed from the sibling game checkout,
+panel auth against game accounts (gm/admin roles, admin sessions, CSRF, audit_log), the
+"Workshop" shell + Ctrl+K palette, Dashboard v1 with the live server card, and the
+schema-form generator driving World Settings drafts (`content_world_settings`, draft rows
+only). Playwright login smoke: `node tools/smoke/admin-login.mjs`; dist layout matches the
+deployed `dawned-admin.service`.
+**A1 — the Abilities editor + publish pipeline v1 is live** (2026-08-03, alongside game P5;
+P6's 16 caster rows also went through it): Content → Abilities (class-grouped drafts, quick
+tuning fields over shared-schema-validated JSON, Ctrl+S, prune-on-match), publish v1 (diff
+review → validate-all + slot-collision cross-check → transactional copy →
+`/ops/reload-content` hot reload), 15 tests green, all 44 live ability rows authored through
+it (`tools/content/author-kits.mjs`; live-tune proof re-runnable via
+`tools/content/live-tune-proof.mjs`). **Current: game P7 needs the next A1 editors — the XP
+curve and skill-tree/node editors land here alongside it; remaining A1 editors follow their
+consuming game phases (P8 items, P9 enemies…).**
 
 ### Running it locally
 
