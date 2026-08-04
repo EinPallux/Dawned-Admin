@@ -17,7 +17,7 @@ import {
   contentWorldSettings,
   sessions,
 } from '@dawned/shared/schema';
-import { defaultWorldSettings } from '@dawned/shared';
+import { defaultWorldSettings, type WorldSettings } from '@dawned/shared';
 import { loadConfig } from './config.js';
 import { buildApp, type App } from './app.js';
 
@@ -175,7 +175,20 @@ describe('world-settings drafts (A0 DoD round-trip)', () => {
     const cookie = sessionCookieOf(await login(ADMIN_NAME));
     const session = { dawned_admin_session: cookie };
 
-    const edited = { ...defaultWorldSettings(), xpRate: 2, motd: 'Welcome to the dawn.' };
+    // Baseline = what is actually PUBLISHED, not the schema defaults: the dev
+    // database is a live world (a game smoke may have published `xpRate 8`),
+    // and pruning is defined against published, not against defaults.
+    const before = await ctx.app.inject({
+      method: 'GET',
+      url: '/api/world-settings',
+      cookies: session,
+    });
+    const publishedNow = before.json<{ published: WorldSettings }>().published;
+
+    // Flip to a value that is different from published AND inside the
+    // schema's range (xpRate caps at 8 — "published + 1" is not always legal).
+    const editedRate = publishedNow.xpRate === 1 ? 2 : 1;
+    const edited = { ...publishedNow, xpRate: editedRate, motd: 'Welcome to the dawn.' };
     const saved = await ctx.app.inject({
       method: 'PUT',
       url: '/api/world-settings',
@@ -185,7 +198,7 @@ describe('world-settings drafts (A0 DoD round-trip)', () => {
     });
     expect(saved.statusCode).toBe(200);
     const savedData = saved.json<{ draft: typeof edited; draftKeys: string[] }>();
-    expect(savedData.draft.xpRate).toBe(2);
+    expect(savedData.draft.xpRate).toBe(editedRate);
     expect(savedData.draftKeys.sort()).toEqual(['motd', 'xpRate']);
 
     // A fresh GET (the "reload the panel" case) sees the persisted draft.
@@ -210,7 +223,7 @@ describe('world-settings drafts (A0 DoD round-trip)', () => {
       url: '/api/world-settings',
       cookies: session,
       headers: CSRF,
-      payload: defaultWorldSettings(),
+      payload: publishedNow,
     });
     expect(reverted.json<{ draftKeys: string[] }>().draftKeys).toEqual([]);
     const draftRows = await ctx.dbHandle.db

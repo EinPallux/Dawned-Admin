@@ -18,6 +18,9 @@ truth).
 - **Process:** follow ROADMAP.md A-phases (synced to game P-phases); `pnpm check` before done;
   CHANGELOG `[Unreleased]`; design questions go to the game repo's USER_QUESTIONS.md with a
   recommended default.
+- **Freshness checklist (every task):** ROADMAP row + phase block · CHANGELOG · README status
+  block · CLAUDE/AGENTS current state in BOTH repos · docs you touched · no hardcoded
+  phase/version strings in the UI · counts you quote re-read from the run you just did.
 - **State (updated 2026-08-04):** A0 ✅ closed — the owner logged in at
   play.pathlands.cc/admin and the panel works (scaffold, panel auth gm/admin + audit,
   Workshop shell + palette, live dashboard, schema-form World Settings drafts). A1's
