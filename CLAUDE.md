@@ -65,11 +65,17 @@ deployed `dawned-admin.service`.
 P6's 16 caster rows also went through it): Content → Abilities (class-grouped drafts, quick
 tuning fields over shared-schema-validated JSON, Ctrl+S, prune-on-match), publish v1 (diff
 review → validate-all + slot-collision cross-check → transactional copy →
-`/ops/reload-content` hot reload), 15 tests green, all 44 live ability rows authored through
-it (`tools/content/author-kits.mjs`; live-tune proof re-runnable via
-`tools/content/live-tune-proof.mjs`). **Current: game P7 needs the next A1 editors — the XP
-curve and skill-tree/node editors land here alongside it; remaining A1 editors follow their
-consuming game phases (P8 items, P9 enemies…).**
+`/ops/reload-content` hot reload), all 44 live ability rows authored through it
+(`tools/content/author-kits.mjs`; live-tune proof re-runnable via
+`tools/content/live-tune-proof.mjs`).
+**A1-b — the Progression editors are live** (2026-08-04, alongside game P7): Content →
+Progression with the skill-trees tab (class picker, tier-laid branch columns, shared-schema
+JSON editing per node, draft dots) and the XP-curve tab (29 editable rows, cumulative +
+formula reference, reset-to-formula), publishing over v1's rails plus the tree cross-checks
+(curve completeness, ability refs, cell collisions, one capstone per branch). The full P7
+content set — 29 curve rows + 96 nodes — went live through it
+(`tools/content/author-progression.mjs`); 19 tests green. **Current: remaining A1 editors
+follow their consuming game phases (P8 items/loot/vendors, P9 enemies…).**
 
 ### Running it locally
 

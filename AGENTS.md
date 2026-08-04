@@ -24,5 +24,9 @@ truth).
   Abilities editor + publish v1 is live (drafts → validate + slot-collision cross-check →
   transactional publish → game hot reload); all 44 ability rows (P5 + P6 kits) were
   authored/published through it and the live-tune DoD is proven re-runnably
-  (`tools/content/live-tune-proof.mjs`). Current: the XP-curve and skill-tree editors land
-  here alongside game P7; remaining A1 editors follow their consuming phases.
+  (`tools/content/live-tune-proof.mjs`). A1-b (game P7) is live too: Content → Progression
+  (skill-tree tab with tier-laid branch columns + shared-schema JSON node editing; XP-curve
+  tab with cumulative + formula reference and reset-to-formula) publishing over v1's rails
+  plus tree cross-checks; the full P7 set (29 curve rows + 96 nodes) went live through it
+  (`tools/content/author-progression.mjs`), 19 tests green. Current: remaining A1 editors
+  follow their consuming phases (P8 items/loot/vendors, P9 enemies…).
