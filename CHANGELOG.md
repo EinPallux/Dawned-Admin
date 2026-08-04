@@ -5,6 +5,33 @@ versions track the game's release trains (0.1.0 = tooling that shipped Dawned 0.
 
 ## [Unreleased]
 
+### Added — Map editor foundations: draft store, validate, bake, publish (2026-08-04, A2-b)
+
+- **The map is now editable data with a real publish rail.** Terrain drafts are
+  stored chunk by chunk, so a brush stroke autosaves as a handful of 25 kB
+  writes rather than the whole world. Everything standing on the ground is its
+  own row, which is what makes "move this rock" one write and "wipe every prop
+  in Emberwood" a scoped delete.
+- **Import the live world into the draft** (`Import live map`). Without this the
+  editor would open on empty ocean and the first publish would delete Dawnhaven,
+  every camp and every zone. It reads the bake players are currently standing on
+  plus the published spawner rows, and takes a checkpoint before overwriting an
+  existing draft.
+- **Validation catches what the viewport cannot show**: land in no zone (it
+  would read as open ocean), a chest with no loot table, a prop whose model was
+  never baked, a spawner inside a safe zone or pointing at an unpublished enemy,
+  and — the one nobody finds by looking — content you cannot walk to, via a
+  flood-fill from the spawn across the same walkgrid the server enforces.
+  Floaters, buried props and per-chunk instance budgets report without blocking.
+- **Bake + publish with live progress.** Chunk bins, walkgrid, zones,
+  placements, meta and the world-map/minimap renders are staged into a temporary
+  directory and renamed into place; the `current.json` pointer moves LAST, so a
+  bake that fails halfway cannot take the world down. The game is then asked to
+  hot-load the new map — no deploy, no restart.
+- **One writer at a time**: a 45-second lease with takeover requests, and named
+  checkpoints (gzip snapshots) you can restore, taken automatically before
+  anything destructive.
+
 ### Added — Enemies editor: bestiary, spawners, time-to-kill (2026-08-04, with game P9)
 
 - **Content → Enemies**, two tabs on one publish rail. Enemies and spawners ship

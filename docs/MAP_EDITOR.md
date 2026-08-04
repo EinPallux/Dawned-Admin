@@ -109,6 +109,35 @@ world-map + minimap renders (styled per game WORLD.md §5), publishes a map vers
 bundle entry (game repo pipeline). Bake runs server-side (admin API worker, niced) with progress
 UI; typical incremental bake target <60 s (changed chunks only), full-map <10 min on the VPS.
 
+### 4.1 As-built (A2-b)
+
+- **Draft storage is chunk-granular and row-per-object.** `map_draft_chunks` holds heights +
+  splat + water + an `enabled` flag per chunk (a stroke autosaves as a handful of ~25 kB
+  upserts); `map_draft_objects` holds one row per placed thing, keyed by id and indexed by
+  chunk. Disabled chunks are open ocean: the bake skips them and the client never downloads
+  them, which is what keeps a 32×32 world cheap.
+- **Import before you edit.** `POST /api/map/import-live` reads the bake players are currently
+  standing on (chunks, zones, placements) plus the published spawner rows into the draft. The
+  editor otherwise opens on empty ocean, and the first publish would delete the world. It
+  checkpoints an existing draft before overwriting it.
+- **The pointer moves last.** A bake stages into `<version>.tmp`, renames into `<version>/`, and
+  only then rewrites `current.json`. Until that last write the previous version is still live,
+  so a bake that dies halfway cannot take the world down. Publish then pokes the game's
+  `/ops/reload-map` (which loads the new bake BEFORE swapping it in) and `/ops/reload-content`.
+- **Spawners are the one layer the GAME reads from the database, not from the bake**
+  (`content_spawners`). Publishing the map republishes that layer — delete-then-insert in one
+  transaction, so a camp deleted in the editor actually stops spawning.
+- **Reachability is a real flood-fill**, not a heuristic: the bake builds the walkgrid, floods
+  from the resolved spawn across walkable + water, and reports any POI, interactable or spawner
+  further than 3 m from a reached cell. World metre → cell is FLOOR, matching the game's
+  `Walkgrid.classAt` — rounding instead puts the bake half a cell away from what the server
+  enforces, which is enough to declare a reachable world unreachable.
+- **Blocking vs advisory.** Blocked: land in no zone, an inverted level band, a placement on a
+  disabled chunk, an unbaked `modelRef`, a chest with a missing or unpublished loot table, a
+  spawner pointing at an unpublished enemy or sitting in a safe zone, a scatter patch whose set
+  was deleted, unreachable content. Advisory: overlapping zones, floaters/buried props, chunks
+  over the instance budget, spawners in an unreachable pocket.
+
 ## 5. Play-test Bridge
 
 "Play-test ▸" button: opens the game client (new tab) pointed at a **draft preview channel** —

@@ -56,3 +56,14 @@ truth).
   is the whole answer** and the page defaults it to 40, where a properly built level-12
   warrior measures 78 (an unspent one, 30). A guessed dps can be 3× off and send someone
   re-balancing a boss that was fine — worth a measured reference on the sim controls.
+  **A2-a/A2-b — the map editor's foundations are in (2026-08-04).** Shared (game repo)
+  owns brush math + deterministic scatter so preview, bake and server agree; draft
+  tables are migration 0014. Here: chunk-granular draft CRUD behind a 45 s single-writer
+  lease with takeover, gzip checkpoints + restore, per-layer clear; `validateDraft`
+  (zone coverage, model/loot/enemy refs, safe-zone spawners, walkgrid flood-fill
+  reachability, floater/buried + per-chunk instance budgets); `bakeDraft` staging into
+  `.tmp` then renaming, with SSE progress. Publish mints `map-<epoch>`, repoints
+  `current.json` LAST, mirrors the spawner layer into published `content_spawners`, then
+  pokes `/ops/reload-map` + `/ops/reload-content`. `POST /api/map/import-live` seeds the
+  draft from the live world — without it the first publish would delete Dawnhaven.
+  61 tests green. Next: A2-c (viewport) and A2-d (terrain tools).

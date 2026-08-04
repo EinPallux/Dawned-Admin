@@ -119,6 +119,22 @@ defaults it to 40. The measured number for a properly built level-12 warrior wit
 **78**, and an UNSPENT level 12 does 30 — so a preview run with a guessed dps can be off by
 3× and send someone re-balancing a boss that was fine. Worth surfacing on the sim controls
 (a measured reference row, or level-derived defaults) next time the Enemies page is touched.
+**A2-a/A2-b — the map editor's foundations are in** (2026-08-04): the game repo's
+`@dawned/shared` now owns brush math and deterministic scatter (so the editor preview, the
+bake and the server cannot disagree), plus the draft tables (migration 0014). Here: chunk-
+granular draft CRUD with a 45 s single-writer lease + takeover, gzip checkpoints with
+restore, per-layer clear; `validateDraft` (zone coverage, model/loot/enemy refs, safe-zone
+spawners, walkgrid flood-fill reachability, floater/buried + per-chunk instance budgets);
+`bakeDraft` staging into `.tmp` then renaming (chunk bins, walkgrid, zones, placements,
+meta, world-map + minimap) with SSE progress. Publish mints `map-<epoch>`, repoints
+`current.json` LAST, mirrors the spawner layer into published `content_spawners` (a camp
+moved in the editor has to move in the game), then pokes `/ops/reload-map` +
+`/ops/reload-content`. **`POST /api/map/import-live` seeds the draft from the live world** —
+without it the editor opens on empty ocean and the first publish would delete Dawnhaven.
+The GAME side landed with it: the live map version is a served artifact, not a constant
+(server reads `current.json`, reports it on `/api/health`, client asks the server which bake
+to stream), and `/ops/reload-map` swaps a new bake under the running world. 61 tests green.
+**Next: A2-c (three.js viewport + overlays) and A2-d (terrain tools + undo).**
 
 ### Running it locally
 

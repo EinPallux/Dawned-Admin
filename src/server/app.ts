@@ -39,6 +39,7 @@ import type { Config } from './config.js';
 import { createDb, assertSchemaPresent, type DbHandle } from './db.js';
 import { AdminAuth, SESSION_COOKIE, roleAtLeast } from './auth.js';
 import { createAuditWriter, type AuditWriter } from './audit.js';
+import { registerMapRoutes } from './map-routes.js';
 import { probeGame, probeMetrics } from './game-status.js';
 import { readWorldSettings, saveWorldSettingsDraft } from './world-settings.js';
 import {
@@ -710,6 +711,11 @@ export const buildApp = async (config: Config): Promise<App> => {
     if (!result.ok) return reply.code(422).send(result);
     return result;
   });
+
+  // --- map editor (A2/A3) ---------------------------------------------------
+  // Its own module: the editor's surface is as large as every content editor
+  // put together, and mixing them would bury both.
+  registerMapRoutes(app, { db: dbHandle.db, config, audit, requireRole });
 
   // --- static SPA (production build) ----------------------------------------
   // dist layout: dist/server/app.js (this file) beside dist/client/ (the SPA).

@@ -8,7 +8,7 @@
 | ----- | --------------------------------------------- | ---- | --------------------- | --------------------------------------- |
 | A0    | Foundation: shell, auth, data link            | M    | game P1 (schema live) | ✅ done (2026-08-04)                    |
 | A1    | Content editors (items→curves) + publish v1   | L    | A0; serves P5–P8      | 🟨 abilities · progression · items live |
-| A2    | Map Editor I: viewport, terrain, publish/bake | XL   | game P2 formats       | 🔲                                      |
+| A2    | Map Editor I: viewport, terrain, publish/bake | XL   | game P2 formats       | 🚧 in progress (a/b done, 2026-08-04)   |
 | A3    | Map Editor II: placement, spawns, zones, POIs | XL   | A2 + game P9 systems  | 🔲                                      |
 | A4    | Quest & dialogue editor                       | M    | A1; serves P11        | 🔲                                      |
 | A5    | Live Ops: players, moderation, server, audit  | M    | game P13 ops API      | 🔲                                      |
@@ -112,7 +112,7 @@ selection rules.**
       game phases (P9 enemies…); the shared editor framework generalizes from
       the abilities/items surfaces as they arrive.
 
-## A2 — Map Editor I: Terrain (XL)
+## A2 — Map Editor I: Terrain (XL) — in progress
 
 Viewport foundation (game-parity rendering: terrain/splat/water/sky, fly/orbit cameras, overlay
 system, chunk streaming in-editor); terrain sculpt suite (all brushes incl. path spline +
@@ -122,6 +122,25 @@ autosave/crash recovery + named checkpoints; undo/redo journal; validate→bake�
 artifacts (walkgrid, chunk bins, world-map render) with SSE progress; heightmap import/export.
 **DoD:** MAP_EDITOR.md §7 scenario _terrain half_: sculpt/paint/publish a new islet and walk it
 in the live game; full-map bake under 10 min on the VPS; undo survives a 200-step brush session.
+
+- [x] **A2-a — shared map-authoring core (game repo).** Brush math (`applyBrushToChunk`, seam
+      correctness across the shared vertex row, splat renormalisation to 255) and deterministic
+      scatter resolution (`resolveScatter`) live in `@dawned/shared`, so the editor preview, the
+      bake and the server cannot disagree about what a stroke did. Draft tables (chunks, objects,
+      lock, checkpoints, versions) landed as migration 0014. 34 new shared tests.
+- [x] **A2-b — draft store + bake/publish worker (here).** Chunk-granular draft CRUD with a
+      45 s single-writer lease and takeover requests, gzip checkpoints with restore, per-layer
+      clear (optionally polygon-scoped); `validateDraft` (zone coverage, placement/model/loot
+      refs, safe-zone spawners, walkgrid flood-fill reachability, floater/buried and per-chunk
+      instance-budget reports); `bakeDraft` staging into `.tmp` and renaming (chunk bins,
+      walkgrid, zones, placements, meta, world-map + minimap renders) with SSE progress. Publish
+      mints `map-<epoch>`, repoints `current.json` LAST, mirrors the spawner layer into published
+      `content_spawners`, then pokes the game's `/ops/reload-map` + `/ops/reload-content`.
+      **`POST /api/map/import-live` seeds the draft from the world players are standing on** —
+      without it the editor opens on empty ocean and the first publish would delete Dawnhaven.
+      19 new tests (61 total green).
+- [ ] A2-c — viewport (three.js, game-parity terrain/splat/water), cameras, overlays.
+- [ ] A2-d — terrain tools: sculpt brushes, splat painting, water, generators, undo journal.
 
 ## A3 — Map Editor II: World Population (XL) — before game P12
 
