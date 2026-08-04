@@ -34,5 +34,8 @@ truth).
   simulator through the shared roller the server drops with) and vendors (stock priced by
   the shared value/sell formulas) — publishing with icon-uniqueness, ref-resolution,
   loot-cycle and live-enemy-table cross-checks plus advisory budget warnings; 25 tests
-  green. Current: P8-C authors the first 60 items through it; remaining A1 editors follow
-  their consuming phases (P9 enemies…).
+  green. The whole P8 catalogue was authored here and published — 62 items, 5 loot tables,
+  5 Dawnhaven vendors, plus the shore/weald enemy loot bindings
+  (`tools/content/author-items.mjs`) — and the game froze the result into its seed
+  migration 0012. Current: game P8 is built and awaiting the owner's playtest; remaining
+  A1 editors follow their consuming phases (P9 enemies…).

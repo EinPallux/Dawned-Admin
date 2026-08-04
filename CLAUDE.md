@@ -84,9 +84,12 @@ killer level + rolls-per-kill adjustable, `nothing` shown as its own share) and 
 item/table/vendor ref resolution, loot cycles and the tables live enemies still roll;
 budget deviations report as advisory warnings. A latent prune bug was fixed with it:
 drafts were compared against the RAW jsonb column, whose key order Postgres normalises,
-so an identical draft could never prune. 25 tests green. **Current: P8-C authors the
-first 60 items through this surface; remaining A1 editors follow their consuming game
-phases (P9 enemies…).**
+so an identical draft could never prune. 25 tests green. The whole P8 catalogue went
+live through this surface — 62 items, 5 loot tables, 5 Dawnhaven vendors and the shore/
+weald enemy loot bindings (`tools/content/author-items.mjs`, numbers derived from the
+shared budget formulas) — and the game froze the published result into its seed
+migration 0012. **Current: game P8 is built and awaiting the owner's playtest; the
+remaining A1 editors follow their consuming game phases (P9 enemies…).**
 
 ### Running it locally
 
