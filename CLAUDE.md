@@ -74,8 +74,19 @@ JSON editing per node, draft dots) and the XP-curve tab (29 editable rows, cumul
 formula reference, reset-to-formula), publishing over v1's rails plus the tree cross-checks
 (curve completeness, ability refs, cell collisions, one capstone per branch). The full P7
 content set — 29 curve rows + 96 nodes — went live through it
-(`tools/content/author-progression.mjs`); 19 tests green. **Current: remaining A1 editors
-follow their consuming game phases (P8 items/loot/vendors, P9 enemies…).**
+(`tools/content/author-progression.mjs`); 19 tests green.
+**A1-c — the Item editors are live** (2026-08-04, alongside game P8): Content → Items
+with three tabs on one publish rail — items (budget meter against the ITEMS_LOOT §2
+formulas, ƒ-suggest for value/weapon band/stat rescale, live duplicate-icon warning),
+loot (a 1 000-roll simulator through the SAME shared roller the server drops with,
+killer level + rolls-per-kill adjustable, `nothing` shown as its own share) and vendors
+(stock priced by the shared value/sell formulas). Publish cross-checks icon uniqueness,
+item/table/vendor ref resolution, loot cycles and the tables live enemies still roll;
+budget deviations report as advisory warnings. A latent prune bug was fixed with it:
+drafts were compared against the RAW jsonb column, whose key order Postgres normalises,
+so an identical draft could never prune. 25 tests green. **Current: P8-C authors the
+first 60 items through this surface; remaining A1 editors follow their consuming game
+phases (P9 enemies…).**
 
 ### Running it locally
 

@@ -5,6 +5,37 @@ versions track the game's release trains (0.1.0 = tooling that shipped Dawned 0.
 
 ## [Unreleased]
 
+### Added — Item editors: items, loot tables + vendors (2026-08-04, with game P8)
+
+- **Content → Items**, three tabs on one publish rail (they reference each other, so
+  they ship together or they ship dangling):
+  - _Items_: category-grouped catalogue with rarity chips and item levels; the selected
+    def opens as SHARED-schema-validated JSON above a **budget meter** that prices it
+    against ITEMS_LOOT §2 for its slot, ilvl and rarity — spent vs budget as a bar,
+    the rolled-attribute count a drop will add, free armour from the armour class, and
+    ƒ-suggest buttons that write the suggested value, weapon band, or a proportional
+    rescale of the stat block straight into the draft. Duplicate icons are flagged
+    while typing, not at publish time.
+  - _Loot_: a **1 000-roll simulator** driven by the SAME shared roller the game drops
+    with — killer level and rolls-per-kill adjustable, per-item drop rate and average
+    stack size, gold frequency and average, and the honest "nothing at all" share
+    (`nothing` is a real weighted entry, so the preview cannot flatter the table).
+    Unknown refs are called out inline.
+  - _Vendors_: stock priced by the shared value/sell formulas, so the preview shows
+    exactly what the server will charge and pay.
+- **Item publish** rides publish v1's rails and adds cross-checks: icon slugs unique
+  across items (§8), every loot-table item/table ref and vendor stock ref resolvable,
+  no self-nesting loot cycles, and every loot table that a LIVE published enemy still
+  rolls must survive the publish. Budget deviations report as advisory **warnings** —
+  an item may deviate on purpose, it just may not deviate by accident.
+- **Fixed:** draft pruning compared the incoming def against the raw jsonb column, whose
+  key order Postgres normalises — an identical draft could read as a difference and sit
+  in "n pending" forever. Both the item and progression editors now compare parsed
+  against parsed.
+- 6 new integration tests (schema refusal, draft/diff round-trip with budget pricing,
+  duplicate-icon/dangling-ref/cycle refusals, three-table publish, prune-on-match,
+  gm read-only); 25 total green.
+
 ### Added — Progression editors: XP curve + skill trees (2026-08-04, with game P7)
 
 - **Content → Progression**, the panel's second content editor pair, one page, two tabs:

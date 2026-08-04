@@ -4,15 +4,15 @@
 > Same working agreements: phases close only on their DoD, statuses maintained in this table.
 > Sizes: S/M/L/XL relative effort.
 
-| Phase | Name                                          | Size | Starts after          | Status                   |
-| ----- | --------------------------------------------- | ---- | --------------------- | ------------------------ |
-| A0    | Foundation: shell, auth, data link            | M    | game P1 (schema live) | ✅ done (2026-08-04)     |
-| A1    | Content editors (items→curves) + publish v1   | L    | A0; serves P5–P8      | 🟨 abilities editor live |
-| A2    | Map Editor I: viewport, terrain, publish/bake | XL   | game P2 formats       | 🔲                       |
-| A3    | Map Editor II: placement, spawns, zones, POIs | XL   | A2 + game P9 systems  | 🔲                       |
-| A4    | Quest & dialogue editor                       | M    | A1; serves P11        | 🔲                       |
-| A5    | Live Ops: players, moderation, server, audit  | M    | game P13 ops API      | 🔲                       |
-| A6    | Publish polish, validation depth, backups UI  | M    | with game P14         | 🔲                       |
+| Phase | Name                                          | Size | Starts after          | Status                                  |
+| ----- | --------------------------------------------- | ---- | --------------------- | --------------------------------------- |
+| A0    | Foundation: shell, auth, data link            | M    | game P1 (schema live) | ✅ done (2026-08-04)                    |
+| A1    | Content editors (items→curves) + publish v1   | L    | A0; serves P5–P8      | 🟨 abilities · progression · items live |
+| A2    | Map Editor I: viewport, terrain, publish/bake | XL   | game P2 formats       | 🔲                                      |
+| A3    | Map Editor II: placement, spawns, zones, POIs | XL   | A2 + game P9 systems  | 🔲                                      |
+| A4    | Quest & dialogue editor                       | M    | A1; serves P11        | 🔲                                      |
+| A5    | Live Ops: players, moderation, server, audit  | M    | game P13 ops API      | 🔲                                      |
+| A6    | Publish polish, validation depth, backups UI  | M    | with game P14         | 🔲                                      |
 
 ## A0 — Foundation (M)
 
@@ -68,7 +68,8 @@ Publish History with revert; Asset Browser v1 (thumbnails via tools pipeline, li
 **DoD:** game P5 tunes Warrior ability numbers live through this panel; game P8's first 60 items
 are authored here start-to-finish (icons enforced unique); publish diff/revert demonstrated.
 
-**Status (2026-08-03): A1-a — Abilities editor + publish v1 live; P5 DoD hook proven.**
+**Status (2026-08-04): A1-a abilities, A1-b progression and A1-c items/loot/vendors are live;
+the P5 DoD hook is proven. P8-C authors the first 60 items through the A1-c surface.**
 
 - [x] Abilities editor (Content → Abilities): class-grouped list with binding
       badges + draft markers, quick tuning fields over a shared-schema-validated
@@ -85,9 +86,27 @@ are authored here start-to-finish (icons enforced unique); publish diff/revert d
       (`tools/content/live-tune-proof.mjs`): Crushing Blow's coefficient bumped
       via draft → publish → hot reload, the live game served the new number,
       then reverted the same way — re-runnable any time.
-- [ ] Remaining A1 editors (items, enemies, loot, vendors, curves, zones…) land
-      with their consuming game phases (P8 items, P9 enemies…); the shared
-      editor framework generalizes from the abilities surface as they arrive.
+- [x] **A1-b — XP curve + skill trees (2026-08-04, with game P7):** Content →
+      Progression's two tabs (class-picked branch columns laid out by tier with
+      per-node shared-schema JSON; 29 editable curve rows with cumulative and
+      formula reference columns), publishing over v1's rails plus curve
+      completeness, ability-ref, cell-collision and one-capstone-per-branch
+      cross-checks. It shipped the whole P7 content set — 29 curve rows and all
+      96 skill nodes (`tools/content/author-progression.mjs`).
+- [x] **A1-c — Items, Loot and Vendors (2026-08-04, with game P8):** Content →
+      Items, three tabs on one publish rail. The items tab prices every draft
+      against the ITEMS_LOOT §2 budget with a live meter and ƒ-suggest buttons
+      (value, weapon band, scale-stats-to-budget) plus an icon-collision
+      warning; the loot tab runs a 1 000-roll simulator through the SAME shared
+      roller the server drops with (killer level and rolls-per-kill adjustable,
+      `nothing` shown as the honest share it is); the vendors tab prices stock
+      with the shared value/sell formulas. Publish cross-checks unique icons,
+      resolvable item/table/vendor refs, loot cycles and the loot tables live
+      enemies still roll, and reports budget deviations as advisory warnings
+      that never block. 6 new integration tests (25 total green).
+- [ ] Remaining A1 editors (enemies, zones, NPCs…) land with their consuming
+      game phases (P9 enemies…); the shared editor framework generalizes from
+      the abilities/items surfaces as they arrive.
 
 ## A2 — Map Editor I: Terrain (XL)
 

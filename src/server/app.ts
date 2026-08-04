@@ -24,7 +24,10 @@ import { eq, sql } from 'drizzle-orm';
 import { contentWorldSettings } from '@dawned/shared/schema';
 import {
   abilityDefSchema,
+  itemDefSchema,
+  lootTableDefSchema,
   skillNodeDefSchema,
+  vendorDefSchema,
   worldSettingsSchema,
   xpCurveEntrySchema,
 } from '@dawned/shared';
@@ -52,6 +55,18 @@ import {
   saveSkillNodeDraft,
   saveXpCurveDraft,
 } from './progression.js';
+import {
+  diffItems,
+  discardItemDraft,
+  listItems,
+  listLootTables,
+  listVendors,
+  publishItems,
+  saveItemDraft,
+  saveLootTableDraft,
+  saveVendorDraft,
+  type ItemTableName,
+} from './items.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -414,6 +429,112 @@ export const buildApp = async (config: Config): Promise<App> => {
     await audit({
       actorAccountId: admin.accountId,
       action: 'progression.publish',
+      args: { published: result.published, problems: result.problems },
+      result: result.ok ? 'ok' : 'denied',
+    });
+    if (!result.ok) return reply.code(422).send(result);
+    return result;
+  });
+
+  // --- item content editors (A1-c, game P8) ---------------------------------
+  /**
+   * Items, loot tables and vendors share one editor surface and one publish
+   * rail (they reference each other; shipping them apart ships dangling refs).
+   * The three save routes are the same shape, so they are generated from one
+   * table rather than copied — a copied route is a route that drifts.
+   */
+  const itemEditors = [
+    { path: 'items', table: 'items' as ItemTableName, schema: itemDefSchema, save: saveItemDraft },
+    {
+      path: 'loot-tables',
+      table: 'loot_tables' as ItemTableName,
+      schema: lootTableDefSchema,
+      save: saveLootTableDraft,
+    },
+    {
+      path: 'vendors',
+      table: 'vendors' as ItemTableName,
+      schema: vendorDefSchema,
+      save: saveVendorDraft,
+    },
+  ];
+
+  app.get('/api/items', async (request, reply) => {
+    if (!requireRole(request, reply, 'gm')) return;
+    return { items: await listItems(dbHandle.db) };
+  });
+
+  app.get('/api/loot-tables', async (request, reply) => {
+    if (!requireRole(request, reply, 'gm')) return;
+    return { tables: await listLootTables(dbHandle.db) };
+  });
+
+  app.get('/api/vendors', async (request, reply) => {
+    if (!requireRole(request, reply, 'gm')) return;
+    return { vendors: await listVendors(dbHandle.db) };
+  });
+
+  for (const editor of itemEditors) {
+    app.put(`/api/${editor.path}/:id`, async (request, reply) => {
+      const admin = requireRole(request, reply, 'admin');
+      if (!admin) return;
+      const { id } = request.params as { id: string };
+      const parsed = editor.schema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({
+          error: 'validation',
+          message: parsed.error.issues
+            .map((issue) => `${issue.path.join('.') || '<root>'}: ${issue.message}`)
+            .join('; '),
+        });
+      }
+      if (parsed.data.id !== id) {
+        return reply
+          .code(400)
+          .send({ error: 'bad_request', message: 'Body id must match the URL.' });
+      }
+      // The union of the three defs is what the matching saver accepts; the
+      // pairing is fixed by the table above, so the cast never widens.
+      const { pruned } = await editor.save(dbHandle.db, parsed.data as never, admin.accountId);
+      await audit({
+        actorAccountId: admin.accountId,
+        action: `${editor.table}.save_draft`,
+        args: { id, pruned },
+        target: id,
+        result: 'ok',
+      });
+      return { ok: true, pruned };
+    });
+
+    app.delete(`/api/${editor.path}/:id/draft`, async (request, reply) => {
+      const admin = requireRole(request, reply, 'admin');
+      if (!admin) return;
+      const { id } = request.params as { id: string };
+      const removed = await discardItemDraft(dbHandle.db, editor.table, id);
+      if (removed) {
+        await audit({
+          actorAccountId: admin.accountId,
+          action: `${editor.table}.discard_draft`,
+          target: id,
+          result: 'ok',
+        });
+      }
+      return { removed };
+    });
+  }
+
+  app.get('/api/publish/items/diff', async (request, reply) => {
+    if (!requireRole(request, reply, 'gm')) return;
+    return diffItems(dbHandle.db);
+  });
+
+  app.post('/api/publish/items', async (request, reply) => {
+    const admin = requireRole(request, reply, 'admin');
+    if (!admin) return;
+    const result = await publishItems(dbHandle.db, config);
+    await audit({
+      actorAccountId: admin.accountId,
+      action: 'items.publish',
       args: { published: result.published, problems: result.problems },
       result: result.ok ? 'ok' : 'denied',
     });

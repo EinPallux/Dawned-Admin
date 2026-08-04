@@ -146,16 +146,21 @@ export const listSkillNodes = async (db: Db): Promise<NodeListEntry[]> => {
 // Draft CRUD (prune-on-match like every editor)
 // ---------------------------------------------------------------------------
 
-const saveDraft = async (
+const saveDraft = async <T>(
   db: Db,
   table: Table,
+  parse: (raw: unknown) => { ok: true; def: T } | { ok: false; message: string },
   id: string,
-  def: unknown,
+  def: T,
   updatedBy: number,
 ): Promise<{ pruned: boolean }> => {
   const rows = await db.select().from(table).where(eq(table.id, id));
-  const published = rows.find((row) => row.status === 'published');
-  if (published && JSON.stringify(def) === JSON.stringify(published.def)) {
+  const publishedRow = rows.find((row) => row.status === 'published');
+  // Compare PARSED against PARSED: jsonb normalises key order on the way in,
+  // so stringifying the raw column would report every identical draft as a
+  // difference and the "n pending" badge would never reach zero.
+  const published = publishedRow ? parse(publishedRow.def) : null;
+  if (published?.ok && JSON.stringify(def) === JSON.stringify(published.def)) {
     await db.delete(table).where(and(eq(table.id, id), eq(table.status, 'draft')));
     return { pruned: true };
   }
@@ -170,10 +175,10 @@ const saveDraft = async (
 };
 
 export const saveXpCurveDraft = (db: Db, def: XpCurveEntry, updatedBy: number) =>
-  saveDraft(db, contentXpCurve, def.id, def, updatedBy);
+  saveDraft(db, contentXpCurve, parseCurve, def.id, def, updatedBy);
 
 export const saveSkillNodeDraft = (db: Db, def: SkillNodeDef, updatedBy: number) =>
-  saveDraft(db, contentSkillNodes, def.id, def, updatedBy);
+  saveDraft(db, contentSkillNodes, parseNode, def.id, def, updatedBy);
 
 export const discardDraft = async (db: Db, table: 'xp_curve' | 'skill_nodes', id: string) => {
   const target = table === 'xp_curve' ? contentXpCurve : contentSkillNodes;

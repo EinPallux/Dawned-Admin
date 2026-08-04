@@ -21,6 +21,19 @@
   designer can then deviate consciously. Deviation >±40% shows a gentle amber hint, never a block.
 - **Import/export:** JSON export/import per entity or filtered set (backup, bulk edits, sharing).
 
+> **As built (A1-c, 2026-08-04 — items, loot, vendors):** Content → Items ships the three
+> editors on one publish rail as tabs over a shared-schema JSON editor (the same surface
+> Abilities and Progression use), plus the per-type helpers that change what the owner can
+> SEE: the item budget meter with ƒ-suggest (value, weapon band, proportional stat rescale)
+> and a live duplicate-icon warning; the loot roll simulator (1 000 seeded rolls through the
+> shared roller, killer level + rolls-per-kill adjustable, `nothing` shown as its own share);
+> and the vendor price preview computed with the shared value/sell formulas. Publish
+> cross-checks icon uniqueness, ref resolution (items, nested tables, vendor stock, and the
+> tables live enemies still roll) and loot cycles; budget deviations are advisory warnings.
+> Still to come with the shared framework: the searchable icon browser and in-hand 3D preview,
+> the tier-series wizard, row-builder forms over the JSON, usage back-references, import/export
+> and history/revert.
+
 ## 2. Item Editor
 
 Form: category/slot/rarity/ilvl/class-lock/stack/value + stats builder (attribute rows vs. the
