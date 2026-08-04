@@ -16,6 +16,7 @@ import { AbilitiesPage } from '../pages/AbilitiesPage.js';
 import { ProgressionPage } from '../pages/ProgressionPage.js';
 import { ItemsPage } from '../pages/ItemsPage.js';
 import { EnemiesPage } from '../pages/EnemiesPage.js';
+import { MapEditorPage } from '../map-editor/MapEditorPage.js';
 
 export const App = () => {
   const queryClient = useQueryClient();
@@ -56,6 +57,7 @@ export const App = () => {
       <Routes>
         <Route element={<Shell user={user} />}>
           <Route index element={<DashboardPage />} />
+          <Route path="world/map" element={<MapEditorPage user={user} />} />
           <Route path="content/world-settings" element={<WorldSettingsPage user={user} />} />
           <Route path="content/abilities" element={<AbilitiesPage user={user} />} />
           <Route path="content/progression" element={<ProgressionPage user={user} />} />

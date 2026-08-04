@@ -44,6 +44,14 @@ export const Shell = ({ user }: { user: AdminUser }) => {
         },
       },
       {
+        id: 'nav-map-editor',
+        label: 'Map Editor',
+        hint: 'nav',
+        run: () => {
+          void navigate('/world/map');
+        },
+      },
+      {
         id: 'nav-world-settings',
         label: 'Go to World Settings',
         hint: 'nav',
@@ -158,9 +166,9 @@ export const Shell = ({ user }: { user: AdminUser }) => {
           Dashboard
         </NavLink>
         <div className="rail-group">World</div>
-        <div className="rail-item is-disabled" title="Arrives with phase A2">
-          Map Editor <span className="phase">A2</span>
-        </div>
+        <NavLink to="/world/map" className={railLink}>
+          Map Editor
+        </NavLink>
         <div className="rail-group">Content</div>
         <NavLink to="/content/world-settings" className={railLink}>
           World Settings
