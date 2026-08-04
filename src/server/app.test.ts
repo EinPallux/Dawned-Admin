@@ -90,6 +90,17 @@ const sessionCookieOf = (response: { cookies: { name: string; value: string }[] 
   return cookie!.value;
 };
 
+/**
+ * One admin session SHARED by the content suites (abilities + progression):
+ * the login limiter allows 10/min per IP and the whole file must fit inside
+ * one window — every content test reuses this cookie instead of logging in.
+ */
+let contentSessionCookie: string | null = null;
+const contentSession = async (): Promise<Record<string, string>> => {
+  contentSessionCookie ??= sessionCookieOf(await login(ADMIN_NAME));
+  return { dawned_admin_session: contentSessionCookie };
+};
+
 describe('panel auth', () => {
   it('rejects wrong passwords and unknown names identically', async () => {
     const wrong = await login(ADMIN_NAME, 'not-the-password');
@@ -263,8 +274,7 @@ describe('ability drafts + publish v1 (A1)', () => {
   // attempts, and every earlier suite already spent some of the budget.
   let session: Record<string, string>;
   beforeAll(async () => {
-    const cookie = sessionCookieOf(await login(ADMIN_NAME));
-    session = { dawned_admin_session: cookie };
+    session = await contentSession();
     // Idempotent reruns: drop BOTH statuses of the fixture ids — a published
     // row from a previous run would make the identical draft prune on save.
     const { inArray } = await import('drizzle-orm');
@@ -402,5 +412,159 @@ describe('ability drafts + publish v1 (A1)', () => {
         headers: CSRF,
       });
     }
+  });
+});
+
+describe('progression editors + publish (A1-b, game P7)', () => {
+  let session: Record<string, string>;
+  beforeAll(async () => {
+    session = await contentSession();
+  });
+
+  it('lists the seeded curve and trees', async () => {
+    const curve = await ctx.app.inject({ method: 'GET', url: '/api/xp-curve', cookies: session });
+    expect(curve.json<{ entries: { level: number }[] }>().entries.length).toBe(29);
+    const nodes = await ctx.app.inject({
+      method: 'GET',
+      url: '/api/skill-nodes',
+      cookies: session,
+    });
+    expect(nodes.json<{ nodes: { id: string }[] }>().nodes.length).toBeGreaterThanOrEqual(96);
+  });
+
+  it('rejects curve rows whose id and level disagree', async () => {
+    const bad = await ctx.app.inject({
+      method: 'PUT',
+      url: '/api/xp-curve/xp_l05',
+      cookies: session,
+      headers: CSRF,
+      payload: { id: 'xp_l05', level: 7, xpToNext: 1500 },
+    });
+    expect(bad.statusCode).toBe(400);
+    expect(bad.json<{ message: string }>().message).toContain('does not match');
+  });
+
+  it('saves and discards node drafts without touching the published row', async () => {
+    const nodeId = 'node_warrior_bulwark_toughened';
+    const detail = await ctx.app.inject({
+      method: 'GET',
+      url: '/api/skill-nodes',
+      cookies: session,
+    });
+    const live = detail
+      .json<{ nodes: { id: string; def: Record<string, unknown> }[] }>()
+      .nodes.find((entry) => entry.id === nodeId);
+    expect(live).toBeDefined();
+    const tweaked = {
+      ...live!.def,
+      ranks: [
+        [{ kind: 'stat', mods: { maxHpPct: 4 } }],
+        [{ kind: 'stat', mods: { maxHpPct: 8 } }],
+        [{ kind: 'stat', mods: { maxHpPct: 12 } }],
+      ],
+    };
+    const saved = await ctx.app.inject({
+      method: 'PUT',
+      url: `/api/skill-nodes/${nodeId}`,
+      cookies: session,
+      headers: CSRF,
+      payload: tweaked,
+    });
+    expect(saved.statusCode).toBe(200);
+    const diff = await ctx.app.inject({
+      method: 'GET',
+      url: '/api/publish/progression/diff',
+      cookies: session,
+    });
+    expect(
+      diff
+        .json<{ nodes: { id: string; kind: string }[] }>()
+        .nodes.some((entry) => entry.id === nodeId && entry.kind === 'changed'),
+    ).toBe(true);
+    const discarded = await ctx.app.inject({
+      method: 'DELETE',
+      url: `/api/skill-nodes/${nodeId}/draft`,
+      cookies: session,
+      headers: CSRF,
+    });
+    expect(discarded.json<{ removed: boolean }>().removed).toBe(true);
+  });
+
+  it('publish refuses unknown ability refs and lattice cell collisions', async () => {
+    const nodeId = 'node_warrior_bulwark_toughened';
+    const list = await ctx.app.inject({ method: 'GET', url: '/api/skill-nodes', cookies: session });
+    const live = list
+      .json<{ nodes: { id: string; def: Record<string, unknown> }[] }>()
+      .nodes.find((entry) => entry.id === nodeId)!;
+
+    // Unknown ability reference → 422, nothing published, live row untouched.
+    await ctx.app.inject({
+      method: 'PUT',
+      url: `/api/skill-nodes/${nodeId}`,
+      cookies: session,
+      headers: CSRF,
+      payload: {
+        ...live.def,
+        ranks: [
+          [
+            {
+              kind: 'ability_mod',
+              abilityId: 'ability_warrior_zz_missing',
+              mods: { damagePct: 1 },
+            },
+          ],
+          [
+            {
+              kind: 'ability_mod',
+              abilityId: 'ability_warrior_zz_missing',
+              mods: { damagePct: 2 },
+            },
+          ],
+          [
+            {
+              kind: 'ability_mod',
+              abilityId: 'ability_warrior_zz_missing',
+              mods: { damagePct: 3 },
+            },
+          ],
+        ],
+      },
+    });
+    const refusedRef = await ctx.app.inject({
+      method: 'POST',
+      url: '/api/publish/progression',
+      cookies: session,
+      headers: CSRF,
+    });
+    expect(refusedRef.statusCode).toBe(422);
+    expect(refusedRef.json<{ problems: string[] }>().problems.join(' ')).toContain(
+      'ability_warrior_zz_missing',
+    );
+
+    // Cell collision: moving the node onto Plated's order slot must refuse.
+    await ctx.app.inject({
+      method: 'PUT',
+      url: `/api/skill-nodes/${nodeId}`,
+      cookies: session,
+      headers: CSRF,
+      payload: { ...live.def, order: 2 },
+    });
+    const refusedCell = await ctx.app.inject({
+      method: 'POST',
+      url: '/api/publish/progression',
+      cookies: session,
+      headers: CSRF,
+    });
+    expect(refusedCell.statusCode).toBe(422);
+    expect(refusedCell.json<{ problems: string[] }>().problems.join(' ')).toContain(
+      'warrior/bulwark#2',
+    );
+
+    await ctx.app.inject({
+      method: 'DELETE',
+      url: `/api/skill-nodes/${nodeId}/draft`,
+      cookies: session,
+      headers: CSRF,
+    });
   });
 });

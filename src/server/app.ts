@@ -22,7 +22,12 @@ import fastifyStatic from '@fastify/static';
 import { z } from 'zod';
 import { eq, sql } from 'drizzle-orm';
 import { contentWorldSettings } from '@dawned/shared/schema';
-import { abilityDefSchema, worldSettingsSchema } from '@dawned/shared';
+import {
+  abilityDefSchema,
+  skillNodeDefSchema,
+  worldSettingsSchema,
+  xpCurveEntrySchema,
+} from '@dawned/shared';
 import type { AdminUser, DashboardData } from '../shared-ext/api-types.js';
 import type { Config } from './config.js';
 import { createDb, assertSchemaPresent, type DbHandle } from './db.js';
@@ -38,6 +43,15 @@ import {
   readAbility,
   saveAbilityDraft,
 } from './abilities.js';
+import {
+  diffProgression,
+  discardDraft,
+  listSkillNodes,
+  listXpCurve,
+  publishProgression,
+  saveSkillNodeDraft,
+  saveXpCurveDraft,
+} from './progression.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -284,6 +298,122 @@ export const buildApp = async (config: Config): Promise<App> => {
     await audit({
       actorAccountId: admin.accountId,
       action: 'abilities.publish',
+      args: { published: result.published, problems: result.problems },
+      result: result.ok ? 'ok' : 'denied',
+    });
+    if (!result.ok) return reply.code(422).send(result);
+    return result;
+  });
+
+  // --- progression content editors (A1-b, game P7) ---------------------------
+  app.get('/api/xp-curve', async (request, reply) => {
+    if (!requireRole(request, reply, 'gm')) return;
+    return { entries: await listXpCurve(dbHandle.db) };
+  });
+
+  app.put('/api/xp-curve/:id', async (request, reply) => {
+    const admin = requireRole(request, reply, 'admin');
+    if (!admin) return;
+    const { id } = request.params as { id: string };
+    const parsed = xpCurveEntrySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        error: 'validation',
+        message: parsed.error.issues
+          .map((issue) => `${issue.path.join('.') || '<root>'}: ${issue.message}`)
+          .join('; '),
+      });
+    }
+    if (parsed.data.id !== id) {
+      return reply.code(400).send({ error: 'bad_request', message: 'Body id must match the URL.' });
+    }
+    const { pruned } = await saveXpCurveDraft(dbHandle.db, parsed.data, admin.accountId);
+    await audit({
+      actorAccountId: admin.accountId,
+      action: 'xp_curve.save_draft',
+      args: { id, pruned },
+      target: id,
+      result: 'ok',
+    });
+    return { ok: true, pruned };
+  });
+
+  app.delete('/api/xp-curve/:id/draft', async (request, reply) => {
+    const admin = requireRole(request, reply, 'admin');
+    if (!admin) return;
+    const { id } = request.params as { id: string };
+    const removed = await discardDraft(dbHandle.db, 'xp_curve', id);
+    if (removed) {
+      await audit({
+        actorAccountId: admin.accountId,
+        action: 'xp_curve.discard_draft',
+        target: id,
+        result: 'ok',
+      });
+    }
+    return { removed };
+  });
+
+  app.get('/api/skill-nodes', async (request, reply) => {
+    if (!requireRole(request, reply, 'gm')) return;
+    return { nodes: await listSkillNodes(dbHandle.db) };
+  });
+
+  app.put('/api/skill-nodes/:id', async (request, reply) => {
+    const admin = requireRole(request, reply, 'admin');
+    if (!admin) return;
+    const { id } = request.params as { id: string };
+    const parsed = skillNodeDefSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        error: 'validation',
+        message: parsed.error.issues
+          .map((issue) => `${issue.path.join('.') || '<root>'}: ${issue.message}`)
+          .join('; '),
+      });
+    }
+    if (parsed.data.id !== id) {
+      return reply.code(400).send({ error: 'bad_request', message: 'Body id must match the URL.' });
+    }
+    const { pruned } = await saveSkillNodeDraft(dbHandle.db, parsed.data, admin.accountId);
+    await audit({
+      actorAccountId: admin.accountId,
+      action: 'skill_nodes.save_draft',
+      args: { id, pruned },
+      target: id,
+      result: 'ok',
+    });
+    return { ok: true, pruned };
+  });
+
+  app.delete('/api/skill-nodes/:id/draft', async (request, reply) => {
+    const admin = requireRole(request, reply, 'admin');
+    if (!admin) return;
+    const { id } = request.params as { id: string };
+    const removed = await discardDraft(dbHandle.db, 'skill_nodes', id);
+    if (removed) {
+      await audit({
+        actorAccountId: admin.accountId,
+        action: 'skill_nodes.discard_draft',
+        target: id,
+        result: 'ok',
+      });
+    }
+    return { removed };
+  });
+
+  app.get('/api/publish/progression/diff', async (request, reply) => {
+    if (!requireRole(request, reply, 'gm')) return;
+    return diffProgression(dbHandle.db);
+  });
+
+  app.post('/api/publish/progression', async (request, reply) => {
+    const admin = requireRole(request, reply, 'admin');
+    if (!admin) return;
+    const result = await publishProgression(dbHandle.db, config);
+    await audit({
+      actorAccountId: admin.accountId,
+      action: 'progression.publish',
       args: { published: result.published, problems: result.problems },
       result: result.ok ? 'ok' : 'denied',
     });

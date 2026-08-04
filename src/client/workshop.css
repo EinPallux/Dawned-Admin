@@ -721,3 +721,41 @@ code,
 .abilities-reload-note {
   color: var(--text-dim);
 }
+
+/* --- Progression editors (A1-b) ------------------------------------------ */
+.progression-tabs {
+  display: flex;
+  gap: 4px;
+}
+.progression-classes {
+  display: flex;
+  gap: 4px;
+  padding: 6px 10px 10px;
+  flex-wrap: wrap;
+}
+.progression-curve {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.progression-curve th {
+  text-align: left;
+  padding: 4px 8px;
+  color: var(--ws-dim, #8a8fa3);
+  border-bottom: 1px solid var(--ws-line, #2a2e3d);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 10px;
+}
+.progression-curve td {
+  padding: 3px 8px;
+  border-bottom: 1px solid var(--ws-line, #232636);
+}
+.progression-curve input {
+  width: 90px;
+  background: var(--ws-input, #14161f);
+  color: inherit;
+  border: 1px solid var(--ws-line, #2a2e3d);
+  padding: 2px 6px;
+  font: inherit;
+}
