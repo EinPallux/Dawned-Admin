@@ -15,6 +15,7 @@ import { WorldSettingsPage } from '../pages/WorldSettingsPage.js';
 import { AbilitiesPage } from '../pages/AbilitiesPage.js';
 import { ProgressionPage } from '../pages/ProgressionPage.js';
 import { ItemsPage } from '../pages/ItemsPage.js';
+import { EnemiesPage } from '../pages/EnemiesPage.js';
 
 export const App = () => {
   const queryClient = useQueryClient();
@@ -59,6 +60,7 @@ export const App = () => {
           <Route path="content/abilities" element={<AbilitiesPage user={user} />} />
           <Route path="content/progression" element={<ProgressionPage user={user} />} />
           <Route path="content/items" element={<ItemsPage user={user} />} />
+          <Route path="content/enemies" element={<EnemiesPage user={user} />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

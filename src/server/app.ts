@@ -24,9 +24,12 @@ import { eq, sql } from 'drizzle-orm';
 import { contentWorldSettings } from '@dawned/shared/schema';
 import {
   abilityDefSchema,
+  enemyDefSchema,
   itemDefSchema,
   lootTableDefSchema,
   skillNodeDefSchema,
+  spawnerDefSchema,
+  validateEnemyDef,
   vendorDefSchema,
   worldSettingsSchema,
   xpCurveEntrySchema,
@@ -67,6 +70,17 @@ import {
   saveVendorDraft,
   type ItemTableName,
 } from './items.js';
+import {
+  diffEnemies,
+  discardEnemyDraft,
+  listEnemies,
+  listSpawners,
+  previewRotation,
+  publishEnemies,
+  saveEnemyDraft,
+  saveSpawnerDraft,
+  simulateTtk,
+} from './enemies.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -533,6 +547,150 @@ export const buildApp = async (config: Config): Promise<App> => {
       return { removed };
     });
   }
+
+  // --- enemy content editors (A1-d, game P9) --------------------------------
+  const firstIssueOf = (error: z.ZodError): string => {
+    const issue = error.issues[0];
+    return issue ? `${issue.path.join('.') || '<root>'}: ${issue.message}` : 'invalid';
+  };
+
+  /**
+   * Enemies and spawners share one editor surface and one publish rail: a
+   * spawner without its enemy is a camp that never populates, and an enemy
+   * nothing spawns is invisible. Shipping them together is the only way the
+   * cross-check can catch either.
+   */
+  app.get('/api/enemies', async (request, reply) => {
+    if (!requireRole(request, reply, 'gm')) return;
+    return { enemies: await listEnemies(dbHandle.db) };
+  });
+
+  app.get('/api/spawners', async (request, reply) => {
+    if (!requireRole(request, reply, 'gm')) return;
+    return { spawners: await listSpawners(dbHandle.db) };
+  });
+
+  app.put('/api/enemies/:id', async (request, reply) => {
+    const admin = requireRole(request, reply, 'admin');
+    if (!admin) return;
+    const { id } = request.params as { id: string };
+    const parsed = enemyDefSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        error: 'validation',
+        message: parsed.error.issues
+          .map((issue) => `${issue.path.join('.') || '<root>'}: ${issue.message}`)
+          .join('; '),
+      });
+    }
+    if (parsed.data.id !== id) {
+      return reply.code(400).send({ error: 'validation', message: 'id mismatch' });
+    }
+    // Row-level problems are refused at SAVE, not held until publish: an
+    // editor should learn a charge cannot overshoot while looking at it.
+    const problems = validateEnemyDef(parsed.data);
+    if (problems.length > 0) {
+      return reply.code(400).send({ error: 'validation', message: problems.join('; ') });
+    }
+    const { pruned } = await saveEnemyDraft(dbHandle.db, parsed.data, admin.accountId);
+    await audit({
+      actorAccountId: admin.accountId,
+      action: 'enemies.save',
+      args: { id, pruned },
+      result: 'ok',
+    });
+    return { ok: true, pruned };
+  });
+
+  app.put('/api/spawners/:id', async (request, reply) => {
+    const admin = requireRole(request, reply, 'admin');
+    if (!admin) return;
+    const { id } = request.params as { id: string };
+    const parsed = spawnerDefSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        error: 'validation',
+        message: parsed.error.issues
+          .map((issue) => `${issue.path.join('.') || '<root>'}: ${issue.message}`)
+          .join('; '),
+      });
+    }
+    if (parsed.data.id !== id) {
+      return reply.code(400).send({ error: 'validation', message: 'id mismatch' });
+    }
+    const { pruned } = await saveSpawnerDraft(dbHandle.db, parsed.data, admin.accountId);
+    await audit({
+      actorAccountId: admin.accountId,
+      action: 'spawners.save',
+      args: { id, pruned },
+      result: 'ok',
+    });
+    return { ok: true, pruned };
+  });
+
+  app.delete('/api/enemies/:kind/:id/draft', async (request, reply) => {
+    const admin = requireRole(request, reply, 'admin');
+    if (!admin) return;
+    const { kind, id } = request.params as { kind: string; id: string };
+    if (kind !== 'enemies' && kind !== 'spawners') {
+      return reply.code(400).send({ error: 'validation', message: 'unknown kind' });
+    }
+    await discardEnemyDraft(dbHandle.db, kind, id);
+    await audit({
+      actorAccountId: admin.accountId,
+      action: 'enemies.discard',
+      args: { kind, id },
+      result: 'ok',
+    });
+    return { ok: true };
+  });
+
+  /**
+   * Time-to-kill, both ways, through the SAME shared selection rules the live
+   * AI fights with — the combat equivalent of the loot simulator.
+   */
+  app.post('/api/enemies/ttk', async (request, reply) => {
+    if (!requireRole(request, reply, 'gm')) return;
+    const body = request.body as Record<string, unknown>;
+    const parsed = enemyDefSchema.safeParse(body.def);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'validation', message: firstIssueOf(parsed.error) });
+    }
+    const def = parsed.data;
+    const num = (value: unknown, fallback: number): number =>
+      typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+    const playerClass = body.playerClass === 'rogue' ? 'rogue' : 'warrior';
+    return {
+      report: simulateTtk({
+        def,
+        enemyLevel: num(body.enemyLevel, def.levelMin),
+        playerLevel: num(body.playerLevel, def.levelMin),
+        playerClass,
+        playerDps: num(body.playerDps, 40),
+        distance: num(body.distance, 2),
+      }),
+      rotation: previewRotation(def, num(body.distance, 2), 12),
+    };
+  });
+
+  app.get('/api/publish/enemies/diff', async (request, reply) => {
+    if (!requireRole(request, reply, 'gm')) return;
+    return diffEnemies(dbHandle.db);
+  });
+
+  app.post('/api/publish/enemies', async (request, reply) => {
+    const admin = requireRole(request, reply, 'admin');
+    if (!admin) return;
+    const result = await publishEnemies(dbHandle.db, config);
+    await audit({
+      actorAccountId: admin.accountId,
+      action: 'enemies.publish',
+      args: { published: result.published, problems: result.problems },
+      result: result.ok ? 'ok' : 'denied',
+    });
+    if (!result.ok) return reply.code(422).send(result);
+    return result;
+  });
 
   app.get('/api/publish/items/diff', async (request, reply) => {
     if (!requireRole(request, reply, 'gm')) return;

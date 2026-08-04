@@ -40,8 +40,19 @@ truth).
   green. The whole P8 catalogue was authored here and published — 62 items, 5 loot tables,
   5 Dawnhaven vendors, plus the shore/weald enemy loot bindings
   (`tools/content/author-items.mjs`) — and the game froze the result into its seed
-  migration 0012. Current: game P8 is built and in owner playtest — two fix rounds have
-  landed since (character sheet + build-id/cache work, then the dodge roll, invisible
-  vendors and weapon grip; the game is on protocol v11). Neither round touched a content
-  schema, so no editor work is pending here; remaining A1 editors follow their consuming
-  phases (P9 enemies…).
+  migration 0012. Current: game P0–P8 are all closed and owner-verified (2026-08-04, after two
+  fix rounds; the game is on protocol v11) — neither round touched a content schema, so no
+  editor work followed. The game is in P9 — Enemies & AI Depth.
+  **A1-d — Enemies is live** (2026-08-04): bestiary + spawners on one publish rail, level-
+  banded list with rank badges, and a time-to-kill simulator that runs the game's own
+  `selectableEnemyAbilities` so the previewed rotation is the fought rotation (both sides
+  of the trade, range-aware, boss-window aware). Publish blocks on unresolvable spawner
+  refs and unpublished loot; boss-with-no-phases and archetype mismatches warn only.
+  41 tests green. **Pull in after the next `@dawned/shared` rebuild:** the game's P9-D
+  round added `shieldDurationMs` to the enemy ability schema (self-shield duration,
+  default 12 000 ms) — schema-driven, so the form gains it with no editor code.
+  **Game P9 closed 2026-08-04 (built, awaiting playtest):** the King solos in 105 s, inside
+  the 60–120 s design window. Lesson for this panel: the TTK simulator's **player dps input
+  is the whole answer** and the page defaults it to 40, where a properly built level-12
+  warrior measures 78 (an unspent one, 30). A guessed dps can be 3× off and send someone
+  re-balancing a boss that was fine — worth a measured reference on the sim controls.

@@ -5,6 +5,48 @@ versions track the game's release trains (0.1.0 = tooling that shipped Dawned 0.
 
 ## [Unreleased]
 
+### Added — Enemies editor: bestiary, spawners, time-to-kill (2026-08-04, with game P9)
+
+- **Content → Enemies**, two tabs on one publish rail. Enemies and spawners ship
+  together because separating them ships the two failures neither can catch
+  alone: a spawner without its enemy is a camp that silently never populates,
+  and an enemy nothing spawns is invisible.
+  - _Enemies_: the bestiary listed by level band the way NPCS_ENEMIES.md §4
+    reads it, with rank badges (ELITE / BOSS) and archetype at a glance, over
+    the shared-schema JSON editor.
+  - _Spawners_: where the bestiary actually stands — position, count, camp tag.
+- **The time-to-kill panel** runs the SAME `selectableEnemyAbilities` the live
+  AI picks with, so the rotation it shows is the rotation that will be fought.
+  It answers both directions — how long you need to kill it, and how long it
+  needs to kill you — because a number for only one side is how an enemy ends
+  up unkillable or harmless. It weights each ability by the share the game's
+  weighted pick will actually give it, counts a self-shield as zero damage
+  rather than free DPS, shows the whole kit a boss will EVER unlock instead of
+  just phase 0, and names the COMBAT.md §12 60–120 s boss window when a fight
+  misses it. Abilities unusable at the range being tested simply do not appear
+  — which is how you find a "ranged" enemy that would stand and stare.
+- **Publish cross-checks**: unresolvable spawner refs and unpublished loot
+  tables block; judgement calls warn without blocking (a boss with no phases,
+  a boss with no arena, a `ranged` row carrying nothing ranged, a `charger`
+  with no charge). Row-level problems are refused at SAVE rather than held
+  until publish — an editor should learn a charge cannot overshoot while
+  looking at that charge.
+- **Publish now refuses a clip the model does not own.** The Quaternius rig
+  families use non-interchangeable clip names, and asking a rig for a clip it
+  lacks is silent — the attack lands and animates nothing (the P5 Spore
+  Lobber's panic swat had been doing exactly that). The game's shared build
+  records which clips each baked model owns; the cross-check reads it.
+- **`tools/content/author-bestiary.mjs`** authors the whole P9 bestiary through
+  these endpoints — 17 enemies, 20 spawners — and prints the TTK table for every
+  published enemy afterwards, so a content change is never merged without
+  someone having looked at what it does to the fights.
+- **Fixed before it shipped**: the rotation preview used a plain LCG whose
+  long-run distribution is fine but whose first twelve values from a small seed
+  are badly unrepresentative (3/12 where 7 were expected). Sitting directly
+  under the weight table, it would have contradicted the numbers above it. It
+  now uses the same mixed RNG as the loot simulator, and a test pins the
+  distribution rather than just checking both abilities appear.
+
 ### Added — Item editors: items, loot tables + vendors (2026-08-04, with game P8)
 
 - **Content → Items**, three tabs on one publish rail (they reference each other, so

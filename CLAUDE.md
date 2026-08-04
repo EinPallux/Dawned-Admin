@@ -92,15 +92,33 @@ so an identical draft could never prune. 25 tests green. The whole P8 catalogue 
 live through this surface — 62 items, 5 loot tables, 5 Dawnhaven vendors and the shore/
 weald enemy loot bindings (`tools/content/author-items.mjs`, numbers derived from the
 shared budget formulas) — and the game froze the published result into its seed
-migration 0012. **Current: game P8 is built and in owner playtest — two fix rounds have
-landed since (character sheet + build-id/cache work, then the dodge roll, invisible
-vendors and weapon grip; the game is on protocol v11). Nothing in those rounds changed a
-content schema, so the panel is unaffected: no editor work is pending. The remaining A1
-editors follow their consuming game phases (P9 enemies…).**
-Note for the next `@dawned/shared` rebuild here: the game bumped `PROTOCOL_VERSION` to 11
-(the snapshot self block now carries the dodge roll). The panel does not speak the game
-protocol, so this is informational — but `pnpm install` after a game-side shared change is
-still required, as always.
+migration 0012. **Current: game P0–P8 are all closed and owner-verified (2026-08-04, after two
+fix rounds — the game is on protocol v11); nothing in those rounds changed a content
+schema, so the panel needed no editor work. The game is now in P9 — Enemies & AI Depth.**
+**A1-d — the Enemies editor is live** (2026-08-04, alongside game P9): Content → Enemies
+with bestiary + spawners on one publish rail (they reference each other), the level-banded
+list with rank badges, and the **time-to-kill simulator** — it runs the game's OWN
+`selectableEnemyAbilities`, so the rotation it previews is the rotation that will be
+fought. It answers both directions of the trade, hides abilities unusable at the tested
+range, sees a boss's whole unlocked kit rather than phase 0, and names the COMBAT.md §12
+60–120 s boss window when a fight misses it. Publish blocks on unresolvable spawner refs
+and unpublished loot; judgement calls (a boss with no phases or arena, a `ranged` row with
+nothing ranged) warn without blocking. 41 tests green.
+**Shared-schema change to pull in (game P9-D, 2026-08-04):** `enemyAbilitySchema` gained
+`shieldDurationMs` (int ms, default 12 000) — how long a `self_shield` absorb lasts. The
+schema-driven form picks it up for free once `@dawned/shared` is rebuilt in the game repo
+and `pnpm install` runs here; no editor code changes. It is worth a quick tuning-field
+promotion on the Enemies page next time that surface is touched, since it is now part of
+what a caster's shield beat is worth. The game also bumped `PROTOCOL_VERSION` to 12 (enemy
+cast flag on `AbilityStart`); the panel does not speak the game protocol, so that part is
+informational — but `pnpm install` after ANY game-side shared change is still required.
+**Game P9 is built and measured (2026-08-04), awaiting the owner's playtest** — the Mushroom
+King solos in 105 s inside the design's 60–120 s window. One thing that finding is worth to
+this panel: the TTK simulator's **player dps input is the whole answer**, and the page still
+defaults it to 40. The measured number for a properly built level-12 warrior with T2 gear is
+**78**, and an UNSPENT level 12 does 30 — so a preview run with a guessed dps can be off by
+3× and send someone re-balancing a boss that was fine. Worth surfacing on the sim controls
+(a measured reference row, or level-derived defaults) next time the Enemies page is touched.
 
 ### Running it locally
 
