@@ -28,5 +28,14 @@ truth).
   (skill-tree tab with tier-laid branch columns + shared-schema JSON node editing; XP-curve
   tab with cumulative + formula reference and reset-to-formula) publishing over v1's rails
   plus tree cross-checks; the full P7 set (29 curve rows + 96 nodes) went live through it
-  (`tools/content/author-progression.mjs`), 19 tests green. Current: remaining A1 editors
-  follow their consuming phases (P8 items/loot/vendors, P9 enemies…).
+  (`tools/content/author-progression.mjs`), 19 tests green. A1-c (game P8) is live as well:
+  Content → Items with three tabs on one publish rail — items (a budget meter against the
+  ITEMS_LOOT §2 formulas with ƒ-suggest and a duplicate-icon warning), loot (a 1 000-roll
+  simulator through the shared roller the server drops with) and vendors (stock priced by
+  the shared value/sell formulas) — publishing with icon-uniqueness, ref-resolution,
+  loot-cycle and live-enemy-table cross-checks plus advisory budget warnings; 25 tests
+  green. The whole P8 catalogue was authored here and published — 62 items, 5 loot tables,
+  5 Dawnhaven vendors, plus the shore/weald enemy loot bindings
+  (`tools/content/author-items.mjs`) — and the game froze the result into its seed
+  migration 0012. Current: game P8 is built and awaiting the owner's playtest; remaining
+  A1 editors follow their consuming phases (P9 enemies…).

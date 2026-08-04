@@ -759,3 +759,119 @@ code,
   padding: 2px 6px;
   font: inherit;
 }
+
+/* --- Item editors (A1-c) -------------------------------------------------- */
+.items-filter {
+  width: 100%;
+  margin-bottom: 8px;
+  background: var(--bg);
+  border: 1px solid var(--hairline);
+  color: var(--text);
+  font: inherit;
+  padding: 4px 6px;
+}
+/* Rarity reads as a cut chip, never a dot-shaped blob (ADMIN_DESIGN §2). */
+.items-rarity-dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+}
+.items-budget {
+  border: 1px solid var(--hairline);
+  border-left: 2px solid var(--gold);
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  font-size: 12px;
+}
+.items-budget-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+.items-budget-head b {
+  font-size: 13px;
+  letter-spacing: 0;
+  color: var(--text-bright);
+}
+.items-budget-bar {
+  height: 4px;
+  background: var(--bg);
+  border: 1px solid var(--hairline);
+  margin: 6px 0;
+}
+.items-budget-fill {
+  height: 100%;
+  background: var(--green);
+}
+.items-budget-fill.is-over {
+  background: var(--red);
+}
+.items-budget-fill.is-under {
+  background: var(--blue);
+}
+.items-budget-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  color: var(--text-dim);
+}
+.items-budget-facts b {
+  color: var(--text);
+}
+.items-icon-warning {
+  margin-top: 6px;
+  color: var(--red);
+}
+.items-suggest {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.items-sim {
+  border: 1px solid var(--hairline);
+  padding: 8px 10px;
+  margin-bottom: 10px;
+}
+.items-sim-head {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  margin-bottom: 8px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.items-sim-head label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.items-sim-head input {
+  width: 70px;
+  background: var(--bg);
+  border: 1px solid var(--hairline);
+  color: var(--text);
+  font: inherit;
+  padding: 2px 6px;
+}
+.items-vendor-preview {
+  margin-bottom: 10px;
+}
+.items-unknown {
+  color: var(--red);
+}
+.items-warnings {
+  margin-top: 8px;
+  padding-left: 16px;
+  color: var(--gold);
+  font-size: 11px;
+}
+.items-tabs {
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
