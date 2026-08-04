@@ -104,10 +104,14 @@ range, sees a boss's whole unlocked kit rather than phase 0, and names the COMBA
 60–120 s boss window when a fight misses it. Publish blocks on unresolvable spawner refs
 and unpublished loot; judgement calls (a boss with no phases or arena, a `ranged` row with
 nothing ranged) warn without blocking. 41 tests green.
-Note for the next `@dawned/shared` rebuild here: the game bumped `PROTOCOL_VERSION` to 11
-(the snapshot self block now carries the dodge roll). The panel does not speak the game
-protocol, so this is informational — but `pnpm install` after a game-side shared change is
-still required, as always.
+**Shared-schema change to pull in (game P9-D, 2026-08-04):** `enemyAbilitySchema` gained
+`shieldDurationMs` (int ms, default 12 000) — how long a `self_shield` absorb lasts. The
+schema-driven form picks it up for free once `@dawned/shared` is rebuilt in the game repo
+and `pnpm install` runs here; no editor code changes. It is worth a quick tuning-field
+promotion on the Enemies page next time that surface is touched, since it is now part of
+what a caster's shield beat is worth. The game also bumped `PROTOCOL_VERSION` to 12 (enemy
+cast flag on `AbilityStart`); the panel does not speak the game protocol, so that part is
+informational — but `pnpm install` after ANY game-side shared change is still required.
 
 ### Running it locally
 

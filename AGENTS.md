@@ -48,4 +48,6 @@ truth).
   `selectableEnemyAbilities` so the previewed rotation is the fought rotation (both sides
   of the trade, range-aware, boss-window aware). Publish blocks on unresolvable spawner
   refs and unpublished loot; boss-with-no-phases and archetype mismatches warn only.
-  41 tests green.
+  41 tests green. **Pull in after the next `@dawned/shared` rebuild:** the game's P9-D
+  round added `shieldDurationMs` to the enemy ability schema (self-shield duration,
+  default 12 000 ms) — schema-driven, so the form gains it with no editor code.
