@@ -5,10 +5,14 @@ developers and admins edit _everything_ about the game through a friendly UI: th
 (a full 3D map editor), every database-driven piece of content (items, enemies, abilities, loot,
 quests, vendors, zones, curves), and the live server (players, bans, broadcasts, metrics).
 
-> **Status: 🟨 Phase A0 built (2026-08-02)** — panel shell, auth against game accounts
-> (gm/admin), live dashboard, schema-driven World Settings drafts; owner sign-off pending
-> (ROADMAP A0 status). The game repo's planning docs are the design source of truth for game
-> systems; this repo's docs specify the _editing tools_ for them.
+> **Status (2026-08-04): A0 closed, A1 in progress** — the panel shell, auth against game
+> accounts (gm/admin), the live dashboard and schema-driven World Settings shipped in A0; A1
+> has the publish pipeline plus the **Abilities**, **Progression** (XP curve + skill trees) and
+> **Items / Loot / Vendors** editors live, and every ability, node and item the game runs was
+> authored through them. Remaining A1 editors (enemies, zones, NPCs…) land with the game phases
+> that consume them. Phase status: [ROADMAP.md](ROADMAP.md) · what shipped:
+> [CHANGELOG.md](CHANGELOG.md). The game repo's planning docs are the design source of truth for
+> game systems; this repo's docs specify the _editing tools_ for them.
 
 ## Running it locally
 

@@ -115,6 +115,17 @@ export const buildApp = async (config: Config): Promise<App> => {
 
   // --- session + CSRF gates --------------------------------------------------
   app.decorateRequest('admin', null);
+  /**
+   * Panel API answers are never cacheable. They carry draft content and
+   * session-scoped data, and a browser is free to invent a freshness lifetime
+   * for a 200 with no cache header — which reads as "the editor is showing me
+   * yesterday's drafts unless I open a private window".
+   */
+  app.addHook('onSend', (request: FastifyRequest, reply: FastifyReply, payload, done) => {
+    if (request.url.startsWith('/api/')) void reply.header('cache-control', 'no-store');
+    done(null, payload);
+  });
+
   app.addHook('preHandler', async (request: FastifyRequest, reply: FastifyReply) => {
     if (!request.url.startsWith('/api/')) return;
 

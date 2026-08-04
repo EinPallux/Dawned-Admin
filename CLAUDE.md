@@ -43,6 +43,10 @@ docs/         ADMIN_DESIGN.md · MAP_EDITOR.md · CONTENT_EDITORS.md · ARCHITEC
 
 ## Process
 
+- **Freshness checklist (every task, mirrors the game repo's CLAUDE.md):** ROADMAP row + phase
+  block · CHANGELOG · README status block · CLAUDE/AGENTS current state in BOTH repos · docs
+  whose territory you touched · no hardcoded phase/version strings in the UI · counts you quote
+  (tests, rows) re-read from the run you just did. Stale state is a bug the owner has to find.
 - Work inside the current A-phase (ROADMAP.md here; sync points to game P-phases matter — check
   both roadmaps before starting).
 - `pnpm check` green before claiming done; CHANGELOG.md `[Unreleased]` for user-visible changes;
