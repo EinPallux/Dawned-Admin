@@ -66,4 +66,16 @@ truth).
   `current.json` LAST, mirrors the spawner layer into published `content_spawners`, then
   pokes `/ops/reload-map` + `/ops/reload-content`. `POST /api/map/import-live` seeds the
   draft from the live world — without it the first publish would delete Dawnhaven.
-  61 tests green. Next: A2-c (viewport) and A2-d (terrain tools).
+  61 tests green.
+  **A2-c/A2-d + A3-a are in (2026-08-04).** The viewport renders chunks through the
+  SAME shared geometry the game client uses; orbit/fly/top cameras with slots; slope,
+  walkability and height overlays; all six sculpt brushes, masked splat painting, water,
+  board toggle, ruler; island/erosion/auto-splat generators; a 220-step byte-snapshot
+  undo grouped per stroke; the streaming publish panel. Placed objects draw as markers
+  with true-size rings, zone polygons and scatter density; Place stamps a
+  prop/spawner/POI/chest with published-ref defaults; a layers panel counts, hides and
+  clears (checkpointed). Resident region follows camera zoom, capped at 13×13 chunks
+  (17×17 measured at 7.5 M triangles/frame). `tools/smoke/map-editor.mjs` drives it all
+  in a real browser and measures PIXELS — four bugs came out of looking, none from a
+  failing assertion. Open in A3: patrol splines/camp links/density heat, zone polygon
+  drawing with ambience preview, selection sets + prefabs + scatter brush + keymap UI.

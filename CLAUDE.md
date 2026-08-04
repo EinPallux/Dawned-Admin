@@ -134,7 +134,32 @@ without it the editor opens on empty ocean and the first publish would delete Da
 The GAME side landed with it: the live map version is a served artifact, not a constant
 (server reads `current.json`, reports it on `/api/health`, client asks the server which bake
 to stream), and `/ops/reload-map` swaps a new bake under the running world. 61 tests green.
-**Next: A2-c (three.js viewport + overlays) and A2-d (terrain tools + undo).**
+**A2-c/A2-d — the editor itself is live** (2026-08-04): a three.js viewport rendering
+chunks through the SAME `buildChunkGeometryData` the game client uses (extracted to
+`@dawned/shared` for exactly this — an editor with its own vertex code eventually lies
+about the result); orbit/fly/top cameras with 1–9 slots; slope, walkability and height
+overlays as vertex recolours; all six sculpt brushes, 8-layer splat painting with
+slope/height masks, per-chunk water, the island/board toggle and a ruler; seeded island
+synthesis, thermal erosion and auto-splat, each one undo step; a 220-step byte-snapshot
+undo journal grouped per stroke; and the streaming publish panel. The resident region
+follows the camera's zoom, capped at 13×13 chunks — 17×17 was measured at 7.5 M triangles
+a frame.
+**A3-a + the Place tool** (2026-08-04): placed objects render as colour-coded markers with
+rings at TRUE size (a spawner's radius, a POI's ring), zone polygons on their ground, and
+scatter as the 16×16 density grid the format really stores. Click the ground to stamp a
+prop/spawner/POI/chest (defaults from what is actually published), click a marker to select
+it whatever the tool, edit it in a quick-fields-over-schema-validated-JSON inspector, and
+manage the set from a layers panel with counts, hide and a checkpointed "Clear layer…".
+**Verified in a real browser** (`tools/smoke/map-editor.mjs`): imports the live world (271
+chunks, 3 zones, 20 spawners), proves terrain RENDERED by measuring pixels, sculpts (1001 m
+of displacement from 12 dabs), undoes and redoes exactly, paints, cycles every overlay,
+waits for autosave, places and deletes an object, and validates. Four bugs came out of
+LOOKING that no test would have caught: the camera opened inside a hillside, toolbar
+selects stretched across the bar, the camera-follow poll stacked ~9 MB region requests
+until the tab died, and the 17×17 region above.
+**Still open in A3:** patrol splines + camp links + density heat (b), zone polygon drawing
+with live ambience preview (c), selection sets/isolation/prefab collections/scatter brush
+and the rebindable keymap UI (rest of d), then the §7 acceptance run.
 
 ### Running it locally
 

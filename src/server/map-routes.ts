@@ -472,6 +472,17 @@ export const registerMapRoutes = (app: FastifyInstance, deps: MapRouteDeps): voi
     };
   };
 
+  /**
+   * Baked model ids, for the props palette and the placement defaults. Read
+   * from the SAME asset manifest publish validates against, so a model the
+   * editor offers can never be one the bake would reject.
+   */
+  app.get('/api/map/models', async (request, reply) => {
+    if (!requireRole(request, reply, 'gm')) return;
+    const models = await readAssetManifest(config);
+    return { models: [...models].sort() };
+  });
+
   app.get('/api/map/validate', async (request, reply) => {
     if (!requireRole(request, reply, 'gm')) return;
     return validateDraft(await gatherBundle());

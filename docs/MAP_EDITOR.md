@@ -138,6 +138,28 @@ UI; typical incremental bake target <60 s (changed chunks only), full-map <10 mi
   was deleted, unreachable content. Advisory: overlapping zones, floaters/buried props, chunks
   over the instance budget, spawners in an unreachable pocket.
 
+### 4.2 As-built: the viewport and the tools (A2-c/A2-d)
+
+- **One geometry, two repos.** Chunk meshes are built by `buildChunkGeometryData` in
+  `@dawned/shared` — the same function the game client calls. The editor owns only materials,
+  lighting and the water plane. An editor with its own vertex code is an editor that eventually
+  lies about the result, and the divergence would be invisible until someone published.
+- **The resident region follows the camera's zoom**, capped at a 6-chunk radius (13×13 = 832 m,
+  wider than the whole dev island). The cap is measured, not guessed: 17×17 is 7.5 M triangles a
+  frame and buries a software renderer completely. The whole-world view is the baked world map,
+  not a thousand live chunks.
+- **Overlays recolour the existing vertices** rather than drawing a second mesh, so toggling one
+  costs a buffer update instead of a rebuild. Slope is a green→amber→red ramp over 0–60°;
+  walkability uses the game's own classes (green walkable, red >50° steep, blue water).
+- **Undo is byte snapshots, grouped per stroke, 220 deep.** Inverse operations were rejected: a
+  Smooth or Flatten dab destroys the information you would need to invert it. 17 kB per touched
+  chunk is a fine price for an undo that cannot be subtly wrong.
+- **Autosave is per chunk, 2 s after the last dab.** During a stroke nothing is sent; a save per
+  mousemove would put hundreds of 25 kB bodies on a 1-core VPS. Everything saved is durable, so
+  a closed tab loses at most two seconds.
+- **The lock renews itself.** While the tab holds it, the 15 s poll POSTs (renew) instead of
+  GETting — a lease that lapsed mid-session would start refusing saves with no warning.
+
 ## 5. Play-test Bridge
 
 "Play-test ▸" button: opens the game client (new tab) pointed at a **draft preview channel** —

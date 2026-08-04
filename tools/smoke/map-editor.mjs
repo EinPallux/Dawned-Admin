@@ -288,6 +288,36 @@ const run = async (browser) => {
   );
   ok('autosave settled — the status bar reads "Saved"');
 
+  // --- place an object (A3) -------------------------------------------------
+  await page.click('button:has-text("Place")');
+  await page.waitForTimeout(300);
+  const propsBefore = await layerCount(page, 'Prop');
+  await page.mouse.click(centre.x + 120, centre.y - 60);
+  await page.waitForTimeout(900);
+  const propsAfter = await layerCount(page, 'Prop');
+  if (propsAfter !== propsBefore + 1) {
+    await shoot(page, 'a3-place-failed.png');
+    fail(`placing a prop left the layer count at ${propsAfter} (was ${propsBefore})`);
+  }
+  ok(`placed a prop — the layers panel counts ${propsAfter}`);
+
+  // The inspector must open on what was just placed, or the owner has no way
+  // to pick the model they actually wanted.
+  const inspector = page.locator('.me-card', { hasText: 'prop ·' });
+  if ((await inspector.count()) === 0) {
+    await shoot(page, 'a3-no-inspector.png');
+    fail('no inspector appeared for the newly placed prop');
+  }
+  ok('the inspector opened on the new prop');
+  await shoot(page, 'a3-placed.png');
+
+  // Delete it again, so the run leaves the draft as it found it.
+  await page.locator('.me-card button:has-text("Delete")').click();
+  await page.waitForTimeout(800);
+  const propsFinal = await layerCount(page, 'Prop');
+  if (propsFinal !== propsBefore) fail(`delete left ${propsFinal} props, expected ${propsBefore}`);
+  ok('deleted it again — the draft is back where it started');
+
   // --- validate -------------------------------------------------------------
   await page.click('button:has-text("Validate")');
   await page.waitForSelector('.me-publish', { timeout: 30000 });
@@ -304,6 +334,13 @@ const run = async (browser) => {
   );
   if (fatal.length > 0) fail(`console errors during the run:\n  ${fatal.join('\n  ')}`);
   ok('no console errors');
+};
+
+/** How many rows the layers panel counts for a layer. */
+const layerCount = async (page, label) => {
+  const row = page.locator('.me-layer-row', { hasText: label }).first();
+  const text = await row.locator('b').innerText();
+  return Number(text);
 };
 
 /** Total ground displacement across every enabled chunk, from the live store. */

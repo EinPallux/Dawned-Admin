@@ -51,8 +51,12 @@ import {
   type IslandSettings,
 } from './generators.js';
 import { PublishPanel } from './PublishPanel.js';
+import { ObjectStore, mintId } from './object-store.js';
+import { LAYER_COLOR, buildObjectView, type PlacedObject } from './placement.js';
+import { ObjectInspector } from './ObjectInspector.js';
+import { LAYER_LABEL, PLACEABLE_LAYERS, newObjectDef, type PlaceableLayer } from './new-object.js';
 
-type ToolId = 'sculpt' | 'paint' | 'water' | 'board' | 'measure';
+type ToolId = 'sculpt' | 'paint' | 'water' | 'board' | 'place' | 'measure';
 
 interface LockState {
   heldBy: string | null;
@@ -65,6 +69,7 @@ interface EditorSession {
   viewport: MapViewport;
   rig: CameraRig;
   store: DraftStore;
+  objects: ObjectStore;
   journal: UndoJournal;
   brushRing: THREE.Line;
   measureLine: THREE.Line;
@@ -115,6 +120,10 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
   const [measure, setMeasure] = useState<{ from: THREE.Vector3; to: THREE.Vector3 } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [lastAction, setLastAction] = useState<string | null>(null);
+  const [placeLayer, setPlaceLayer] = useState<PlaceableLayer>('prop');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [objects, setObjects] = useState<PlacedObject[]>([]);
+  const [hiddenLayers, setHiddenLayers] = useState<Set<string>>(() => new Set());
 
   // Tool settings are read inside imperative pointer handlers that are
   // registered once; refs keep them current without re-registering listeners.
@@ -123,12 +132,14 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
   const toolRef = useRef(tool);
   const brushRef = useRef(brush);
   const paintRef = useRef(paint);
+  const placeLayerRef = useRef(placeLayer);
   const lockRef = useRef<LockState | null>(null);
   useEffect(() => {
     toolRef.current = tool;
     brushRef.current = brush;
     paintRef.current = paint;
-  }, [tool, brush, paint]);
+    placeLayerRef.current = placeLayer;
+  }, [tool, brush, paint, placeLayer]);
 
   /**
    * Say something. The toast fades, the status-bar line does NOT: "imported 271
@@ -190,16 +201,31 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
     measureLine.visible = false;
     viewport.addGizmo(measureLine);
 
+    // Placed objects. Views are rebuilt from the store on every change; the
+    // ground lookup answers null for un-streamed terrain, so a marker is simply
+    // not drawn rather than seated on the sea floor (the P8 vendor bug).
+    const objectStore = new ObjectStore({
+      onChanged: () => {
+        setObjects(objectStore.all());
+      },
+      onError: (message) => {
+        setToast(message);
+        setLastAction(message);
+      },
+    });
+
     const session: EditorSession = {
       viewport,
       rig,
       store,
+      objects: objectStore,
       journal,
       brushRing,
       measureLine,
       slots: new Map(),
     };
     sessionRef.current = session;
+    void objectStore.load().catch(() => undefined);
 
     // The rig only needs a per-frame tick for fly movement; piggy-backing on
     // rAF here keeps the viewport ignorant of input.
@@ -303,6 +329,52 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
     }
   };
 
+  // --- placement ------------------------------------------------------------
+  //
+  // The refs a new object needs (a model, an enemy, a loot table) come from
+  // what is actually published, so a stamped object is legal the instant it
+  // exists rather than a row the bake will reject later.
+
+  const placementRefs = useQuery({
+    queryKey: ['map-placement-refs'],
+    staleTime: 60_000,
+    queryFn: async () => {
+      const [models, enemies, loot] = await Promise.all([
+        apiGet<{ models: string[] }>('/map/models').catch(() => ({ models: [] })),
+        apiGet<{ enemies: { id: string }[] }>('/enemies').catch(() => ({ enemies: [] })),
+        apiGet<{ tables: { id: string }[] }>('/loot-tables').catch(() => ({ tables: [] })),
+      ]);
+      return {
+        modelRef: models.models[0] ?? '',
+        enemyId: enemies.enemies[0]?.id ?? '',
+        lootTableId: loot.tables[0]?.id ?? '',
+      };
+    },
+  });
+
+  const stampObject = async (point: THREE.Vector3): Promise<void> => {
+    const session = sessionRef.current;
+    if (!session) return;
+    const layer = placeLayerRef.current;
+    const taken = new Set(session.objects.all().map((object) => object.id));
+    const built = newObjectDef(
+      layer,
+      mintId(layer, point.x, point.z, taken),
+      point.x,
+      point.z,
+      placementRefs.data ?? { modelRef: '', enemyId: '', lootTableId: '' },
+    );
+    if ('error' in built) {
+      say(built.error);
+      return;
+    }
+    const saved = await session.objects.save(layer, built.def, `Place ${layer}`);
+    if (saved) {
+      setSelectedId(String(built.def.id));
+      say(`Placed ${LAYER_LABEL[layer] ?? layer}.`);
+    }
+  };
+
   // --- pointer --------------------------------------------------------------
 
   const worldUnderPointer = (
@@ -345,6 +417,28 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
 
     if (!lockRef.current?.mine) {
       say('You are read-only — take the editing lock first.');
+      return;
+    }
+
+    // A click on an existing marker always SELECTS it, whatever the tool —
+    // otherwise placing next to a spawner means stacking one on top of it, and
+    // there would be no way to pick the buried one again.
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const rect = canvas.getBoundingClientRect();
+      const hitId = session.viewport.pickObject(
+        ((event.clientX - rect.left) / rect.width) * 2 - 1,
+        -((event.clientY - rect.top) / rect.height) * 2 + 1,
+      );
+      if (hitId) {
+        setSelectedId(hitId);
+        return;
+      }
+    }
+
+    if (toolRef.current === 'place') {
+      setSelectedId(null);
+      void stampObject(point);
       return;
     }
 
@@ -452,6 +546,27 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
     ]);
     session.measureLine.visible = true;
   }, [measure, tool]);
+
+  // --- object views ---------------------------------------------------------
+  //
+  // Rebuilt wholesale on change rather than diffed: the whole set is a few
+  // hundred markers, rebuilding one is microseconds, and a diff would be a
+  // second source of truth about what is on screen.
+
+  useEffect(() => {
+    const session = sessionRef.current;
+    if (!session) return;
+    session.viewport.clearObjectViews();
+    for (const object of objects) {
+      if (hiddenLayers.has(object.layer)) continue;
+      const view = buildObjectView(
+        object,
+        (x, z) => session.store.heightAt(x, z),
+        object.id === selectedId,
+      );
+      session.viewport.setObjectView(object.id, view);
+    }
+  }, [objects, selectedId, hiddenLayers, saveState]);
 
   // --- overlays -------------------------------------------------------------
 
@@ -640,16 +755,44 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
     }
   };
 
+  /**
+   * "Clear layer…" — the start-fresh requirement (MAP_EDITOR.md §3). Double
+   * confirmed, and the server takes a checkpoint before it runs, so even this
+   * is recoverable after a reload.
+   */
+  const clearLayer = async (layer: string, count: number): Promise<void> => {
+    if (
+      !window.confirm(`Delete all ${count} ${LAYER_LABEL[layer] ?? layer} rows from the draft?`)
+    ) {
+      return;
+    }
+    if (!window.confirm('This cannot be undone with Ctrl+Z. A checkpoint is taken first. Sure?')) {
+      return;
+    }
+    try {
+      const result = await apiPost<{ removed: number; checkpointId: number }>(
+        '/map/objects/clear-layer',
+        { layer },
+      );
+      await sessionRef.current?.objects.load();
+      setSelectedId(null);
+      say(`Cleared ${result.removed} ${layer} rows (checkpoint #${result.checkpointId}).`);
+    } catch (error) {
+      say(error instanceof ApiRequestError ? error.message : 'Clear failed.');
+    }
+  };
+
   // --- render ---------------------------------------------------------------
 
   const readOnly = !lock?.mine;
+  const selected = objects.find((object) => object.id === selectedId) ?? null;
   const canWrite = user.role === 'admin';
 
   return (
     <div className="map-editor">
       <header className="me-toolbar">
         <div className="me-modes">
-          {(['sculpt', 'paint', 'water', 'board', 'measure'] as ToolId[]).map((id) => (
+          {(['sculpt', 'paint', 'water', 'board', 'place', 'measure'] as ToolId[]).map((id) => (
             <button
               key={id}
               type="button"
@@ -764,6 +907,27 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
                   setPaint({ ...paint, heightMin });
                 }}
               />
+            </>
+          )}
+
+          {tool === 'place' && (
+            <>
+              <select
+                className="ws-input"
+                value={placeLayer}
+                onChange={(event) => {
+                  setPlaceLayer(event.target.value as PlaceableLayer);
+                }}
+              >
+                {PLACEABLE_LAYERS.map((layer) => (
+                  <option key={layer} value={layer}>
+                    {LAYER_LABEL[layer] ?? layer}
+                  </option>
+                ))}
+              </select>
+              <span className="me-hint">
+                Click the ground to place. Click a marker to select it instead.
+              </span>
             </>
           )}
 
@@ -1000,6 +1164,80 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
           )}
 
           <section className="ws-panel me-card">
+            <h3>Layers</h3>
+            {LAYER_ORDER.map((layer) => {
+              const count = objects.filter((object) => object.layer === layer).length;
+              const hidden = hiddenLayers.has(layer);
+              return (
+                <div key={layer} className="me-layer-row">
+                  <button
+                    type="button"
+                    className={`me-eye${hidden ? ' is-off' : ''}`}
+                    title={hidden ? 'Show' : 'Hide'}
+                    onClick={() => {
+                      setHiddenLayers((current) => {
+                        const next = new Set(current);
+                        if (next.has(layer)) next.delete(layer);
+                        else next.add(layer);
+                        return next;
+                      });
+                    }}
+                  >
+                    <span className="me-dot" style={{ background: swatchFor(layer) }} />
+                  </button>
+                  <span className={hidden ? 'me-layer-off' : ''}>
+                    {LAYER_LABEL[layer] ?? layer}
+                  </span>
+                  <b>{count}</b>
+                  <button
+                    type="button"
+                    className="ws-btn ws-btn--danger me-tiny"
+                    disabled={readOnly || count === 0}
+                    title={`Delete every ${layer} in the draft`}
+                    onClick={() => {
+                      void clearLayer(layer, count);
+                    }}
+                  >
+                    Clear
+                  </button>
+                </div>
+              );
+            })}
+          </section>
+
+          {selected && (
+            <ObjectInspector
+              key={selected.id}
+              object={selected}
+              readOnly={readOnly}
+              onApply={(def) => {
+                const session = sessionRef.current;
+                if (!session) return;
+                void session.objects.save(selected.layer, def, `Edit ${selected.id}`);
+              }}
+              onDelete={() => {
+                const session = sessionRef.current;
+                if (!session) return;
+                void session.objects.remove([selected.id], `Delete ${selected.id}`).then((ok) => {
+                  if (ok) setSelectedId(null);
+                });
+              }}
+              onFrame={() => {
+                const session = sessionRef.current;
+                if (!session || selected.x === null || selected.z === null) return;
+                session.rig.frame(
+                  new THREE.Vector3(
+                    selected.x,
+                    session.store.heightAt(selected.x, selected.z) ?? 0,
+                    selected.z,
+                  ),
+                  40,
+                );
+              }}
+            />
+          )}
+
+          <section className="ws-panel me-card">
             <h3>Draft</h3>
             <div className="me-row">
               <button
@@ -1082,8 +1320,15 @@ const TOOL_LABELS: Record<ToolId, string> = {
   paint: 'Paint',
   water: 'Water',
   board: 'Board',
+  place: 'Place',
   measure: 'Measure',
 };
+
+/** Layer rows in the panel, in the order they are worth thinking about. */
+const LAYER_ORDER = ['prop', 'scatter', 'spawner', 'node', 'npc', 'zone', 'poi', 'interactable'];
+
+const swatchFor = (layer: string): string =>
+  `#${(LAYER_COLOR[layer] ?? 0x999999).toString(16).padStart(6, '0')}`;
 
 const OVERLAY_CYCLE: OverlayKind[] = ['none', 'slope', 'walkable', 'height'];
 const nextOverlay = (current: OverlayKind): OverlayKind =>

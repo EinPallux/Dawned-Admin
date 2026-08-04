@@ -9,7 +9,7 @@
 | A0    | Foundation: shell, auth, data link            | M    | game P1 (schema live) | ✅ done (2026-08-04)                    |
 | A1    | Content editors (items→curves) + publish v1   | L    | A0; serves P5–P8      | 🟨 abilities · progression · items live |
 | A2    | Map Editor I: viewport, terrain, publish/bake | XL   | game P2 formats       | 🚧 in progress (a/b done, 2026-08-04)   |
-| A3    | Map Editor II: placement, spawns, zones, POIs | XL   | A2 + game P9 systems  | 🔲                                      |
+| A3    | Map Editor II: placement, spawns, zones, POIs | XL   | A2 + game P9 systems  | 🚧 in progress (2026-08-04)             |
 | A4    | Quest & dialogue editor                       | M    | A1; serves P11        | 🔲                                      |
 | A5    | Live Ops: players, moderation, server, audit  | M    | game P13 ops API      | 🔲                                      |
 | A6    | Publish polish, validation depth, backups UI  | M    | with game P14         | 🔲                                      |
@@ -139,10 +139,23 @@ in the live game; full-map bake under 10 min on the VPS; undo survives a 200-ste
       **`POST /api/map/import-live` seeds the draft from the world players are standing on** —
       without it the editor opens on empty ocean and the first publish would delete Dawnhaven.
       19 new tests (61 total green).
-- [ ] A2-c — viewport (three.js, game-parity terrain/splat/water), cameras, overlays.
-- [ ] A2-d — terrain tools: sculpt brushes, splat painting, water, generators, undo journal.
+- [x] **A2-c — viewport, cameras, overlays.** Chunk meshes come from the SAME
+      `buildChunkGeometryData` the game client uses (extracted to `@dawned/shared` for this),
+      so the editor cannot show a world that differs from the one players walk on. Orbit / fly /
+      top-down rig with 1–9 camera slots and fly speed scaled to the boom; overlays for slope,
+      walkability and height bands (vertex recolour, not a second mesh); chunk grid; a status bar
+      carrying save state, cursor world position, chunk and the last action taken.
+      The resident region follows the camera's zoom, capped at 13×13 chunks (832 m — wider than
+      the whole dev island) after measuring 17×17 at 7.5 M triangles a frame.
+- [x] **A2-d — terrain tools + undo.** All six sculpt brush kinds, 8-layer splat painting with
+      slope/height masks, per-chunk water, the island/board toggle and a ruler. Seeded island
+      synthesis, thermal erosion and auto-splat, each a single undo step. The journal keeps byte
+      snapshots grouped per stroke, 220 deep: a brush dab is not invertible in general, and 17 kB
+      per touched chunk buys an undo that cannot be subtly wrong.
+      Verified in a real browser (`tools/smoke/map-editor.mjs`) — it imports the live world,
+      measures PIXELS to prove terrain rendered, sculpts, and proves undo/redo restore exactly.
 
-## A3 — Map Editor II: World Population (XL) — before game P12
+## A3 — Map Editor II: World Population (XL) — in progress, before game P12
 
 Props mode (palette, gizmos, snapping, jitter stamping, multi-select, prefab collections,
 floaters/buried reports), foliage scatter sets (paint + bake-to-instances), Spawns mode (enemy
@@ -154,6 +167,24 @@ or the documented staging fallback decision).
 **DoD:** the full MAP_EDITOR.md §7 acceptance scenario, performed by the owner unassisted; game
 P12 world building proceeds entirely in this tool (its real DoD is P12 shipping the Dawnlands
 with it).
+
+- [x] **A3-a — placement core.** Everything that stands on the terrain draws through one module:
+      coloured markers per layer, rings at TRUE size for the numbers the owner is actually
+      choosing (a spawner's radius, a POI's discovery ring), zone polygons on the ground they
+      cover, and scatter as the 16×16 density grid the format really stores rather than a
+      prettier lie. A marker on un-streamed ground is NOT drawn, rather than seated on the sea
+      floor. Objects have their own store with immediate saves and rollback on refusal — moving
+      a rock is one 300-byte row, and an object that vanishes inside a 2 s debounce is worse than
+      a save per drag.
+- [x] **A3-d (part) — the Place tool, selection, inspector and layers panel.** Click the ground
+      to stamp a prop / spawner / POI / chest (defaults drawn from what is actually published, so
+      a new row is legal the instant it exists); click a marker to select it, whatever the tool.
+      The inspector is quick fields over the schema-validated full row — the same two-tier shape
+      the Abilities and Items editors use. The layers panel counts each layer, hides it, and
+      carries the double-confirmed, checkpointed "Clear layer…".
+- [ ] A3-b — patrol splines, camp links, spawn-density heat, simulate-populate.
+- [ ] A3-c — zone polygon drawing/editing with live ambience preview, shrine graph.
+- [ ] A3-d (rest) — selection sets + isolation, prefab collections, scatter brush, keymap UI.
 
 ## A4 — Quest & Dialogue Editor (M) — with game P11
 

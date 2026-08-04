@@ -13,6 +13,7 @@
  */
 
 import * as THREE from 'three';
+import { disposeObjectView } from './placement.js';
 import {
   CHUNK_SIZE_M,
   CHUNK_VERTS,
@@ -163,6 +164,10 @@ export class MapViewport {
   private readonly chunks = new Map<string, ChunkView>();
   private readonly terrainGroup = new THREE.Group();
   private readonly gizmoGroup = new THREE.Group();
+  /** Placed objects (A3). Separate from terrain so picking can ask for one or
+   * the other: clicking a spawner must select it, not sculpt the hill under it. */
+  private readonly objectGroup = new THREE.Group();
+  private readonly objectViews = new Map<string, THREE.Object3D>();
   private readonly gridHelper: THREE.LineSegments;
   private overlay: OverlayKind = 'none';
   private seaLevel: number;
@@ -193,6 +198,7 @@ export class MapViewport {
     this.scene.add(new THREE.HemisphereLight('#dce8ff', '#3a4a3a', 1.1));
 
     this.scene.add(this.terrainGroup);
+    this.scene.add(this.objectGroup);
     this.scene.add(this.gizmoGroup);
     this.scene.add(buildOcean(this.seaLevel));
     this.gridHelper = buildChunkGrid();
@@ -282,9 +288,56 @@ export class MapViewport {
     attribute.needsUpdate = true;
   }
 
+  // --- placed objects -------------------------------------------------------
+
+  /** Replace one object's view (or remove it when `view` is null). */
+  setObjectView(id: string, view: THREE.Object3D | null): void {
+    const existing = this.objectViews.get(id);
+    if (existing) {
+      this.objectGroup.remove(existing);
+      disposeObjectView(existing);
+      this.objectViews.delete(id);
+    }
+    if (view) {
+      this.objectViews.set(id, view);
+      this.objectGroup.add(view);
+    }
+  }
+
+  clearObjectViews(): void {
+    for (const id of [...this.objectViews.keys()]) this.setObjectView(id, null);
+  }
+
+  /** Per-layer visibility — the layers panel's hide toggle. */
+  setLayerVisible(layer: string, visible: boolean): void {
+    for (const view of this.objectViews.values()) {
+      const data = view.userData as { layer?: string };
+      if (data.layer === layer) view.visible = visible;
+    }
+  }
+
   // --- picking --------------------------------------------------------------
 
   private readonly raycaster = new THREE.Raycaster();
+
+  /**
+   * The id of the placed object under the cursor, or null. Checked BEFORE the
+   * terrain pick by every placement tool: a click that lands on a marker means
+   * "select this", not "put another one behind it".
+   */
+  pickObject(ndcX: number, ndcY: number): string | null {
+    this.raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), this.camera);
+    const hits = this.raycaster.intersectObjects(this.objectGroup.children, true);
+    for (const hit of hits) {
+      let node: THREE.Object3D | null = hit.object;
+      while (node) {
+        const data = node.userData as { objectId?: string };
+        if (typeof data.objectId === 'string') return data.objectId;
+        node = node.parent;
+      }
+    }
+    return null;
+  }
 
   /**
    * World point under normalised device coordinates, or null when the ray
@@ -333,6 +386,7 @@ export class MapViewport {
     this.disposed = true;
     cancelAnimationFrame(this.raf);
     this.clearChunks();
+    this.clearObjectViews();
     this.renderer.dispose();
   }
 }

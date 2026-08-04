@@ -5,6 +5,45 @@ versions track the game's release trains (0.1.0 = tooling that shipped Dawned 0.
 
 ## [Unreleased]
 
+### Added — placing things in the world (2026-08-04, A3-a)
+
+- **Place mode**: click the ground to drop a prop, an enemy spawner, a
+  discovery point or a chest. New rows come out valid — the model, enemy and
+  loot table default to things that are actually published — and the inspector
+  opens on what you just placed so choosing the right one is the next thing in
+  front of you.
+- **Everything on the terrain is visible and clickable**: props, spawners,
+  camps, POIs and chests as colour-coded markers, with rings drawn at TRUE size
+  for the numbers you are actually deciding — a spawner's radius, a POI's
+  discovery ring. Zone borders draw on the ground they cover. Foliage shows as
+  the density map it really is, not a fake forest.
+- **The layers panel** counts each kind, hides any of them, and carries
+  "Clear layer…" — double-confirmed, and the server takes a checkpoint first,
+  so wiping every prop in a zone is recoverable even after a reload.
+- A marker whose ground has not streamed in yet is not drawn at all, rather
+  than parked on the sea floor.
+
+### Added — the Map Editor (2026-08-04, A2-c/A2-d)
+
+- **The world is editable in the browser.** Content → World → Map Editor opens
+  the island in 3D, rendered exactly the way the game renders it — same
+  geometry, same splat colours, same water — because both sides now build
+  chunks from one shared implementation. What you sculpt is what players get.
+- **Sculpt and paint**: raise, smooth, flatten, set-height, terrace and noise
+  brushes with four falloffs; 8-layer texture painting that can be masked to a
+  slope band ("only on cliffs") or a height band ("only above the tree line");
+  per-chunk water; and a board tool for deciding which chunks are world at all.
+- **Generators to start from**: a seeded island (same seed, same island),
+  thermal erosion that turns noise spikes into shapes you can walk on, and
+  auto-splat that dresses terrain from its own slope and height. Each is a
+  single Ctrl+Z.
+- **Overlays that answer questions**: slope heat, a walkability preview in the
+  game's own green/red/blue, height bands, and the chunk grid.
+- **Cameras**: orbit for shaping, fly (WASD, speed scaled to how far out you
+  are) for crossing the island, top-down for coastlines, and 1–9 slots.
+- **Undo 220 steps deep**, grouped per stroke — a coastline undoes as a
+  coastline, not one dab at a time.
+
 ### Added — Map editor foundations: draft store, validate, bake, publish (2026-08-04, A2-b)
 
 - **The map is now editable data with a real publish rail.** Terrain drafts are
