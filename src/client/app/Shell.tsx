@@ -60,6 +60,14 @@ export const Shell = ({ user }: { user: AdminUser }) => {
         },
       },
       {
+        id: 'nav-progression',
+        label: 'Go to Progression (XP curve + skill trees)',
+        hint: 'nav',
+        run: () => {
+          void navigate('/content/progression');
+        },
+      },
+      {
         id: 'open-game',
         label: 'Open the game',
         hint: 'link',
@@ -143,6 +151,9 @@ export const Shell = ({ user }: { user: AdminUser }) => {
         </NavLink>
         <NavLink to="/content/abilities" className={railLink}>
           Abilities
+        </NavLink>
+        <NavLink to="/content/progression" className={railLink}>
+          Progression
         </NavLink>
         <div className="rail-item is-disabled" title="Arrives with phase A1">
           Items <span className="phase">A1</span>

@@ -97,3 +97,24 @@ time-to-kill both directions vs. the COMBAT.md targets (the balance sanity tool)
 | Enemy model/archetype swaps, zone ambience                                                    | ✅ live (clients apply next zone-load; note shown)                                                                         |
 | Map bakes (terrain/placements/spawners/walkgrid)                                              | ⚠ staged: live chunk-swap where safe, else "applies on restart" (publish dialog states which, per game ARCHITECTURE.md §5) |
 | Schema migrations                                                                             | ❌ deploy path (UPDATE.sh), by design                                                                                      |
+
+## 8. As-built status (A1 rolls out editor-by-editor)
+
+Editors land alongside the game phase that consumes them; this section tracks what exists
+versus the spec above.
+
+- **Abilities (2026-08-03, game P5/P6):** shipped per §4's core — class-grouped list with
+  draft dots, quick tuning fields over the full shared-schema-validated JSON def, Ctrl+S
+  drafts with prune-on-match, publish v1 with slot-collision cross-check + hot reload. All 44
+  live ability rows went through it. Tooltip preview and ref-existence validation are still
+  ahead (they need the P8+ registries).
+- **Progression (2026-08-04, game P7):** Content → Progression with two tabs. _Skill trees_:
+  class picker + three branch columns laid out by tier with capstone marking and draft dots;
+  the selected node edits as shared-schema-validated JSON (`skillNodeDefSchema`) with the
+  node's gate shown; per-node discard. _XP curve_: the 29-level table with editable
+  `xpToNext`, precomputed cumulative column, the design-formula reference value (ƒ per §1)
+  and a one-click reset-to-formula per row. One publish rail covers both tables with the
+  progression cross-checks (curve completeness, node ability-refs against published
+  abilities, branch cell collisions, one capstone per branch) and ends in the same hot
+  reload. The §4 lattice "tree preview" upgrades when the game client's tree UI (P7-D)
+  settles the visual language.

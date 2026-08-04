@@ -4,15 +4,15 @@
 > Same working agreements: phases close only on their DoD, statuses maintained in this table.
 > Sizes: S/M/L/XL relative effort.
 
-| Phase | Name                                          | Size | Starts after          | Status                         |
-| ----- | --------------------------------------------- | ---- | --------------------- | ------------------------------ |
-| A0    | Foundation: shell, auth, data link            | M    | game P1 (schema live) | 🟨 built — owner login pending |
-| A1    | Content editors (items→curves) + publish v1   | L    | A0; serves P5–P8      | 🟨 abilities editor live       |
-| A2    | Map Editor I: viewport, terrain, publish/bake | XL   | game P2 formats       | 🔲                             |
-| A3    | Map Editor II: placement, spawns, zones, POIs | XL   | A2 + game P9 systems  | 🔲                             |
-| A4    | Quest & dialogue editor                       | M    | A1; serves P11        | 🔲                             |
-| A5    | Live Ops: players, moderation, server, audit  | M    | game P13 ops API      | 🔲                             |
-| A6    | Publish polish, validation depth, backups UI  | M    | with game P14         | 🔲                             |
+| Phase | Name                                          | Size | Starts after          | Status                   |
+| ----- | --------------------------------------------- | ---- | --------------------- | ------------------------ |
+| A0    | Foundation: shell, auth, data link            | M    | game P1 (schema live) | ✅ done (2026-08-04)     |
+| A1    | Content editors (items→curves) + publish v1   | L    | A0; serves P5–P8      | 🟨 abilities editor live |
+| A2    | Map Editor I: viewport, terrain, publish/bake | XL   | game P2 formats       | 🔲                       |
+| A3    | Map Editor II: placement, spawns, zones, POIs | XL   | A2 + game P9 systems  | 🔲                       |
+| A4    | Quest & dialogue editor                       | M    | A1; serves P11        | 🔲                       |
+| A5    | Live Ops: players, moderation, server, audit  | M    | game P13 ops API      | 🔲                       |
+| A6    | Publish polish, validation depth, backups UI  | M    | with game P14         | 🔲                       |
 
 ## A0 — Foundation (M)
 
@@ -54,9 +54,8 @@ status; a schema-form renders and round-trips a `world_settings` edit as a draft
       New `node tools/smoke/admin-prod-serve.mjs` serves `dist/` exactly like the VPS (prefix
       strip + real CSP from the sibling Caddyfile) and walks load → MIME/cache checks → login
       in Chromium, so serving bugs can't reach a deploy unseen again.
-- [ ] **Owner DoD check:** log in at play.pathlands.cc/admin after the next deploy (needs an
-      `admin`-role account — set via `UPDATE accounts SET role='admin' WHERE name='…'`),
-      confirm the live server card and a world-settings draft round-trip. Then A0 closes.
+- [x] **Owner DoD check:** confirmed 2026-08-04 — the owner logged in at
+      play.pathlands.cc/admin and the panel works. A0 is closed.
 
 ## A1 — Content Editors & Publish v1 (L) — runs alongside game P5–P8
 

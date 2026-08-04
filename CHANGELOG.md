@@ -5,6 +5,30 @@ versions track the game's release trains (0.1.0 = tooling that shipped Dawned 0.
 
 ## [Unreleased]
 
+### Added — Progression editors: XP curve + skill trees (2026-08-04, with game P7)
+
+- **Content → Progression**, the panel's second content editor pair, one page, two tabs:
+  - _Skill trees_: pick a class, see its three branches as columns laid out by unlock tier
+    (capstones marked, draft dots live); selecting a node opens the full definition as JSON
+    validated by the SHARED `skillNodeDefSchema` (per-rank cumulative effects and all), with
+    the node's tier gate spelled out. Ctrl+S saves drafts, prune-on-match, per-node discard —
+    the same editing contract as Abilities.
+  - _XP curve_: all 29 level rows in one table — editable `xpToNext`, the cumulative total
+    precomputed per row, the design formula's reference value alongside (ƒ-suggest per the
+    editor spec) and a one-click reset-to-formula for any row the owner has bent.
+- **Progression publish** rides publish v1's rails (diff → validate-all → transactional copy
+  → `/ops/reload-content`) and adds the tree cross-checks: curve completeness (no missing
+  levels), node ability-references resolved against published abilities (including
+  cooldown-reset/free-cast/proc targets), branch cell collisions (`class/branch#order`), and
+  exactly one capstone per branch. Any failure refuses the whole publish; everything audited.
+- **The editors shipped the P7 content**: the full XP curve (29 rows) and all 96 CLASSES.md
+  skill nodes authored through the panel API and published live
+  (`tools/content/author-progression.mjs`, node definitions in
+  `tools/content/progression-data.mjs`), hot-reloaded into the running game; the game repo's
+  seed migration 0010 mirrors the set for fresh deploys. 4 new integration tests (curve +
+  node draft round-trips, unknown-ability-ref refusal, order-collision refusal); 19 total
+  green.
+
 ### Added — Abilities editor + publish pipeline v1 (2026-08-03, A1 begins)
 
 - **Content → Abilities**: the panel's first full content editor. Every ability
