@@ -115,9 +115,13 @@ const main = async () => {
       enemyLevel: row.levelMin,
       playerLevel: row.levelMin,
       playerClass: 'warrior',
-      // A rough level-appropriate melee number: enough to compare fights to
-      // each other, which is what this table is for.
-      playerDps: 22 + 6 * row.levelMin,
+      // Melee damage a BUILT character of that level actually puts out. The
+      // game's browser-p9 run measured 78 dps for a level-12 warrior with every
+      // attribute point spent and published T2 gear, which this line is anchored
+      // to. The anchor matters more than it looks: the same warrior with its 33
+      // points UNSPENT does 30, and a table built on a guessed number can be 3×
+      // off and send someone re-balancing a boss that was fine.
+      playerDps: Math.round(6.5 * row.levelMin),
       distance,
     };
     const { report } = await (

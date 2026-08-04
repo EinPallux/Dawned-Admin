@@ -51,3 +51,8 @@ truth).
   41 tests green. **Pull in after the next `@dawned/shared` rebuild:** the game's P9-D
   round added `shieldDurationMs` to the enemy ability schema (self-shield duration,
   default 12 000 ms) — schema-driven, so the form gains it with no editor code.
+  **Game P9 closed 2026-08-04 (built, awaiting playtest):** the King solos in 105 s, inside
+  the 60–120 s design window. Lesson for this panel: the TTK simulator's **player dps input
+  is the whole answer** and the page defaults it to 40, where a properly built level-12
+  warrior measures 78 (an unspent one, 30). A guessed dps can be 3× off and send someone
+  re-balancing a boss that was fine — worth a measured reference on the sim controls.

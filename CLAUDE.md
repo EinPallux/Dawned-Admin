@@ -112,6 +112,13 @@ promotion on the Enemies page next time that surface is touched, since it is now
 what a caster's shield beat is worth. The game also bumped `PROTOCOL_VERSION` to 12 (enemy
 cast flag on `AbilityStart`); the panel does not speak the game protocol, so that part is
 informational — but `pnpm install` after ANY game-side shared change is still required.
+**Game P9 is built and measured (2026-08-04), awaiting the owner's playtest** — the Mushroom
+King solos in 105 s inside the design's 60–120 s window. One thing that finding is worth to
+this panel: the TTK simulator's **player dps input is the whole answer**, and the page still
+defaults it to 40. The measured number for a properly built level-12 warrior with T2 gear is
+**78**, and an UNSPENT level 12 does 30 — so a preview run with a guessed dps can be off by
+3× and send someone re-balancing a boss that was fine. Worth surfacing on the sim controls
+(a measured reference row, or level-derived defaults) next time the Enemies page is touched.
 
 ### Running it locally
 
