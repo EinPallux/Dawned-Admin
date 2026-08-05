@@ -100,6 +100,56 @@ export class ObjectStore {
     }
   }
 
+  /**
+   * Create or update several rows as ONE undo step.
+   *
+   * A scatter stroke crossing four chunks and a stamped prefab of twelve props
+   * are both single actions in the owner's head; four or twelve undo entries
+   * would be a lie about what just happened. Same optimistic-then-rollback
+   * shape as `save`, applied to the whole batch.
+   */
+  async saveMany(
+    rows: readonly { layer: string; def: Record<string, unknown> }[],
+    label: string,
+  ): Promise<boolean> {
+    if (rows.length === 0) return true;
+    const before: (PlacedObject | null)[] = [];
+    const after: PlacedObject[] = [];
+    for (const row of rows) {
+      const id = typeof row.def.id === 'string' ? row.def.id : '';
+      if (!id) {
+        this.events.onError('an object needs an id');
+        return false;
+      }
+      before.push(this.byId.get(id) ?? null);
+      after.push({
+        id,
+        layer: row.layer,
+        def: row.def,
+        x: typeof row.def.x === 'number' ? row.def.x : null,
+        z: typeof row.def.z === 'number' ? row.def.z : null,
+      });
+    }
+    for (const object of after) this.byId.set(object.id, object);
+    this.events.onChanged(after.map((object) => object.id));
+    try {
+      await apiPut('/map/objects', {
+        objects: rows.map((row) => ({ layer: row.layer, def: row.def })),
+      });
+      this.record(label, before, after);
+      return true;
+    } catch (error) {
+      for (const [index, object] of after.entries()) {
+        const previous = before[index];
+        if (previous) this.byId.set(object.id, previous);
+        else this.byId.delete(object.id);
+      }
+      this.events.onChanged(after.map((object) => object.id));
+      this.events.onError(error instanceof Error ? error.message : 'save refused');
+      return false;
+    }
+  }
+
   async remove(ids: string[], label: string): Promise<boolean> {
     if (ids.length === 0) return true;
     const before = ids.map((id) => this.byId.get(id) ?? null);

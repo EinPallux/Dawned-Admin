@@ -5,6 +5,9 @@
  * it by walking there in the live game.
  */
 
+import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   CHUNK_SIZE_M,
@@ -13,8 +16,15 @@ import {
   WalkClass,
   Walkgrid,
   baseSplat,
+  placementsFileSchema,
 } from '@dawned/shared';
-import { validateDraft, isReachable, reachableFrom, type DraftBundle } from './map-bake.js';
+import {
+  bakeDraft,
+  validateDraft,
+  isReachable,
+  reachableFrom,
+  type DraftBundle,
+} from './map-bake.js';
 import type { DraftChunk, DraftObject } from './map-draft.js';
 
 /** A flat, enabled chunk at `height`. */
@@ -374,5 +384,95 @@ describe('scatter', () => {
       }),
     );
     expect(report.warnings.join(' ')).toMatch(/holds \d+ instances/);
+  });
+});
+
+/**
+ * The bake itself, on the smallest legal world. `validateDraft` passing is NOT
+ * proof a draft bakes: validation reads the draft's own schemas, while the bake
+ * has to hand every layer to the GAME's strict artifact schemas. A painted
+ * forest used to pass validation and then throw inside `placements.json`.
+ */
+describe('bakeDraft', () => {
+  const scatterSet = {
+    id: 'scatter_cover',
+    name: 'Cover',
+    entries: [{ modelRef: 'nature_rock_a', weight: 1, scaleMin: 1, scaleMax: 1 }],
+    densityPer100m2: 20,
+    maxSlopeDeg: 90,
+    minHeight: -64,
+  };
+
+  const bakeInto = async (over: Partial<DraftBundle> = {}) => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'dawned-bake-'));
+    try {
+      const result = await bakeDraft(bundle(over), dir, 'test-bake');
+      const placements = placementsFileSchema.parse(
+        JSON.parse(await readFile(path.join(dir, 'test-bake', 'placements.json'), 'utf8')),
+      );
+      return { result, placements };
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  };
+
+  it('writes a placements file the game can read', async () => {
+    const { result, placements } = await bakeInto();
+    expect(result.chunksEmitted).toBe(1);
+    expect(placements.props).toEqual([]);
+    expect(placements.scatter).toEqual([]);
+  });
+
+  /**
+   * The regression: a draft scatter row carries an `id` (it is a row key), the
+   * baked format is keyed by (cx, cy, setId) and is `.strict()`. Handing the
+   * row straight over threw `unrecognized_keys` — and because the bake stages
+   * into `.tmp` and only renames at the end, the failure looked like a publish
+   * that silently stopped after "zones".
+   */
+  it('projects a draft scatter patch into the baked format (drops the row id)', async () => {
+    const { result, placements } = await bakeInto({
+      scatterSets: [scatterSet],
+      objects: [
+        zoneOver(4, 4),
+        {
+          id: 'scatter_cover_4_4',
+          layer: 'scatter',
+          x: null,
+          z: null,
+          def: {
+            id: 'scatter_cover_4_4',
+            setId: 'scatter_cover',
+            cx: 4,
+            cy: 4,
+            density: new Array(256).fill(255),
+          },
+        },
+      ],
+    });
+    expect(placements.scatter).toHaveLength(1);
+    expect(placements.scatter[0]).not.toHaveProperty('id');
+    expect(placements.scatter[0]?.setId).toBe('scatter_cover');
+    expect(result.scatterInstances).toBeGreaterThan(0);
+  });
+
+  it('leaves no staging directory behind when the bake throws', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'dawned-bake-'));
+    try {
+      await expect(
+        bakeDraft(
+          bundle({
+            // A zone whose polygon the GAME's schema refuses: the bake reaches
+            // `zoneSchema.parse` after the chunk bins are already staged.
+            objects: [zoneOver(4, 4, 'zone_test', { polygon: [[0, 0]] })],
+          }),
+          dir,
+          'test-bake',
+        ),
+      ).rejects.toThrow();
+      expect(await readdir(dir)).toEqual([]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });

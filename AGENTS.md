@@ -107,5 +107,32 @@ truth).
   clicks from markers standing on it and one Delete ate Dawnshore (markers now beat
   outlines, zone deletes confirm); and the zone tool required terrain under the cursor,
   making the half of every outline that runs over water untouchable.
-  Open in A3: selection sets + prefabs + scatter brush + keymap UI, then the §7 run.
-  121 tests green; `node tools/smoke/map-editor.mjs` passes end to end.
+  **A3-d (2026-08-05):** scatter brush painting the per-chunk density grid (seam-aware,
+  one save + one undo per stroke, emptied patches deleted) with a scatter-set editor;
+  multi-select by click / Shift+click / Shift+drag marquee testing DRAWN positions;
+  prefabs stamping plain placements from a stored relative layout (game migration 0015,
+  `map_editor_collections`); selection sets that drop dead ids; isolation that hides and
+  composes with layer hiding; and a fully rebindable keymap. The browser run caught one
+  more: scatter dabs re-read the store each dab, so a stroke kept only its last dab —
+  `strokeBase` owns that precedence now. Transform gizmos/snap/jitter deliberately not
+  built.
+  **A2/A3-e (2026-08-05) — the §7 acceptance run closes both phases** (A2 ✅ done, A3 ✅
+  built; the owner's own unassisted run is the last word). `tools/smoke/map-scenario.mjs`
+  performs the whole §7 sentence in a browser against the real game: pan to open water,
+  sculpt an islet, paint, scatter a forest, drop a 21-spawner camp, place chest/shrine/
+  vista, trace a zone with its own fog, validate, publish — then ask the GAME whether it
+  swapped worlds (`dev-2 → map-<epoch>`, no restart), read the islet's chunk bin and zone
+  back out of the bake, and clear just that zone's props. Patrol routes (Q24), T2 resource
+  nodes (Q25) and per-zone music (Q26) are reported missing, not faked. See MAP_EDITOR §7.1.
+  **It found that no publish carrying scatter had ever worked**: the bake handed draft
+  scatter rows (which carry a row `id`) to the game's `.strict()` placements schema, so it
+  threw between "zones" and "placements" with nothing on screen, nothing in the log and a
+  staging dir left behind. Rows are projected now rather than cast, the throw is logged, a
+  failed bake clears its stage, and `map-bake.test.ts` BAKES — validation passing is not
+  proof a draft bakes, they run different schemas. Also: publishing sweeps old bakes
+  (`pruneOldBakes`, 5-deep window — each is ~8.6 MB and nothing removed them), and the live
+  bake is git-ignored + archived by the game's `BACKUP.sh`.
+  172 tests green; `map-editor.mjs` and `map-scenario.mjs` both pass end to end. (Running
+  both against one world found a third thing: `map-editor.mjs` measured its scatter erase
+  against EVERY patch in the draft, so the islet's deliberately-left forest read as
+  "erasing left 13 077 density behind". It counts its own set now.)

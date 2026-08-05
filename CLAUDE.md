@@ -201,15 +201,62 @@ the cursor**, which made half of every outline untouchable (all three zones reac
 water) — it picks against the world plane now. Also: `@dawned/shared` is excluded from Vite's
 dep pre-bundling, because the cached bundle survived a rebuild in the game repo and reported a
 brand-new export as missing.
-**Still open in A3:** selection sets/isolation/prefab collections/scatter brush and the
-rebindable keymap UI (rest of d), then the §7 run. **121 tests green**, and
-`node tools/smoke/map-editor.mjs` passes end to end (import → sculpt/undo/redo → paint →
-overlays → autosave → place/inspect/delete → spawn budget + rings → two shrines and the
-travel graph → drag/insert/remove a zone corner → validate → clean up after itself).
+**A3-d — scatter, selection, prefabs and the keymap** (2026-08-05): the scatter brush paints
+the 16×16-per-chunk density grid the format really stores (a forest is a couple of hundred
+bytes and the bake re-scatters it deterministically); a stroke across a seam paints both
+sides, the whole stroke is ONE save and ONE undo, and erasing a patch to nothing deletes the
+row rather than storing 256 zeroes. Scatter sets — the weighted model list, density per
+100 m², slope/height limits — are edited in the same card. Multi-select is click /
+`Shift`+click / `Shift`+drag, and the marquee tests where markers are DRAWN, not the metre
+they stand on. Prefabs keep a group's relative layout and stamp plain placements anywhere
+(game migration 0015, `map_editor_collections` — in Postgres because months of them must not
+die with a browser cache); stamping mints ids against the map AND against the ids minted
+earlier in the same stamp. Selection sets drop ids that no longer exist rather than keeping
+ghosts; isolation HIDES and composes with layer hiding. Every shortcut is a keymap row:
+rebinding takes the key off its previous owner instead of silently swapping (two actions on
+one key means the second never fires), and an old stored map gains new actions' defaults.
+One bug came out of the browser run again: **scatter dabs did not accumulate within a
+stroke** — each dab re-read the store, which is only written on mouse-up, so only the last
+dab survived. Painting looked roughly right; erasing removed 9 % of what it should have.
+`strokeBase` now owns that precedence and is tested.
+**Not built, deliberately:** transform gizmos, grid snap and jitter stamping — polish on a
+placement path that already works, not worth delaying the §7 run for.
+**A2/A3-e — the §7 acceptance run closes both phases** (2026-08-05; A2 ✅ done, A3 ✅ built,
+the owner's own unassisted run is the last word). `tools/smoke/map-scenario.mjs` performs the
+whole §7 sentence in a real browser against the real game server: pan out to open water
+(−6.8 m), Island-generate an islet (28.4 m of land where there was sea), paint it, scatter a
+forest (13 077 density), drop a 21-spawner camp, place a chest/shrine/vista, trace a zone and
+give it its own fog through the inspector, validate, PUBLISH — then ask the GAME whether it
+swapped worlds (`dev-2 → map-<epoch>`, no restart), read the islet's own chunk bin and the new
+zone back out of the published bake, and clear just that zone's props (3 → 0, the rest of the
+world untouched). Three parts of §7 the game cannot receive are REPORTED, not faked: patrol
+routes (Q24), T2 resource nodes (Q25), per-zone music/sfx (Q26). Full table in MAP_EDITOR §7.1.
+**The run found the bug that mattered: no publish carrying scatter had ever worked.** The bake
+handed draft scatter rows — which carry a row `id` — straight to the game's `.strict()`
+placements schema, so `placements.json` threw and publish stopped between "zones" and
+"placements", with no error on screen, none in the log, and a staging directory left behind
+each time. Draft rows are PROJECTED into the baked format now (never cast — the cast is what
+type-checked the mistake into existence), the failure is logged, a failed bake removes its own
+stage, and `map-bake.test.ts` BAKES rather than only validating: passing `validateDraft` is not
+proof a draft bakes, because the two run different schemas. Two operational holes closed with
+it — publishing never removed an old bake (~8.6 MB each, forever; now a 5-deep rollback window
+swept and reported via `pruneOldBakes`), and the live bake was in neither git nor the backups
+(game `deploy/BACKUP.sh` archives it; bakes + `current.json` are git-ignored so a `git pull` on
+the VPS cannot repoint the live world). Running both browser suites against ONE world found a
+third: `map-editor.mjs` measured its scatter erase against EVERY patch in the draft, so the
+islet's deliberately-left forest read as "erasing left 13 077 density behind" — a run has to
+measure what it DID, not what the world contains, so it counts its own set id now.
+**172 tests green**, and both browser runs pass end to
+end: `map-editor.mjs` (import → sculpt/undo/redo → paint → overlays → autosave →
+place/inspect/delete → spawn budget + rings → shrines and the travel graph →
+drag/insert/remove a zone corner → validate → clean up after itself) and `map-scenario.mjs`.
 
 ### Running it locally
 
 ```bash
-pnpm install && pnpm dev   # API :8082 + Vite :5174 → http://localhost:5174/admin/
-pnpm check                 # needs the game repo's migrated local Postgres
+pnpm install && pnpm dev            # API :8082 + Vite :5174 → localhost:5174/admin/
+pnpm check                          # needs the game repo's migrated local Postgres
+node tools/smoke/map-editor.mjs     # the editor's tools, in a real browser
+node tools/smoke/map-scenario.mjs   # MAP_EDITOR §7 — needs the GAME server on :8081,
+                                    # and PUBLISHES a map (it leaves the islet live)
 ```

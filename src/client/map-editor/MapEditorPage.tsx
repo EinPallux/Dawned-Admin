@@ -25,7 +25,7 @@ import {
   type BrushFalloff,
 } from '@dawned/shared';
 import type { AdminUser } from '../../shared-ext/api-types.js';
-import { ApiRequestError, apiDelete, apiGet, apiPost } from '../api.js';
+import { ApiRequestError, apiDelete, apiGet, apiPost, apiPut } from '../api.js';
 import { MapViewport, type OverlayKind } from './viewport.js';
 import { CameraRig, type CameraMode, type CameraState } from './cameras.js';
 import { DraftStore, type SaveState } from './draft-store.js';
@@ -91,8 +91,33 @@ import {
 } from './zone-edit.js';
 import { graphHops, shrinesFrom, travelProblems } from './travel-graph.js';
 import { buildTravelOverlay, disposeTravelOverlay } from './travel-overlay.js';
+import {
+  DEFAULT_SCATTER_BRUSH,
+  chunksUnderBrush,
+  dabScatter,
+  densityOf,
+  densitySum,
+  hasDensity,
+  scatterRowId,
+  strokeBase,
+  type ScatterBrushSettings,
+} from './scatter.js';
+import {
+  clickSelection,
+  isMarquee,
+  makePrefab,
+  prefabDataSchema,
+  rectFromDrag,
+  stampPrefab,
+  type Collection,
+} from './collections.js';
+import { ScatterCard } from './ScatterCard.js';
+import { CollectionsCard } from './CollectionsCard.js';
+import { KeymapCard } from './KeymapCard.js';
+import { actionFor, loadKeymap, saveKeymap, type EditorAction, type Keymap } from './keymap.js';
+import type { ScatterSet } from '@dawned/shared';
 
-type ToolId = 'sculpt' | 'paint' | 'water' | 'board' | 'place' | 'zone' | 'measure';
+type ToolId = 'sculpt' | 'paint' | 'water' | 'board' | 'place' | 'scatter' | 'zone' | 'measure';
 
 interface LockState {
   heldBy: string | null;
@@ -159,7 +184,18 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
   const [toast, setToast] = useState<string | null>(null);
   const [lastAction, setLastAction] = useState<string | null>(null);
   const [placeLayer, setPlaceLayer] = useState<PlaceableLayer>('prop');
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [isolated, setIsolated] = useState(false);
+  const [armedPrefabId, setArmedPrefabId] = useState<string | null>(null);
+  const [scatterBrush, setScatterBrush] = useState<ScatterBrushSettings>(DEFAULT_SCATTER_BRUSH);
+  const [keymap, setKeymap] = useState<Keymap>(() => loadKeymap());
+  /** The marquee as the owner drags it — screen pixels, drawn as an overlay. */
+  const [marqueeRect, setMarqueeRect] = useState<{
+    x0: number;
+    y0: number;
+    x1: number;
+    y1: number;
+  } | null>(null);
   const [objects, setObjects] = useState<PlacedObject[]>([]);
   const [hiddenLayers, setHiddenLayers] = useState<Set<string>>(() => new Set());
   const [sketchLength, setSketchLength] = useState(0);
@@ -180,6 +216,13 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
   const paintRef = useRef(paint);
   const placeLayerRef = useRef(placeLayer);
   const interactKindRef = useRef(interactKind);
+  const scatterBrushRef = useRef(scatterBrush);
+  const keymapRef = useRef(keymap);
+  const selectedRef = useRef<ReadonlySet<string>>(selectedIds);
+  /** Rows touched by the scatter stroke in progress, saved on mouse-up. */
+  const scatterStroke = useRef(
+    new Map<string, { cx: number; cy: number; setId: string; density: number[] }>(),
+  );
   const lockRef = useRef<LockState | null>(null);
   useEffect(() => {
     toolRef.current = tool;
@@ -187,7 +230,21 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
     paintRef.current = paint;
     placeLayerRef.current = placeLayer;
     interactKindRef.current = interactKind;
-  }, [tool, brush, paint, placeLayer, interactKind]);
+    scatterBrushRef.current = scatterBrush;
+    armedPrefabRef.current = armedPrefabId;
+    keymapRef.current = keymap;
+    selectedRef.current = selectedIds;
+  }, [
+    tool,
+    brush,
+    paint,
+    placeLayer,
+    interactKind,
+    scatterBrush,
+    armedPrefabId,
+    keymap,
+    selectedIds,
+  ]);
 
   /**
    * Say something. The toast fades, the status-bar line does NOT: "imported 271
@@ -195,7 +252,16 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
    * message that only exists for three seconds is a message that gets missed.
    */
   /** The object the inspector and the ambience preview are looking at. */
+  /**
+   * The inspector edits ONE thing. With several selected there is no single row
+   * to show, and a "multi-edit" that silently writes the same value into a
+   * spawner and a signpost is worse than no inspector at all.
+   */
+  const selectedId = selectedIds.size === 1 ? [...selectedIds][0]! : null;
   const selected = objects.find((object) => object.id === selectedId) ?? null;
+  const setSelectedId = useCallback((id: string | null): void => {
+    setSelectedIds(id === null ? new Set() : new Set([id]));
+  }, []);
 
   const say = useCallback((message: string) => {
     setToast(message);
@@ -351,6 +417,25 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
          */
         objects: (): { id: string; layer: string; def: Record<string, unknown> }[] =>
           objectStore.all().map(({ id, layer, def }) => ({ id, layer, def })),
+        /** Where the camera is looking — the pivot the generators centre on. */
+        pivot: (): { x: number; z: number } => ({ x: rig.target.x, z: rig.target.z }),
+        /**
+         * Where a world point lands on screen, in page pixels.
+         *
+         * The §7 scenario builds an islet at coordinates it discovered rather
+         * than at a spot someone guessed, so it needs to know where that is to
+         * click on it. Same projection the viewport renders with, so the answer
+         * is the pixel the owner would aim at.
+         */
+        project: (x: number, z: number): { x: number; y: number } => {
+          const rect = canvas.getBoundingClientRect();
+          const ground = store.heightAt(x, z) ?? 0;
+          const projected = new THREE.Vector3(x, ground, z).project(viewport.camera);
+          return {
+            x: rect.left + ((projected.x + 1) / 2) * rect.width,
+            y: rect.top + ((1 - projected.y) / 2) * rect.height,
+          };
+        },
         /**
          * Where a placed object's marker is ON SCREEN.
          *
@@ -463,6 +548,106 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
     },
   });
 
+  // --- scatter sets + editor collections (A3-d) -----------------------------
+
+  const scatterSets = useQuery({
+    queryKey: ['map-scatter-sets'],
+    queryFn: () => apiGet<{ sets: ScatterSet[] }>('/map/scatter-sets'),
+  });
+
+  const collections = useQuery({
+    queryKey: ['map-collections'],
+    queryFn: () => apiGet<{ collections: Collection[] }>('/map/collections'),
+  });
+
+  const writeScatterSets = async (sets: ScatterSet[]): Promise<void> => {
+    try {
+      await apiPut('/map/scatter-sets', { sets });
+      queryClient.setQueryData(['map-scatter-sets'], { sets });
+    } catch (error) {
+      say(error instanceof ApiRequestError ? error.message : 'Could not save the scatter set.');
+    }
+  };
+
+  const saveCollection = async (
+    id: string,
+    kind: 'selection' | 'prefab',
+    name: string,
+    data: unknown,
+  ): Promise<void> => {
+    try {
+      await apiPut('/map/collections', { id, kind, name, data });
+      await collections.refetch();
+      say(`Saved "${name}".`);
+    } catch (error) {
+      say(error instanceof ApiRequestError ? error.message : 'Could not save that.');
+    }
+  };
+
+  /**
+   * Paint one dab of scatter density.
+   *
+   * A dab can straddle a chunk seam, and the row for each chunk is created on
+   * first touch — an empty grid is never stored, so a stroke that clips a
+   * corner does not litter the draft with blank patches.
+   */
+  const scatterDab = (point: THREE.Vector3, erase: boolean): void => {
+    const session = sessionRef.current;
+    const brush = scatterBrushRef.current;
+    if (!session || !brush.setId) return;
+    for (const { cx, cy } of chunksUnderBrush(point.x, point.z, brush.radius)) {
+      if (cx < 0 || cy < 0 || cx >= WORLD_CHUNKS || cy >= WORLD_CHUNKS) continue;
+      const id = scatterRowId(cx, cy, brush.setId);
+      // Dabs accumulate WITHIN the stroke. The store is only written on
+      // mouse-up, so re-reading it per dab meant every dab started from the
+      // pre-stroke grid and only the last one survived — painting looked
+      // roughly right and erasing barely worked, which is how it was found.
+      const staged = scatterStroke.current.get(id);
+      const existing = session.objects.get(id);
+      const before = strokeBase(staged?.density, existing ? densityOf(existing.def) : undefined);
+      const after = dabScatter(
+        before,
+        cx,
+        cy,
+        point.x,
+        point.z,
+        brush.radius,
+        brush.strength,
+        erase,
+      );
+      if (densitySum(after) === densitySum(before)) continue;
+      scatterStroke.current.set(id, { cx, cy, setId: brush.setId, density: after });
+    }
+    // Draw the stroke as it happens: the density grid IS the preview, and a
+    // brush whose result only appears on mouse-up cannot be aimed.
+    for (const [id, row] of scatterStroke.current) {
+      const view = buildObjectView(
+        { id, layer: 'scatter', def: { id, ...row }, x: null, z: null },
+        (x, z) => session.store.heightAt(x, z),
+        false,
+      );
+      session.viewport.setObjectView(id, view);
+    }
+  };
+
+  /** Commit a scatter stroke: one save for the whole thing, one undo step. */
+  const commitScatter = async (): Promise<void> => {
+    const session = sessionRef.current;
+    const stroke = scatterStroke.current;
+    scatterStroke.current = new Map();
+    if (!session || stroke.size === 0) return;
+    const rows: { layer: string; def: Record<string, unknown> }[] = [];
+    const empties: string[] = [];
+    for (const [id, row] of stroke) {
+      if (hasDensity(row.density)) rows.push({ layer: 'scatter', def: { id, ...row } });
+      else if (session.objects.get(id)) empties.push(id);
+    }
+    if (rows.length > 0) await session.objects.saveMany(rows, 'Scatter');
+    // Erasing a patch back to nothing DELETES the row rather than saving 256
+    // zeroes — an empty patch is a ref the bake has to check for no reason.
+    if (empties.length > 0) await session.objects.remove(empties, 'Clear scatter');
+  };
+
   const stampObject = async (point: THREE.Vector3): Promise<void> => {
     const session = sessionRef.current;
     if (!session) return;
@@ -515,6 +700,29 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
   const painting = useRef(false);
   const lastPointer = useRef<{ x: number; y: number } | null>(null);
   const clock = useRef(new StrokeClock());
+  const marquee = useRef<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  const armedPrefabRef = useRef<string | null>(null);
+
+  /** Stamp the armed prefab where the ground was clicked. */
+  const stampArmedPrefab = async (point: THREE.Vector3): Promise<void> => {
+    const session = sessionRef.current;
+    const entry = collections.data?.collections.find(
+      (candidate) => candidate.id === armedPrefabRef.current,
+    );
+    if (!session || !entry) return;
+    const parsed = prefabDataSchema.safeParse(entry.data);
+    if (!parsed.success) {
+      say(`"${entry.name}" is not a readable prefab.`);
+      return;
+    }
+    const taken = new Set(session.objects.all().map((object) => object.id));
+    const rows = stampPrefab(parsed.data, point.x, point.z, taken, mintId);
+    const saved = await session.objects.saveMany(rows, `Stamp ${entry.name}`);
+    if (saved) {
+      setSelectedIds(new Set(rows.map((row) => String(row.def.id))));
+      say(`Stamped ${entry.name} — ${rows.length} rows.`);
+    }
+  };
 
   // --- zone vertex editing (A3-c) -------------------------------------------
   //
@@ -596,6 +804,35 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
       return;
     }
 
+    // Shift+drag anywhere is a marquee. Recorded first, resolved on mouse-up:
+    // a marquee that only knows it is one after ten pixels would otherwise eat
+    // the click that started it.
+    if (event.shiftKey && toolRef.current !== 'zone') {
+      marquee.current = {
+        x0: event.clientX,
+        y0: event.clientY,
+        x1: event.clientX,
+        y1: event.clientY,
+      };
+      return;
+    }
+
+    // An armed prefab consumes the next ground click.
+    if (armedPrefabRef.current) {
+      void stampArmedPrefab(point);
+      return;
+    }
+
+    if (toolRef.current === 'scatter') {
+      if (!scatterBrushRef.current.setId) {
+        say('Pick a scatter set first.');
+        return;
+      }
+      painting.current = true;
+      scatterDab(point, event.ctrlKey || event.metaKey);
+      return;
+    }
+
     // Zone corner handles come first of all: they sit ON the polygon they
     // edit, so an object pick would win every time and the corners would be
     // undraggable.
@@ -640,7 +877,7 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
         -((event.clientY - rect.top) / rect.height) * 2 + 1,
       );
       if (hitId) {
-        setSelectedId(hitId);
+        setSelectedIds((current) => clickSelection(current, hitId, event.shiftKey));
         return;
       }
     }
@@ -727,6 +964,17 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
       session.brushRing.visible = false;
     }
 
+    if (marquee.current && (event.buttons & 1) !== 0) {
+      marquee.current = { ...marquee.current, x1: event.clientX, y1: event.clientY };
+      setMarqueeRect({ ...marquee.current });
+      return;
+    }
+
+    if (toolRef.current === 'scatter' && painting.current && point && (event.buttons & 1) !== 0) {
+      scatterDab(point, event.ctrlKey || event.metaKey);
+      return;
+    }
+
     // A corner being dragged: keep the last LEGAL position, so pulling a corner
     // through the far edge stops at the fold instead of saving a bow tie.
     const drag = vertexDrag.current;
@@ -756,6 +1004,33 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
   const onPointerUp = (): void => {
     const session = sessionRef.current;
     if (!session) return;
+
+    const box = marquee.current;
+    marquee.current = null;
+    setMarqueeRect(null);
+    if (box) {
+      const rect = rectFromDrag(box.x0, box.y0, box.x1, box.y1);
+      if (isMarquee(rect)) {
+        const canvas = canvasRef.current;
+        const bounds = canvas?.getBoundingClientRect();
+        if (bounds) {
+          const hits = session.viewport.objectsInRect(
+            rect,
+            bounds,
+            (id) => !hiddenLayers.has(session.objects.get(id)?.layer ?? ''),
+          );
+          setSelectedIds((current) => new Set([...current, ...hits]));
+          say(`${hits.length} selected.`);
+        }
+      }
+      return;
+    }
+
+    if (painting.current && toolRef.current === 'scatter') {
+      painting.current = false;
+      void commitScatter();
+      return;
+    }
     if (painting.current) {
       painting.current = false;
       session.journal.commit(session.store);
@@ -807,11 +1082,11 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
       const view = buildObjectView(
         object,
         (x, z) => session.store.heightAt(x, z),
-        object.id === selectedId,
+        selectedIds.has(object.id),
       );
       session.viewport.setObjectView(object.id, view);
     }
-  }, [objects, selectedId, hiddenLayers, saveState]);
+  }, [objects, selectedIds, hiddenLayers, saveState]);
 
   // --- spawns mode (A3-b) ---------------------------------------------------
   //
@@ -903,6 +1178,20 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
       disposeSpawnOverlay(overlay);
     };
   }, [spawners, links, spawnOverlay, simulateSeed, selected, enemyFacts.data, saveState]);
+
+  // --- isolation (A3-d) -----------------------------------------------------
+  //
+  // Isolation dims by HIDING rather than fading: a translucent hundred markers
+  // is still a hundred markers in the way, and the point of isolating is to see
+  // the ground you are working on.
+
+  useEffect(() => {
+    sessionRef.current?.viewport.setIsolation(isolated ? selectedIds : null);
+  }, [isolated, selectedIds, objects]);
+
+  useEffect(() => {
+    saveKeymap(keymap);
+  }, [keymap]);
 
   // --- zone corner handles (A3-c) -------------------------------------------
   //
@@ -1039,7 +1328,7 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
       setSelectedId(id);
       say(`Zone drawn with ${polygon.length} corners. Name it in the inspector.`);
     }
-  }, [say]);
+  }, [say, setSelectedId]);
 
   const cancelZone = useCallback((): void => {
     const session = sessionRef.current;
@@ -1077,6 +1366,15 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
       }
       if (event.ctrlKey || event.metaKey || event.altKey) return;
 
+      // Escape puts down an armed prefab. Documented from the moment the card
+      // said "Esc puts it down" — and missing until a smoke run stamped one it
+      // could not get rid of.
+      if (event.code === 'Escape' && armedPrefabRef.current) {
+        setArmedPrefabId(null);
+        say('Prefab put down.');
+        return;
+      }
+
       // Zone drawing owns Enter/Escape/Backspace while an outline is open.
       if (toolRef.current === 'zone' && session.sketch.length > 0) {
         if (event.code === 'Enter' || event.code === 'NumpadEnter') {
@@ -1097,29 +1395,58 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
         }
       }
 
-      switch (event.code) {
-        case 'KeyB':
-          setTool((current) => (current === 'sculpt' ? 'paint' : 'sculpt'));
+      // Shortcuts come from the KEYMAP now (MAP_EDITOR.md §6) rather than a
+      // switch on hard-coded codes, so every one of them is rebindable.
+      const action: EditorAction | null = actionFor(keymapRef.current, event.code);
+      switch (action) {
+        case 'toolSculpt':
+          setTool('sculpt');
           break;
-        case 'BracketLeft':
+        case 'toolPaint':
+          setTool('paint');
+          break;
+        case 'toolPlace':
+          setTool('place');
+          break;
+        case 'toolZone':
+          setTool('zone');
+          break;
+        case 'toolScatter':
+          setTool('scatter');
+          break;
+        case 'toolMeasure':
+          setTool('measure');
+          break;
+        case 'brushSmaller':
           adjustRadius(-2, event.shiftKey);
           break;
-        case 'BracketRight':
+        case 'brushBigger':
           adjustRadius(2, event.shiftKey);
           break;
-        case 'KeyT':
+        case 'topDown':
           setCameraMode((mode) => (mode === 'top' ? 'orbit' : 'top'));
           break;
-        case 'KeyO':
+        case 'cycleOverlay':
           setOverlay((current) => nextOverlay(current));
           break;
-        case 'KeyG':
+        case 'toggleGrid':
           setShowGrid((current) => !current);
           break;
-        case 'KeyF': {
+        case 'frameCursor':
           if (cursor) session.rig.frame(new THREE.Vector3(cursor.x, cursor.y ?? 0, cursor.z));
           break;
-        }
+        case 'isolate':
+          setIsolated((current) => !current);
+          break;
+        case 'deleteSelection':
+          if (selectedRef.current.size > 0 && lockRef.current?.mine) {
+            void session.objects
+              .remove([...selectedRef.current], `Delete ${selectedRef.current.size} objects`)
+              .then((ok) => {
+                if (ok) setSelectedIds(new Set());
+              });
+          }
+          break;
         default:
           break;
       }
@@ -1233,22 +1560,31 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
    * is recoverable after a reload.
    */
   const clearLayer = async (layer: string, count: number): Promise<void> => {
-    if (
-      !window.confirm(`Delete all ${count} ${LAYER_LABEL[layer] ?? layer} rows from the draft?`)
-    ) {
-      return;
-    }
+    // Scoped to the selected zone when there is one — MAP_EDITOR.md §3's
+    // "wipe all props in Emberwood but keep terrain+spawns", which is also the
+    // last beat of the §7 scenario ("wipe just its props and redecorate").
+    // The server has taken a polygon since A2-b; nothing was passing it.
+    const zone = selected?.layer === 'zone' ? selected : null;
+    const polygon = zone ? polygonOf(zone.def) : null;
+    const zoneName =
+      zone && typeof zone.def.name === 'string' && zone.def.name ? zone.def.name : zone?.id;
+    const where = polygon ? ` inside ${zoneName ?? 'the selected zone'}` : ' from the draft';
+    if (!window.confirm(`Delete ${LAYER_LABEL[layer] ?? layer} rows${where}?`)) return;
     if (!window.confirm('This cannot be undone with Ctrl+Z. A checkpoint is taken first. Sure?')) {
       return;
     }
     try {
       const result = await apiPost<{ removed: number; checkpointId: number }>(
         '/map/objects/clear-layer',
-        { layer },
+        polygon ? { layer, polygon, zoneName } : { layer },
       );
       await sessionRef.current?.objects.load();
-      setSelectedId(null);
-      say(`Cleared ${result.removed} ${layer} rows (checkpoint #${result.checkpointId}).`);
+      setSelectedIds(new Set());
+      say(
+        `Cleared ${result.removed} of ${count} ${layer} rows${
+          polygon ? ` in ${zoneName ?? 'the zone'}` : ''
+        } (checkpoint #${result.checkpointId}).`,
+      );
     } catch (error) {
       say(error instanceof ApiRequestError ? error.message : 'Clear failed.');
     }
@@ -1263,20 +1599,20 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
     <div className="map-editor">
       <header className="me-toolbar">
         <div className="me-modes">
-          {(['sculpt', 'paint', 'water', 'board', 'place', 'zone', 'measure'] as ToolId[]).map(
-            (id) => (
-              <button
-                key={id}
-                type="button"
-                className={`ws-btn${tool === id ? ' me-on' : ''}`}
-                onClick={() => {
-                  setTool(id);
-                }}
-              >
-                {TOOL_LABELS[id]}
-              </button>
-            ),
-          )}
+          {(
+            ['sculpt', 'paint', 'water', 'board', 'place', 'scatter', 'zone', 'measure'] as ToolId[]
+          ).map((id) => (
+            <button
+              key={id}
+              type="button"
+              className={`ws-btn${tool === id ? ' me-on' : ''}`}
+              onClick={() => {
+                setTool(id);
+              }}
+            >
+              {TOOL_LABELS[id]}
+            </button>
+          ))}
         </div>
 
         <div className="me-options">
@@ -1463,6 +1799,14 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
             </>
           )}
 
+          {tool === 'scatter' && (
+            <span className="me-hint">
+              {scatterBrush.setId
+                ? 'Paint ground cover; hold Ctrl to clear it. Set and sizes are in the Scatter card.'
+                : 'Pick a scatter set in the Scatter card first.'}
+            </span>
+          )}
+
           {tool === 'water' && <span className="me-hint">Click a chunk to set / clear water.</span>}
           {tool === 'board' && (
             <span className="me-hint">Click a chunk to include it in the world, or remove it.</span>
@@ -1536,6 +1880,17 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
               event.preventDefault();
             }}
           />
+          {marqueeRect && (
+            <div
+              className="me-marquee"
+              style={{
+                left: Math.min(marqueeRect.x0, marqueeRect.x1),
+                top: Math.min(marqueeRect.y0, marqueeRect.y1),
+                width: Math.abs(marqueeRect.x1 - marqueeRect.x0),
+                height: Math.abs(marqueeRect.y1 - marqueeRect.y0),
+              }}
+            />
+          )}
           {busy && <div className="me-busy">{busy}</div>}
           {toast && <div className="me-toast">{toast}</div>}
         </div>
@@ -1676,6 +2031,28 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
                   setIsland({ ...island, peak });
                 }}
               />
+              {/* The centre was only settable by "Centre here" (the camera
+                  pivot). Showing the numbers costs two fields and answers
+                  "where is this about to land?" before you press the button —
+                  and lets an islet go exactly where the coastline wants it. */}
+              <NumberField
+                label="centre x"
+                value={island.centerX}
+                min={-1024}
+                max={1024}
+                onChange={(centerX) => {
+                  setIsland({ ...island, centerX });
+                }}
+              />
+              <NumberField
+                label="centre z"
+                value={island.centerZ}
+                min={-1024}
+                max={1024}
+                onChange={(centerZ) => {
+                  setIsland({ ...island, centerZ });
+                }}
+              />
               <div className="me-row">
                 <button
                   type="button"
@@ -1785,6 +2162,94 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
             )}
           </section>
 
+          <ScatterCard
+            sets={scatterSets.data?.sets ?? []}
+            models={placementRefs.data?.models ?? []}
+            activeSetId={scatterBrush.setId}
+            radius={scatterBrush.radius}
+            strength={scatterBrush.strength}
+            readOnly={readOnly}
+            busy={busy !== null}
+            onSelect={(setId) => {
+              setScatterBrush((current) => ({ ...current, setId }));
+              if (setId) setTool('scatter');
+            }}
+            onRadius={(radius) => {
+              setScatterBrush((current) => ({ ...current, radius: clamp(radius, 2, 80) }));
+            }}
+            onStrength={(strength) => {
+              setScatterBrush((current) => ({ ...current, strength: clamp(strength, 0.05, 1) }));
+            }}
+            onSave={(set) => {
+              const sets = scatterSets.data?.sets ?? [];
+              void writeScatterSets(
+                sets.some((candidate) => candidate.id === set.id)
+                  ? sets.map((candidate) => (candidate.id === set.id ? set : candidate))
+                  : [...sets, set],
+              );
+            }}
+            onDelete={(id) => {
+              void writeScatterSets((scatterSets.data?.sets ?? []).filter((set) => set.id !== id));
+              setScatterBrush((current) =>
+                current.setId === id ? { ...current, setId: '' } : current,
+              );
+            }}
+          />
+
+          <CollectionsCard
+            collections={collections.data?.collections ?? []}
+            selectedCount={selectedIds.size}
+            isolated={isolated}
+            armedPrefabId={armedPrefabId}
+            readOnly={readOnly}
+            onClearSelection={() => {
+              setSelectedIds(new Set());
+              setIsolated(false);
+            }}
+            onToggleIsolate={() => {
+              setIsolated((current) => !current);
+            }}
+            onSaveSelection={(name) => {
+              void saveCollection(collectionId('sel', name), 'selection', name, {
+                ids: [...selectedIds],
+              });
+            }}
+            onLoadSelection={(ids) => {
+              // Ids that no longer exist are dropped rather than kept as ghosts:
+              // a set that outlived some of its objects should shrink, not lie.
+              const alive = ids.filter((id) => objects.some((object) => object.id === id));
+              setSelectedIds(new Set(alive));
+              say(
+                alive.length === ids.length
+                  ? `${alive.length} selected.`
+                  : `${alive.length} of ${ids.length} still exist.`,
+              );
+            }}
+            onMakePrefab={(name) => {
+              const chosen = objects.filter((object) => selectedIds.has(object.id));
+              const built = makePrefab(chosen);
+              if ('error' in built) {
+                say(built.error);
+                return;
+              }
+              void saveCollection(collectionId('pre', name), 'prefab', name, built);
+            }}
+            onArmPrefab={(id) => {
+              setArmedPrefabId(id);
+              if (id) say('Click the ground to stamp it.');
+            }}
+            onDelete={(id) => {
+              void apiDelete('/map/collections', { id })
+                .then(() => collections.refetch())
+                .then(() => {
+                  if (armedPrefabId === id) setArmedPrefabId(null);
+                })
+                .catch(() => {
+                  say('Could not delete that.');
+                });
+            }}
+          />
+
           <section className="ws-panel me-card">
             <h3>Travel</h3>
             <div className="me-row">
@@ -1862,17 +2327,23 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
                     type="button"
                     className="ws-btn ws-btn--danger me-tiny"
                     disabled={readOnly || count === 0}
-                    title={`Delete every ${layer} in the draft`}
+                    title={
+                      selected?.layer === 'zone'
+                        ? `Delete every ${layer} inside the selected zone`
+                        : `Delete every ${layer} in the draft`
+                    }
                     onClick={() => {
                       void clearLayer(layer, count);
                     }}
                   >
-                    Clear
+                    {selected?.layer === 'zone' ? 'Clear ⌖' : 'Clear'}
                   </button>
                 </div>
               );
             })}
           </section>
+
+          <KeymapCard keymap={keymap} onChange={setKeymap} />
 
           {selected && (
             <ObjectInspector
@@ -1984,7 +2455,19 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
 
 // --- small pieces -----------------------------------------------------------
 
+/**
+ * A stable id for a saved collection: the same name overwrites rather than
+ * piling up a second "Harbour props" nobody can tell from the first.
+ */
+const collectionId = (prefix: string, name: string): string =>
+  `${prefix}_${name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 60)}`;
+
 const TOOL_LABELS: Record<ToolId, string> = {
+  scatter: 'Scatter',
   sculpt: 'Sculpt',
   paint: 'Paint',
   water: 'Water',

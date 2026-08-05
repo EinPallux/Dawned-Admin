@@ -27,6 +27,8 @@ const SHOT_DIR = shotIndex !== -1 ? process.argv[shotIndex + 1] : null;
 const DATABASE_URL = process.env.DATABASE_URL ?? 'postgres://dawned:dawned@127.0.0.1:5432/dawned';
 const ACCOUNT = 'zz_map_smoke';
 const PASSWORD = 'map-smoke-pass-1';
+/** The scatter set this run creates and paints with — its own, nobody else's. */
+const SCATTER_SET_ID = 'scatter_smoke_cover';
 
 const ok = (message) => console.log(`✅ ${message}`);
 class SmokeFailure extends Error {}
@@ -62,6 +64,21 @@ const provision = async () => {
   // a shrine the owner named and kept is never touched.
   await db.query(
     `DELETE FROM map_draft_objects WHERE layer = 'interactable' AND def->>'name' = 'New shrine'`,
+  );
+  // Same for anything the scatter block painted with its own set, and the props
+  // a prefab stamp left behind if the run died between stamping and deleting.
+  await db.query(
+    `DELETE FROM map_draft_objects WHERE layer = 'scatter' AND def->>'setId' = 'scatter_smoke_cover'`,
+  );
+  // …and the SET itself, which rides world settings rather than the object
+  // table. Filtered out by id so the owner's own sets in the same row survive.
+  await db.query(
+    `UPDATE map_versions
+        SET summary = (
+          SELECT COALESCE(jsonb_agg(entry), '[]'::jsonb)
+            FROM jsonb_array_elements(summary) entry
+           WHERE entry->>'id' <> 'scatter_smoke_cover')
+      WHERE version = 'map_scatter_sets'`,
   );
 };
 
@@ -184,6 +201,7 @@ const run = async (browser) => {
   try {
     await page.waitForFunction(
       () => document.querySelector('.me-status')?.textContent?.includes('editing') === true,
+      undefined,
       { timeout: 15000 },
     );
   } catch {
@@ -199,6 +217,7 @@ const run = async (browser) => {
   // a script that races it is measuring its own timing, not the app.
   await page.waitForFunction(
     () => /Imported \d+ chunks/.test(document.querySelector('.me-last')?.textContent ?? ''),
+    undefined,
     { timeout: 180_000 },
   );
   const importToast = await page.locator('.me-last').innerText();
@@ -297,6 +316,7 @@ const run = async (browser) => {
   // --- autosave -------------------------------------------------------------
   await page.waitForFunction(
     () => document.querySelector('.me-save')?.textContent?.trim() === 'Saved',
+    undefined,
     { timeout: 30_000 },
   );
   ok('autosave settled — the status bar reads "Saved"');
@@ -376,6 +396,148 @@ const run = async (browser) => {
     `aggro, leash and camp-link overlays draw (${beforeRings.colours} → ${afterRings.colours} distinct colours)`,
   );
   await shoot(page, 'a3b-spawns.png');
+
+  // --- prefabs, marquee select and the delete shortcut (A3-d) ---------------
+  //
+  // The whole point of a prefab is that it comes back the same: place one prop,
+  // keep it as a prefab, stamp it somewhere else, and the map should hold two.
+  await page.click('button:has-text("Place")');
+  await page.waitForTimeout(300);
+  await page.locator('.me-options select').first().selectOption('prop');
+  // Counted as a DELTA: a run that died earlier may have left props behind, and
+  // an absolute expectation would then fail against a working editor.
+  const propsBaseline = await layerCount(page, 'Prop');
+  await page.mouse.click(centre.x - 60, centre.y + 90);
+  await page.waitForTimeout(900);
+
+  const collectionsCard = page.locator('.me-card', { hasText: 'Selection' });
+  page.once('dialog', (dialog) => void dialog.accept('Smoke prefab'));
+  await collectionsCard.locator('button:has-text("Make prefab")').click();
+  // WAIT rather than sample: the prompt, the save and the list refetch are
+  // three round trips, and a fixed pause fails against a correct app on a slow
+  // machine — which is exactly what it did the first time.
+  const prefabButton = collectionsCard.locator('.me-link', { hasText: 'Smoke prefab' });
+  try {
+    await prefabButton.waitFor({ state: 'attached', timeout: 20_000 });
+  } catch {
+    await shoot(page, 'a3d-no-prefab.png');
+    fail('"Make prefab" produced nothing in the prefab list');
+  }
+  await prefabButton.click();
+  await page.mouse.click(centre.x + 60, centre.y + 90);
+  await page.waitForTimeout(1200);
+  const propsStamped = await layerCount(page, 'Prop');
+  if (propsStamped !== propsBaseline + 2) {
+    await shoot(page, 'a3d-stamp-failed.png');
+    fail(
+      `stamping the prefab took the draft from ${propsBaseline} to ${propsStamped} props, expected +2`,
+    );
+  }
+  ok('made a prefab from one prop and stamped it — the draft gained 2');
+
+  // Box-select both, then delete them with the (rebindable) shortcut.
+  await page.keyboard.down('Shift');
+  await page.mouse.move(centre.x - 160, centre.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(centre.x + 160, centre.y + 160, { steps: 8 });
+  await page.mouse.up();
+  await page.keyboard.up('Shift');
+  await page.waitForTimeout(600);
+  const selectionLine = await collectionsCard.locator('.me-hint').first().innerText();
+  if (!/[2-9]\d* selected/.test(selectionLine)) {
+    await shoot(page, 'a3d-no-marquee.png');
+    fail(`the marquee selected nothing useful: "${selectionLine}"`);
+  }
+  ok(`marquee selected a group (${selectionLine})`);
+
+  await page.keyboard.press('Delete');
+  await page.waitForTimeout(1200);
+  const propsGone = await layerCount(page, 'Prop');
+  // ≤ baseline, not exactly baseline: the box legitimately catches anything
+  // else standing in it, and deleting those is the tool working, not a bug.
+  if (propsGone > propsBaseline) {
+    await shoot(page, 'a3d-delete-failed.png');
+    fail(`Delete left ${propsGone} props, expected at most ${propsBaseline}`);
+  }
+  ok(`the Delete shortcut removed the whole selection (${propsStamped} → ${propsGone} props)`);
+  await collectionsCard
+    .locator('tr', { hasText: 'Smoke prefab' })
+    .locator('button:has-text("✕")')
+    .click();
+  await page.waitForTimeout(700);
+
+  // --- the scatter brush (A3-d) ---------------------------------------------
+  //
+  // §7 asks for "scatter a forest". Density is what actually ships, so the
+  // check reads the painted grid out of the editor's own store.
+  const scatterCard = page.locator('.me-card', { hasText: 'Scatter' });
+  page.once('dialog', (dialog) => void dialog.accept('Smoke cover'));
+  await scatterCard.locator('button:has-text("New set")').click();
+  try {
+    await scatterCard
+      .locator('option', { hasText: 'Smoke cover' })
+      .waitFor({ state: 'attached', timeout: 20_000 });
+  } catch {
+    await shoot(page, 'a3d-no-set.png');
+    fail('the new scatter set never appeared in the picker');
+  }
+  // Select it explicitly rather than relying on creation to do it: that is the
+  // path the owner takes when they come back to a set they made yesterday, and
+  // it is the one that has to arm the tool.
+  // .first(): the card also holds the model pickers inside the expanded set
+  // editor, and the set picker is the one at the top.
+  await scatterCard.locator('select').first().selectOption(SCATTER_SET_ID);
+  await page.waitForTimeout(600);
+  const activeTool = await page.locator('.me-modes button.me-on').first().innerText();
+  if (!/scatter/i.test(activeTool)) {
+    await shoot(page, 'a3d-wrong-tool.png');
+    fail(`picking a scatter set left the "${activeTool}" tool active`);
+  }
+
+  await page.mouse.move(centre.x - 40, centre.y - 40);
+  await page.mouse.down();
+  for (let step = 0; step < 8; step++) {
+    await page.mouse.move(centre.x - 40 + step * 9, centre.y - 40 + (step % 3) * 6);
+    await page.waitForTimeout(50);
+  }
+  await page.mouse.up();
+  await page.waitForTimeout(1500);
+  const patches = await ownPatches(page);
+  const painted = densityOf(patches);
+  if (patches.length === 0 || painted === 0) {
+    await shoot(page, 'a3d-no-scatter.png');
+    fail(`the scatter stroke painted ${patches.length} patches totalling ${painted} density`);
+  }
+  ok(`scatter painted ${patches.length} chunk patch(es), ${painted} total density`);
+  await shoot(page, 'a3d-scatter.png');
+
+  // Erase it again — an emptied patch must be DELETED, not saved as zeroes.
+  await page.keyboard.down('Control');
+  await page.mouse.move(centre.x - 40, centre.y - 40);
+  await page.mouse.down();
+  for (let step = 0; step < 10; step++) {
+    await page.mouse.move(centre.x - 40 + step * 9, centre.y - 40 + (step % 3) * 6);
+    await page.waitForTimeout(50);
+  }
+  await page.mouse.up();
+  await page.keyboard.up('Control');
+  await page.waitForTimeout(1500);
+  const leftPatches = await ownPatches(page);
+  const left = densityOf(leftPatches);
+  if (left > 0) {
+    await shoot(page, 'a3d-scatter-left.png');
+    fail(`erasing left ${left} density behind in ${leftPatches.length} patches`);
+  }
+  ok('erasing cleared the patches back out of the draft');
+  // The set editor opens by itself when a set is created, so clicking the
+  // summary unconditionally would CLOSE it and hide the button underneath.
+  const setDetails = scatterCard.locator('details');
+  if (!(await setDetails.evaluate((element) => element.open))) {
+    await scatterCard.locator('summary').click();
+  }
+  page.once('dialog', (dialog) => void dialog.accept());
+  await scatterCard.locator('button:has-text("Delete set")').click();
+  await page.waitForTimeout(900);
 
   // --- shrines + the travel graph (A3-c) ------------------------------------
   //
@@ -610,6 +772,27 @@ const readObjects = (page) =>
     if (!probe) throw new Error('editor probe missing (window.__dawnedMapEditor)');
     return probe.objects();
   });
+
+/**
+ * The scatter patches THIS run painted, by its own set id.
+ *
+ * Not "every scatter patch in the draft": the §7 scenario leaves a forest on
+ * its islet on purpose, and this run counting that as its own made the erase
+ * step fail with someone else's 13 077 density. A run has to measure what it
+ * did, not what the world contains.
+ */
+const ownPatches = async (page) =>
+  (await readObjects(page)).filter(
+    (object) => object.layer === 'scatter' && object.def.setId === SCATTER_SET_ID,
+  );
+
+/** Total density across a set of scatter patches. */
+const densityOf = (patches) =>
+  patches.reduce(
+    (sum, patch) =>
+      sum + (Array.isArray(patch.def.density) ? patch.def.density.reduce((a, b) => a + b, 0) : 0),
+    0,
+  );
 
 /** Where the zone corner handles are on screen right now. */
 const readHandles = (page) =>

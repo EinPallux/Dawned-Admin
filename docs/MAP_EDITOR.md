@@ -62,6 +62,32 @@ checks — not a game client).
 - **Physics sanity:** placements auto-report "floating" (>15 cm above ground) and "buried" — a
   fixable-list panel with select-and-snap-to-ground.
 
+#### As-built (A3-d)
+
+- **Multi-select**: click replaces, `Shift`+click toggles, `Shift`+drag boxes. The marquee hits
+  what it LOOKS like it hits — every marker's drawn position is projected to the screen and tested
+  against the box, rather than its ground point, because a marker stands up from the terrain and
+  the two are twenty pixels apart at map height.
+- **Prefab collections** are named groups with RELATIVE offsets, stored in Postgres
+  (`map_editor_collections`) rather than the browser: they are shared between the owner and any GM,
+  and months of collected prefabs must not die with a cache clear. Arm one and click the ground to
+  stamp it; the origin is the group's average position, so what lands under the cursor is its
+  middle. Stamping mints fresh ids against everything already placed AND against the ids minted
+  earlier in the same stamp — two members on the same metre would otherwise collide with each
+  other. Prefabs never reach the game: a stamp produces plain placements, so the bake never learns
+  they exist.
+- **Foliage scatter brush**: pick a set, paint density, hold `Ctrl` to clear it. Density lives in
+  the 16×16-per-chunk grid the format actually stores, so a forest is a couple of hundred bytes and
+  the bake re-scatters it deterministically. A stroke that straddles a chunk seam paints both
+  sides (or every chunk edge grows a bald stripe), the whole stroke is ONE save and ONE undo step,
+  and erasing a patch back to nothing DELETES the row instead of storing 256 zeroes.
+- **Scatter sets** are edited in the same card: name, the weighted model list, instances per 100 m²,
+  and the slope/height limits that keep ground cover off cliffs and out of the sea. They are
+  map-wide settings, so they ride world settings rather than the object table.
+- **Transform gizmos, snapping and jitter stamping are NOT built.** Position is edited numerically
+  in the inspector and by re-stamping; a drag-gizmo is worth having but it is polish on top of a
+  placement path that already works, and it was not worth delaying the §7 run for.
+
 ### 2.3 Spawns Mode
 
 - Place/edit **enemy spawners** (point/area; entries with weights/counts; rank override; respawn
@@ -155,6 +181,10 @@ checks — not a game client).
   interactables) — and per-zone **"Clear layer…"** action (the "start fresh" requirement: e.g.
   wipe all props in Emberwood but keep terrain+spawns; double-confirm + auto-draft-backup).
 - **Selection sets & isolation:** save named selections; isolate-mode dims everything else.
+  **As-built (A3-d):** a named set stores ids; loading one drops ids that no longer exist rather
+  than keeping ghosts, and says so. Isolation HIDES rather than fades — a translucent hundred
+  markers is still a hundred markers in the way — and it composes with layer hiding rather than
+  overriding it, so a hidden layer stays hidden while you isolate.
 - **Overlays:** chunk grid, walkability bake preview (green/red), slope heat, splat layer weights,
   spawn density, zone fills, collider wireframes, tri/instance budget per chunk (red when over).
 - **Measurements:** ruler tool, radius stamp (for planning camp spacing).
@@ -200,6 +230,23 @@ UI; typical incremental bake target <60 s (changed chunks only), full-map <10 mi
   spawner pointing at an unpublished enemy or sitting in a safe zone, a scatter patch whose set
   was deleted, unreachable content. Advisory: overlapping zones, floaters/buried props, chunks
   over the instance budget, spawners in an unreachable pocket.
+- **Validation passing is not proof a draft BAKES.** They run different schemas: `validateDraft`
+  reads the draft's own shapes, the bake hands every layer to the GAME's `.strict()` artifact
+  schemas. A scatter row carries an `id` (it is a row key) that the baked format has no field
+  for, so for a while every publish with a painted forest in it validated clean and then threw
+  inside `placements.json` — between the "zones" and "placements" steps, with nothing in the log
+  and a staging directory left behind. Draft rows are PROJECTED into the baked format now, never
+  cast; a failed bake logs and removes its own stage; and `map-bake.test.ts` bakes for real
+  rather than only validating.
+- **A publish sweeps old bakes.** Each one is ~8.6 MB of chunk bins and nothing used to remove
+  them, so the VPS filled in proportion to how much the owner edited. `pruneOldBakes` keeps the
+  five newest plus whatever `current.json` points at, takes any `.tmp` a killed process left,
+  and reports the count on the stream and in the audit row. `dev-2` — the committed
+  `pnpm world:generate` fallback — is not a `map-*` directory and is never touched.
+- **The live bake is machine state, and it is backed up.** Published bakes land in the game
+  checkout next to `dev-2`, so they are git-ignored (a `git pull` on the VPS must never repoint
+  the live world at a bake from someone's laptop) and `deploy/BACKUP.sh` archives the live one
+  nightly. The DRAFT it came from is in Postgres, which pg_dump already covers.
 
 ### 4.2 As-built: the viewport and the tools (A2-c/A2-d)
 
@@ -252,6 +299,16 @@ staging-clone flow (documented decision point at A3).
 `O` overlay picker · `Space` tool options popover. Fully rebindable (same keybind UI component as
 the game's settings).
 
+#### As-built (A3-d)
+
+Every editor shortcut is a row in a keymap rather than a case in a `switch`: click a binding in
+the Keys card, press a key, done. Binding a key that another action holds takes it off that
+action and leaves it UNBOUND rather than swapping — a silent swap moves a key nobody asked to
+move, and two actions on one key means the second silently never fires. The keymap is stored per
+browser (localStorage), because it is a property of the hands and the hardware, not of the login;
+a stored map missing an action added in a later release falls back to that action's default
+rather than leaving it dead. `Ctrl+Z`/`Ctrl+S`/`1–9` camera slots are fixed and not rebindable.
+
 ## 7. Acceptance bar (A2/A3 DoD extract)
 
 The editor is done when the owner can, without touching code or docs: sculpt a new islet, paint
@@ -259,3 +316,31 @@ it, scatter a forest, drop a bandit camp with a patrol, ring it with T2 nodes, z
 fog + music, place a chest + vista + shrine, validate, publish — and stand on it in the live game
 within minutes, then wipe just its props and redecorate. That exact scenario is the A3 demo
 script.
+
+### 7.1 As-built: the run (A2/A3-e, 2026-08-05)
+
+`node tools/smoke/map-scenario.mjs` performs that sentence in a real browser against the real
+game server, and is the phase's evidence rather than a checklist someone ticked:
+
+| §7 asks for                | the run does                                                             |
+| -------------------------- | ------------------------------------------------------------------------ |
+| sculpt a new islet         | pans out to open water (−6.8 m), Island-generates 28.4 m of land there   |
+| paint it                   | a splat stroke across the new ground                                     |
+| scatter a forest           | the scatter brush, 13 077 density over the islet's chunks                |
+| a bandit camp              | 21 spawners placed, camp links and rings drawn at true size              |
+| …with a patrol             | **not authored** — no patrol field, no patrol AI state (game Q24)        |
+| ring it with T2 nodes      | **not possible yet** — no resource-node schema in shared (game Q25)      |
+| zone it with custom fog    | a traced polygon, renamed, level-banded and given its own fog            |
+| …+ music                   | **not possible yet** — `zoneAmbienceSchema` has no audio fields (Q26)    |
+| chest + vista + shrine     | one of each, every row already passing `validateInteractable`            |
+| validate, publish          | the streaming publish panel, `map-<epoch>` minted                        |
+| stand on it within minutes | the GAME's `/api/health` flips `dev-2 → map-<epoch>` with no restart     |
+| wipe just its props        | the zone-scoped "Clear layer…" removes 3 of 3, leaving the rest standing |
+
+The three "not possible yet" rows are recorded rather than faked; each carries a recommended
+default in the game repo's USER_QUESTIONS.md. Everything else is checked against artifacts, not
+appearances: the islet's own chunk bin and the new zone are read back out of the published bake,
+and the map version is taken from the game server rather than from the panel that just wrote it.
+
+The run leaves the islet live on purpose — this is a dev checkout, and the point of the scenario
+is that the world changed. Re-running it is safe: it deletes its own previous leavings first.
