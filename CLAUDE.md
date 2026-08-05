@@ -92,9 +92,10 @@ so an identical draft could never prune. 25 tests green. The whole P8 catalogue 
 live through this surface — 62 items, 5 loot tables, 5 Dawnhaven vendors and the shore/
 weald enemy loot bindings (`tools/content/author-items.mjs`, numbers derived from the
 shared budget formulas) — and the game froze the published result into its seed
-migration 0012. **Current: game P0–P8 are all closed and owner-verified (2026-08-04, after two
-fix rounds — the game is on protocol v11); nothing in those rounds changed a content
-schema, so the panel needed no editor work. The game is now in P9 — Enemies & AI Depth.**
+migration 0012. **Current: game P0–P8 are closed and owner-verified; P9 and P10 are both built
+and measured (2026-08-05) and awaiting the owner's playtest, and the game is on protocol v13.
+P11 — Quests, POIs & Interactables is next, which is this panel's A4 (quest & dialogue
+editor) sync point.**
 **A1-d — the Enemies editor is live** (2026-08-04, alongside game P9): Content → Enemies
 with bestiary + spawners on one publish rail (they reference each other), the level-banded
 list with rank badges, and the **time-to-kill simulator** — it runs the game's OWN
@@ -163,9 +164,23 @@ delayed tick at 1.5/s carried the marker half a catch zone. Rebuild `@dawned/sha
 game repo and re-run `pnpm install` here, as after any game-side shared change. Nothing in the
 Professions editor reads it today — but the moment this panel grows a fishing PREVIEW the way
 the Enemies page has a TTK simulator, it has to run the shared reel rather than a copy, for
-exactly the reason the TTK sim runs `selectableEnemyAbilities`. The open feel question is the
-game repo's Q27 (how hard a T5 legendary should be); the whole ladder is two numbers in
-`fishingDifficulty`, so it is a natural candidate for a tuning surface here later.
+exactly the reason the TTK sim runs `selectableEnemyAbilities`. Q27 (how hard a T5 legendary
+should be) was answered 2026-08-05 with the recommended default — leave the reel as shipped and
+judge it in the playtest — so the ladder is settled for 0.1.0; it stays two numbers in
+`fishingDifficulty` and a natural candidate for a tuning surface here later.
+
+**Game P10 is closed (2026-08-05) — P10-G measured the DoD and nothing here needed changing,
+but two of its findings are this panel's business.** (1) The Professions editor's gathering
+preview reports "how many gathers walk this profession from one gate to the next", and that
+number now has a MEASURED counterpart: woodcutting goes 1 → 10 in **458 real gathers** on the
+live server, with the T2 gate at 248 — and both figures reproduce the shared curve's own
+arithmetic to the gather, which is the strongest evidence yet that this page's preview and the
+game agree. Worth showing as a reference row next time the page is touched, the same way the
+Enemies page's TTK sim wants the measured 78 dps instead of its default 40. (2) The game gained
+**`/ops/fish`**, which puts a named fish on a player's line — the reel's difficulty comes from
+the fish's rarity, so this is how a rare or legendary BAR gets played on purpose rather than
+waited for. If the fishing preview mentioned above is ever built, that lever is how its numbers
+get checked against a real server, and it is also the handle a GM would want on a Live Ops page.
 **A2-a/A2-b — the map editor's foundations are in** (2026-08-04): the game repo's
 `@dawned/shared` now owns brush math and deterministic scatter (so the editor preview, the
 bake and the server cannot disagree), plus the draft tables (migration 0014). Here: chunk-

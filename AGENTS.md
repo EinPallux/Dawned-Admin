@@ -41,8 +41,10 @@ truth).
   5 Dawnhaven vendors, plus the shore/weald enemy loot bindings
   (`tools/content/author-items.mjs`) — and the game froze the result into its seed
   migration 0012. Current: game P0–P8 are all closed and owner-verified (2026-08-04, after two
-  fix rounds; the game is on protocol v11) — neither round touched a content schema, so no
-  editor work followed. The game is in P9 — Enemies & AI Depth.
+  fix rounds) — neither round touched a content schema, so no editor work followed. Current:
+  game P9 and P10 are both built and measured (2026-08-05) and awaiting the owner's playtest;
+  the game is on protocol v13. P11 — Quests, POIs & Interactables is next, which is this
+  panel's A4 (quest & dialogue editor) sync point.
   **A1-d — Enemies is live** (2026-08-04): bestiary + spawners on one publish rail, level-
   banded list with rank badges, and a time-to-kill simulator that runs the game's own
   `selectableEnemyAbilities` so the previewed rotation is the fought rotation (both sides
@@ -91,8 +93,17 @@ truth).
   `MARKER_MAX_SPEED` 1.5 → 0.9 (the reel bar was unwinnable through one tick of command
   delay — 20/20 offline, 0/12 on the wire). Rebuild shared in the game repo, `pnpm install`
   here. If this panel ever grows a fishing preview it must run the shared reel, not a copy —
-  same rule as the TTK sim running `selectableEnemyAbilities`. Open feel question: game repo
-  Q27 (T5 legendary difficulty), which is two numbers in `fishingDifficulty`.
+  same rule as the TTK sim running `selectableEnemyAbilities`. Q27 (T5 legendary difficulty)
+  was answered 2026-08-05 — leave the reel as shipped, judge it in the playtest.
+
+  **Game P10 is closed (2026-08-05).** No editor work needed; two findings are this panel's
+  business. (1) The Professions preview's "gathers from this gate to the next" now has a
+  measured counterpart: woodcutting 1 → 10 in **458 real gathers** on the live server, T2 gate
+  at 248, both reproducing the shared curve's arithmetic to the gather — worth a reference row
+  next time the page is touched, like the Enemies TTK sim wanting the measured 78 dps over its
+  default 40. (2) New game lever **`/ops/fish`** names the fish on a player's line; since the
+  reel's difficulty comes from rarity, that is how a rare or legendary bar gets played on
+  purpose — the handle a fishing preview (or a Live Ops page) would check itself against.
   **A2-a/A2-b — the map editor's foundations are in (2026-08-04).** Shared (game repo)
   owns brush math + deterministic scatter so preview, bake and server agree; draft
   tables are migration 0014. Here: chunk-granular draft CRUD behind a 45 s single-writer

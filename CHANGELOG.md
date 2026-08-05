@@ -5,6 +5,21 @@ versions track the game's release trains (0.1.0 = tooling that shipped Dawned 0.
 
 ## [Unreleased]
 
+### Changed — game P10 closed; two things it hands this panel (2026-08-05, game P10-G)
+
+- The Professions editor's gathering preview estimates how many gathers walk a profession from
+  one tier gate to the next. That number now has a **measured** counterpart: on the live server
+  woodcutting goes 1 → 10 in **458 real gathers**, with the T2 gate at 248 — and both figures
+  reproduce the shared XP curve's own arithmetic to the gather. The preview and the game agree.
+  Worth surfacing as a reference row next time the page is touched, the same way the Enemies
+  page's time-to-kill simulator wants the measured 78 dps rather than its default of 40.
+- The game gained **`/ops/fish`**, which puts a named fish on a player's line. The reel bar's
+  speed and width come from the fish's rarity, so this is how a rare or legendary bar gets
+  played on purpose instead of waited for (a rare is one yield weight in ten). If this panel
+  ever grows a fishing preview, that lever is how its numbers get checked against a real
+  server — and it is the handle a GM would want on a Live Ops page.
+- No editor or schema changes: P10-G was verification only.
+
 ### Changed — pull in the game's shared rebuild (2026-08-05, game P10-F)
 
 - `@dawned/shared` moved `MARKER_MAX_SPEED` (the fishing marker's top speed) from 1.5 to 0.9,
