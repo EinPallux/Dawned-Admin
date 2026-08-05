@@ -40,11 +40,11 @@ truth).
   green. The whole P8 catalogue was authored here and published — 62 items, 5 loot tables,
   5 Dawnhaven vendors, plus the shore/weald enemy loot bindings
   (`tools/content/author-items.mjs`) — and the game froze the result into its seed
-  migration 0012. Current: game P0–P8 are all closed and owner-verified (2026-08-04, after two
-  fix rounds) — neither round touched a content schema, so no editor work followed. Current:
-  game P9 and P10 are both built and measured (2026-08-05) and awaiting the owner's playtest;
-  the game is on protocol v13. P11 — Quests, POIs & Interactables is next, which is this
-  panel's A4 (quest & dialogue editor) sync point.
+  migration 0012. Current:
+  game P0–P10 are all closed and owner-accepted (P9 + P10 on 2026-08-05, on their measured
+  DoDs); the game is on protocol v13. **A4 — the quest & dialogue editor — is the next work
+  in this repo**, syncing to game P11. Phases close on the measured DoD, not on a playtest;
+  all feel/number tuning is one pass at the end of the project.
   **A1-d — Enemies is live** (2026-08-04): bestiary + spawners on one publish rail, level-
   banded list with rank badges, and a time-to-kill simulator that runs the game's own
   `selectableEnemyAbilities` so the previewed rotation is the fought rotation (both sides
@@ -53,7 +53,7 @@ truth).
   41 tests green. **Pull in after the next `@dawned/shared` rebuild:** the game's P9-D
   round added `shieldDurationMs` to the enemy ability schema (self-shield duration,
   default 12 000 ms) — schema-driven, so the form gains it with no editor code.
-  **Game P9 closed 2026-08-04 (built, awaiting playtest):** the King solos in 105 s, inside
+  **Game P9 closed (2026-08-04, accepted 2026-08-05):** the King solos in 105 s, inside
   the 60–120 s design window. Lesson for this panel: the TTK simulator's **player dps input
   is the whole answer** and the page defaults it to 40, where a properly built level-12
   warrior measures 78 (an unspent one, 30). A guessed dps can be 3× off and send someone

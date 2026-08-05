@@ -92,10 +92,11 @@ so an identical draft could never prune. 25 tests green. The whole P8 catalogue 
 live through this surface — 62 items, 5 loot tables, 5 Dawnhaven vendors and the shore/
 weald enemy loot bindings (`tools/content/author-items.mjs`, numbers derived from the
 shared budget formulas) — and the game froze the published result into its seed
-migration 0012. **Current: game P0–P8 are closed and owner-verified; P9 and P10 are both built
-and measured (2026-08-05) and awaiting the owner's playtest, and the game is on protocol v13.
-P11 — Quests, POIs & Interactables is next, which is this panel's A4 (quest & dialogue
-editor) sync point.**
+migration 0012. **Current: game P0–P10 are all closed and owner-accepted (P9 + P10 on
+2026-08-05, on their measured DoDs — the game is on protocol v13). P11 — Quests, POIs &
+Interactables is next, which is this panel's A4 (quest & dialogue editor) sync point — the
+next piece of work in this repo.** Phases close on the measured DoD, not on a playtest; all
+feel/number tuning is one deliberate pass at the end of the project.
 **A1-d — the Enemies editor is live** (2026-08-04, alongside game P9): Content → Enemies
 with bestiary + spawners on one publish rail (they reference each other), the level-banded
 list with rank badges, and the **time-to-kill simulator** — it runs the game's OWN
@@ -113,7 +114,7 @@ promotion on the Enemies page next time that surface is touched, since it is now
 what a caster's shield beat is worth. The game also bumped `PROTOCOL_VERSION` to 12 (enemy
 cast flag on `AbilityStart`); the panel does not speak the game protocol, so that part is
 informational — but `pnpm install` after ANY game-side shared change is still required.
-**Game P9 is built and measured (2026-08-04), awaiting the owner's playtest** — the Mushroom
+**Game P9 is closed (measured 2026-08-04, owner-accepted 2026-08-05)** — the Mushroom
 King solos in 105 s inside the design's 60–120 s window. One thing that finding is worth to
 this panel: the TTK simulator's **player dps input is the whole answer**, and the page still
 defaults it to 40. The measured number for a properly built level-12 warrior with T2 gear is
