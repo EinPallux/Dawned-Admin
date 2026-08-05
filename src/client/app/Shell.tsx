@@ -84,6 +84,14 @@ export const Shell = ({ user }: { user: AdminUser }) => {
         },
       },
       {
+        id: 'nav-quests',
+        label: 'Go to Quests (steps, dialogue, chain graph, grant-to-GM)',
+        hint: 'nav',
+        run: () => {
+          void navigate('/content/quests');
+        },
+      },
+      {
         id: 'nav-professions',
         label: 'Go to Professions (resource nodes, gathering preview)',
         hint: 'nav',
@@ -193,18 +201,18 @@ export const Shell = ({ user }: { user: AdminUser }) => {
         <NavLink to="/content/items" className={railLink}>
           Items
         </NavLink>
+        <NavLink to="/content/quests" className={railLink}>
+          Quests
+        </NavLink>
         <NavLink to="/content/professions" className={railLink}>
           Professions
         </NavLink>
-        <div className="rail-item is-disabled" title="Arrives with phase A3">
-          Quests <span className="phase">A3</span>
-        </div>
         <div className="rail-group">Operations</div>
-        <div className="rail-item is-disabled" title="Arrives with phase A4">
-          Live Ops <span className="phase">A4</span>
+        <div className="rail-item is-disabled" title="Arrives with phase A5">
+          Live Ops <span className="phase">A5</span>
         </div>
-        <div className="rail-item is-disabled" title="Arrives with phase A4">
-          Audit Log <span className="phase">A4</span>
+        <div className="rail-item is-disabled" title="Arrives with phase A5">
+          Audit Log <span className="phase">A5</span>
         </div>
       </nav>
 

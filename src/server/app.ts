@@ -27,6 +27,8 @@ import {
   enemyDefSchema,
   itemDefSchema,
   resourceNodeDefSchema,
+  questDefSchema,
+  npcDefSchema,
   lootTableDefSchema,
   skillNodeDefSchema,
   spawnerDefSchema,
@@ -80,6 +82,20 @@ import {
   publishResourceNodes,
   saveResourceNodeDraft,
 } from './professions.js';
+import {
+  chainGraph,
+  diffQuests,
+  discardNpcDraft,
+  discardQuestDraft,
+  listNpcs,
+  listQuests,
+  previewContext,
+  previewQuest,
+  publishQuests,
+  saveNpcDraft,
+  saveQuestDraft,
+} from './quests.js';
+import { gameOps } from './publish-support.js';
 import {
   diffEnemies,
   discardEnemyDraft,
@@ -820,6 +836,184 @@ export const buildApp = async (config: Config): Promise<App> => {
     });
     if (!result.ok) return reply.code(422).send(result);
     return result;
+  });
+
+  // --- quests + NPCs (game P11) ---------------------------------------------
+  /**
+   * Quests and NPCs share ONE rail because they reference each other: a quest
+   * names its giver, and an NPC exists to be talked to. Publishing them apart
+   * would guarantee a window where a live quest points at an NPC that is not
+   * there yet — the same argument that keeps the bestiary and its spawners
+   * together.
+   */
+  app.get('/api/quests', async (request, reply) => {
+    if (!requireRole(request, reply, 'gm')) return;
+    return { quests: await listQuests(dbHandle.db) };
+  });
+
+  app.get('/api/npcs', async (request, reply) => {
+    if (!requireRole(request, reply, 'gm')) return;
+    return { npcs: await listNpcs(dbHandle.db) };
+  });
+
+  app.put('/api/quests/:id', async (request, reply) => {
+    const admin = requireRole(request, reply, 'admin');
+    if (!admin) return;
+    const { id } = request.params as { id: string };
+    const parsed = questDefSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        error: 'validation',
+        message: parsed.error.issues
+          .map((issue) => `${issue.path.join('.') || '<root>'}: ${issue.message}`)
+          .join('; '),
+      });
+    }
+    if (parsed.data.id !== id) {
+      return reply.code(400).send({ error: 'bad_request', message: 'Body id must match the URL.' });
+    }
+    const result = await saveQuestDraft(dbHandle.db, parsed.data, admin.accountId);
+    await audit({
+      actorAccountId: admin.accountId,
+      action: 'quests.save_draft',
+      args: { id, pruned: result.pruned },
+      result: 'ok',
+    });
+    return { ok: true, ...result };
+  });
+
+  app.put('/api/npcs/:id', async (request, reply) => {
+    const admin = requireRole(request, reply, 'admin');
+    if (!admin) return;
+    const { id } = request.params as { id: string };
+    const parsed = npcDefSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        error: 'validation',
+        message: parsed.error.issues
+          .map((issue) => `${issue.path.join('.') || '<root>'}: ${issue.message}`)
+          .join('; '),
+      });
+    }
+    if (parsed.data.id !== id) {
+      return reply.code(400).send({ error: 'bad_request', message: 'Body id must match the URL.' });
+    }
+    const result = await saveNpcDraft(dbHandle.db, parsed.data, admin.accountId);
+    await audit({
+      actorAccountId: admin.accountId,
+      action: 'npcs.save_draft',
+      args: { id, pruned: result.pruned },
+      result: 'ok',
+    });
+    return { ok: true, ...result };
+  });
+
+  app.delete('/api/quests/:id/draft', async (request, reply) => {
+    const admin = requireRole(request, reply, 'admin');
+    if (!admin) return;
+    const { id } = request.params as { id: string };
+    const removed = await discardQuestDraft(dbHandle.db, id);
+    if (removed) {
+      await audit({
+        actorAccountId: admin.accountId,
+        action: 'quests.discard_draft',
+        args: { id },
+        result: 'ok',
+      });
+    }
+    return { removed };
+  });
+
+  app.delete('/api/npcs/:id/draft', async (request, reply) => {
+    const admin = requireRole(request, reply, 'admin');
+    if (!admin) return;
+    const { id } = request.params as { id: string };
+    const removed = await discardNpcDraft(dbHandle.db, id);
+    if (removed) {
+      await audit({
+        actorAccountId: admin.accountId,
+        action: 'npcs.discard_draft',
+        args: { id },
+        result: 'ok',
+      });
+    }
+    return { removed };
+  });
+
+  /**
+   * Preview a quest as the player will meet it: journal prose, tracker lines,
+   * rewards beside their ƒ-suggested values, and the game's own flow problems.
+   *
+   * Takes the def in the BODY for the same reason the gathering preview does —
+   * previewing the last SAVED row lies for exactly one save.
+   */
+  app.post('/api/quests/preview', async (request, reply) => {
+    if (!requireRole(request, reply, 'gm')) return;
+    const parsed = questDefSchema.safeParse((request.body as { def?: unknown }).def);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        error: 'validation',
+        message: parsed.error.issues
+          .map((issue) => `${issue.path.join('.') || '<root>'}: ${issue.message}`)
+          .join('; '),
+      });
+    }
+    const context = await previewContext(dbHandle.db);
+    return previewQuest(parsed.data, context.npcs, context.items);
+  });
+
+  /** The chain graph — built from prerequisites, which is what the game gates on. */
+  app.get('/api/quests/chain/:chainId', async (request, reply) => {
+    if (!requireRole(request, reply, 'gm')) return;
+    const { chainId } = request.params as { chainId: string };
+    const context = await previewContext(dbHandle.db);
+    return { chain: chainGraph(context.quests, chainId === '_all' ? '' : chainId) };
+  });
+
+  app.get('/api/publish/quests/diff', async (request, reply) => {
+    if (!requireRole(request, reply, 'gm')) return;
+    return diffQuests(dbHandle.db);
+  });
+
+  app.post('/api/publish/quests', async (request, reply) => {
+    const admin = requireRole(request, reply, 'admin');
+    if (!admin) return;
+    const result = await publishQuests(dbHandle.db, config);
+    await audit({
+      actorAccountId: admin.accountId,
+      action: 'quests.publish',
+      args: {
+        quests: result.publishedQuests,
+        npcs: result.publishedNpcs,
+        problems: result.problems,
+      },
+      result: result.ok ? 'ok' : 'denied',
+    });
+    if (!result.ok) return reply.code(422).send(result);
+    return result;
+  });
+
+  /**
+   * Quest test hook: put a quest on a GM character at a step (CONTENT_EDITORS
+   * §6). Proxied to the game's localhost ops API rather than touched here —
+   * rule 3, and the reason the panel never reaches into game memory.
+   */
+  app.post('/api/ops/quest', async (request, reply) => {
+    const admin = requireRole(request, reply, 'admin');
+    if (!admin) return;
+    const body = request.body as { player?: unknown; quest?: unknown; step?: unknown };
+    const player = typeof body.player === 'string' ? body.player : '';
+    const quest = typeof body.quest === 'string' ? body.quest : '';
+    const step = typeof body.step === 'number' ? body.step : 0;
+    const result = await gameOps(config, 'quest', { player, quest, step });
+    await audit({
+      actorAccountId: admin.accountId,
+      action: 'quests.grant',
+      args: { player, quest, step },
+      result: result.ok ? 'ok' : 'denied',
+    });
+    if (!result.ok) return reply.code(result.status === 503 ? 503 : 422).send(result.payload);
+    return result.payload;
   });
 
   // --- map editor (A2/A3) ---------------------------------------------------

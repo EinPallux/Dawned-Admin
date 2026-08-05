@@ -33,6 +33,32 @@ export const reloadGameContent = (config: Config): Promise<ReloadOutcome> =>
 export const reloadGameMap = (config: Config): Promise<ReloadOutcome> =>
   poke(config, 'reload-map', 'game unreachable — the new map loads on its next restart', 30_000);
 
+/**
+ * Send a live-ops command with a body (A4's "grant to my GM character").
+ *
+ * Separate from `poke` because this one CARRIES data and the caller wants the
+ * game's answer — a refusal ("player not online") is the useful half. Rule 3
+ * still holds: the panel never touches game memory, it asks the game to.
+ */
+export const gameOps = async (
+  config: Config,
+  route: string,
+  body: unknown,
+): Promise<{ ok: boolean; status: number; payload: unknown }> => {
+  try {
+    const response = await fetch(`${config.GAME_OPS_URL}/ops/${route}`, {
+      method: 'POST',
+      headers: { 'x-ops-secret': config.OPS_SECRET, 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(5000),
+    });
+    const payload: unknown = await response.json().catch(() => ({}));
+    return { ok: response.ok, status: response.status, payload };
+  } catch {
+    return { ok: false, status: 503, payload: { error: 'game unreachable' } };
+  }
+};
+
 const poke = async (
   config: Config,
   route: string,

@@ -1455,3 +1455,99 @@ code,
   padding-top: 8px;
   border-top: 1px solid var(--hairline);
 }
+
+/* --- quests (A4) --------------------------------------------------------- */
+
+/* A quest with flow problems gets a dot in the list, so a broken chain link is
+   visible without opening every entry — the same affordance the draft dot is. */
+.quests-row-problem {
+  width: 6px;
+  height: 6px;
+  margin-left: auto;
+  background: var(--danger, #d9534f);
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+}
+
+/* The journal card renders the quest as the player reads it: prose first, then
+   the tracker. Deliberately narrower than the editor pane — a wall of prose at
+   full width is the thing the in-game panel will never look like. */
+.quests-journal {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  background: var(--panel-2, rgba(255, 255, 255, 0.02));
+  max-width: 62ch;
+}
+
+.quests-journal h4 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  letter-spacing: 0.02em;
+}
+
+.quests-journal-prose {
+  margin: 0 0 10px;
+  color: var(--ink-2, #b9c2d0);
+  line-height: 1.5;
+}
+
+.quests-tracker {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+}
+
+.quests-tracker li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
+.quests-step-kind {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--gold, #d8a838);
+  min-width: 62px;
+}
+
+.quests-step-text {
+  color: var(--ink);
+}
+
+.quests-step-count {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2, #b9c2d0);
+}
+
+/* An explore step shows its clue instead of a counter — there is no marker, by
+   design (QUESTS_POI §1.4), so the clue IS the objective. */
+.quests-step-clue {
+  color: var(--ink-2, #b9c2d0);
+  font-style: italic;
+}
+
+.quests-chain {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+}
+
+.quests-chain li {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.quests-chain li.is-active .quests-chain-name {
+  color: var(--gold, #d8a838);
+}
+
+.quests-chain-level {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2, #b9c2d0);
+  min-width: 48px;
+}
