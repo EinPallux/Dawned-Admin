@@ -333,11 +333,62 @@ export class MapViewport {
     for (const id of [...this.objectViews.keys()]) this.setObjectView(id, null);
   }
 
+  /**
+   * Isolation (MAP_EDITOR.md §3): show only these objects, or everything when
+   * `ids` is null. Applied on top of layer visibility rather than replacing it
+   * — a hidden layer stays hidden while isolating, which is what "hidden"
+   * means.
+   */
+  private isolation: ReadonlySet<string> | null = null;
+
+  setIsolation(ids: ReadonlySet<string> | null): void {
+    this.isolation = ids;
+    for (const [id, view] of this.objectViews) {
+      view.visible = this.visibilityOf(id, view);
+    }
+  }
+
+  private visibilityOf(id: string, view: THREE.Object3D): boolean {
+    const layer = (view.userData as { layer?: string }).layer ?? '';
+    if (this.hiddenLayers.has(layer)) return false;
+    return this.isolation === null || this.isolation.has(id);
+  }
+
+  /**
+   * Every object whose marker projects inside a screen rect — the marquee.
+   *
+   * Projects the view's own position rather than the stored x/z: a marker
+   * stands up from the ground, and selecting by the point you would click is
+   * the only version that matches what the owner sees.
+   */
+  objectsInRect(
+    rect: { x0: number; y0: number; x1: number; y1: number },
+    bounds: { left: number; top: number; width: number; height: number },
+    accept: (id: string) => boolean,
+  ): string[] {
+    const out: string[] = [];
+    const point = new THREE.Vector3();
+    for (const [id, view] of this.objectViews) {
+      if (!view.visible || !accept(id)) continue;
+      new THREE.Box3().setFromObject(view).getCenter(point);
+      const projected = point.project(this.camera);
+      if (projected.z > 1) continue; // behind the camera
+      const x = bounds.left + ((projected.x + 1) / 2) * bounds.width;
+      const y = bounds.top + ((1 - projected.y) / 2) * bounds.height;
+      if (x >= rect.x0 && x <= rect.x1 && y >= rect.y0 && y <= rect.y1) out.push(id);
+    }
+    return out;
+  }
+
+  private readonly hiddenLayers = new Set<string>();
+
   /** Per-layer visibility — the layers panel's hide toggle. */
   setLayerVisible(layer: string, visible: boolean): void {
-    for (const view of this.objectViews.values()) {
+    if (visible) this.hiddenLayers.delete(layer);
+    else this.hiddenLayers.add(layer);
+    for (const [id, view] of this.objectViews) {
       const data = view.userData as { layer?: string };
-      if (data.layer === layer) view.visible = visible;
+      if (data.layer === layer) view.visible = this.visibilityOf(id, view);
     }
   }
 

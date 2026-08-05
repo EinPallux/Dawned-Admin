@@ -201,8 +201,27 @@ the cursor**, which made half of every outline untouchable (all three zones reac
 water) — it picks against the world plane now. Also: `@dawned/shared` is excluded from Vite's
 dep pre-bundling, because the cached bundle survived a rebuild in the game repo and reported a
 brand-new export as missing.
-**Still open in A3:** selection sets/isolation/prefab collections/scatter brush and the
-rebindable keymap UI (rest of d), then the §7 run. **121 tests green**, and
+**A3-d — scatter, selection, prefabs and the keymap** (2026-08-05): the scatter brush paints
+the 16×16-per-chunk density grid the format really stores (a forest is a couple of hundred
+bytes and the bake re-scatters it deterministically); a stroke across a seam paints both
+sides, the whole stroke is ONE save and ONE undo, and erasing a patch to nothing deletes the
+row rather than storing 256 zeroes. Scatter sets — the weighted model list, density per
+100 m², slope/height limits — are edited in the same card. Multi-select is click /
+`Shift`+click / `Shift`+drag, and the marquee tests where markers are DRAWN, not the metre
+they stand on. Prefabs keep a group's relative layout and stamp plain placements anywhere
+(game migration 0015, `map_editor_collections` — in Postgres because months of them must not
+die with a browser cache); stamping mints ids against the map AND against the ids minted
+earlier in the same stamp. Selection sets drop ids that no longer exist rather than keeping
+ghosts; isolation HIDES and composes with layer hiding. Every shortcut is a keymap row:
+rebinding takes the key off its previous owner instead of silently swapping (two actions on
+one key means the second never fires), and an old stored map gains new actions' defaults.
+One bug came out of the browser run again: **scatter dabs did not accumulate within a
+stroke** — each dab re-read the store, which is only written on mouse-up, so only the last
+dab survived. Painting looked roughly right; erasing removed 9 % of what it should have.
+`strokeBase` now owns that precedence and is tested.
+**Not built, deliberately:** transform gizmos, grid snap and jitter stamping — polish on a
+placement path that already works, not worth delaying the §7 run for.
+**Still open in A3:** the §7 acceptance run. **160 tests green**, and
 `node tools/smoke/map-editor.mjs` passes end to end (import → sculpt/undo/redo → paint →
 overlays → autosave → place/inspect/delete → spawn budget + rings → two shrines and the
 travel graph → drag/insert/remove a zone corner → validate → clean up after itself).

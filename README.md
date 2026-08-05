@@ -12,9 +12,10 @@ quests, vendors, zones, curves), and the live server (players, bans, broadcasts,
 > editors live, and every ability, node and item the game runs was authored through them.
 > Remaining A1 editors (zones, NPCs…) land with the game phases that consume them. **The Map
 > Editor is live** (A2 complete, A3 under way): open the island in 3D, sculpt and paint it,
-> generate a new one, place props, camps, discovery points, chests and shrines, draw a zone and
-> re-shape one you already drew corner by corner, then validate and publish — the game hot-loads
-> the new map without a deploy. Phase status: [ROADMAP.md](ROADMAP.md) ·
+> generate a new one, scatter a forest, place props, camps, discovery points, chests and shrines,
+> keep a group as a reusable prefab, draw a zone and re-shape one you already drew corner by
+> corner, then validate and publish — the game hot-loads the new map without a deploy. Phase
+> status: [ROADMAP.md](ROADMAP.md) ·
 > what shipped:
 > [CHANGELOG.md](CHANGELOG.md). The game repo's planning docs are the design source of truth for
 > game systems; this repo's docs specify the _editing tools_ for them.

@@ -217,7 +217,21 @@ with it).
       plus warnings for shrines off the graph and hops too short to be worth paying for. 36 new
       tests (121 total); the browser smoke drives real mouse events at real handles, and four
       bugs came out of that run — see CHANGELOG.
-- [ ] A3-d (rest) — selection sets + isolation, prefab collections, scatter brush, keymap UI.
+- [x] **A3-d (rest) — scatter brush, multi-select, prefabs, selection sets, isolation, keymap.**
+      The scatter brush paints the 16×16-per-chunk density grid the format actually stores, so the
+      bake re-scatters deterministically and a forest costs a couple of hundred bytes; a stroke
+      across a chunk seam paints both sides, the whole stroke is one save and one undo step, and
+      erasing a patch to nothing deletes the row. Scatter sets (weighted model list, density per
+      100 m², slope/height limits) are edited in the same card. Multi-select is click /
+      `Shift`+click / `Shift`+drag, and the marquee tests where markers are DRAWN rather than the
+      metre they stand on. Prefabs keep a group's relative layout and stamp plain placements
+      anywhere — stored in Postgres (migration 0015, `map_editor_collections`) because months of
+      them must not die with a browser cache. Selection sets drop ids that no longer exist rather
+      than keeping ghosts; isolation hides rather than fades and composes with layer hiding. Every
+      shortcut is a keymap row now: rebinding takes the key off its previous owner instead of
+      silently swapping, and an old stored map gains new actions' defaults. 160 tests.
+      **Transform gizmos, grid snap and jitter stamping are not built** — polish on a placement
+      path that already works, not worth delaying the §7 run for.
 
 ## A4 — Quest & Dialogue Editor (M) — with game P11
 

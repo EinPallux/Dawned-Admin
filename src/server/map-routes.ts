@@ -21,6 +21,7 @@ import {
   contentEnemies,
   contentLootTables,
   contentSpawners,
+  mapEditorCollections,
   mapVersions,
 } from '@dawned/shared/schema';
 import {
@@ -125,6 +126,23 @@ const encodeChunkPayload = (chunk: DraftChunk): z.infer<typeof chunkPayloadSchem
  * object table. Kept here because only the map editor authors them.
  */
 const SCATTER_SETTINGS_KEY = 'map_scatter_sets';
+
+/**
+ * Editor collections (MAP_EDITOR.md §2.2, §3). `data` is checked per kind on
+ * the CLIENT (it owns the prefab/selection shapes) and only bounded here — the
+ * server's job is to keep a GM from writing a megabyte of junk into a shared
+ * table, not to re-derive the editor's own types.
+ */
+const collectionBodySchema = z
+  .object({
+    id: z.string().min(1).max(80),
+    kind: z.enum(['selection', 'prefab']),
+    name: z.string().min(1).max(120),
+    data: z.unknown().refine((value) => JSON.stringify(value ?? null).length <= 400_000, {
+      message: 'collection payload too large',
+    }),
+  })
+  .strict();
 
 export interface MapRouteDeps {
   db: Db;
@@ -379,6 +397,68 @@ export const registerMapRoutes = (app: FastifyInstance, deps: MapRouteDeps): voi
     const body = z.object({ sets: z.array(scatterSetSchema).max(64) }).parse(request.body);
     await writeScatterSets(body.sets, admin);
     return { sets: body.sets };
+  });
+
+  // ------------------------------------------------------- editor collections
+  //
+  // Named selections and stampable prefabs (MAP_EDITOR.md §2.2, §3). These do
+  // NOT need the writer lock: saving "the harbour props" changes nothing about
+  // the map, and a read-only GM planning an edit is exactly who wants to write
+  // one down. They are audited like every other shared write.
+
+  app.get('/api/map/collections', async (request, reply) => {
+    if (!requireRole(request, reply, 'gm')) return;
+    const rows = await db
+      .select({
+        id: mapEditorCollections.id,
+        kind: mapEditorCollections.kind,
+        name: mapEditorCollections.name,
+        data: mapEditorCollections.data,
+      })
+      .from(mapEditorCollections);
+    return { collections: rows.sort((a, b) => a.name.localeCompare(b.name)) };
+  });
+
+  app.put('/api/map/collections', async (request, reply) => {
+    const admin = requireRole(request, reply, 'gm');
+    if (!admin) return;
+    const body = collectionBodySchema.parse(request.body);
+    const now = new Date();
+    await db
+      .insert(mapEditorCollections)
+      .values({
+        id: body.id,
+        kind: body.kind,
+        name: body.name,
+        data: body.data,
+        createdBy: admin.accountId,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: mapEditorCollections.id,
+        set: { name: body.name, data: body.data, updatedAt: now },
+      });
+    await audit({
+      actorAccountId: admin.accountId,
+      action: 'map.collection.save',
+      args: { id: body.id, kind: body.kind, name: body.name },
+      result: 'ok',
+    });
+    return { id: body.id };
+  });
+
+  app.delete('/api/map/collections', async (request, reply) => {
+    const admin = requireRole(request, reply, 'gm');
+    if (!admin) return;
+    const body = z.object({ id: z.string().min(1).max(80) }).parse(request.body);
+    await db.delete(mapEditorCollections).where(eq(mapEditorCollections.id, body.id));
+    await audit({
+      actorAccountId: admin.accountId,
+      action: 'map.collection.delete',
+      args: { id: body.id },
+      result: 'ok',
+    });
+    return { ok: true };
   });
 
   // ------------------------------------------------------------ checkpoints

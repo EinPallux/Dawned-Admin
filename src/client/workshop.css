@@ -1072,6 +1072,14 @@ code,
 
 .me-field .ws-input {
   flex: 1;
+  /* Three labelled number fields on one sidebar row squeezed their inputs to
+     nothing — the value was there and unreadable, which is the same as absent
+     for a field you are meant to set. Wrap instead of shrink. */
+  min-width: 56px;
+}
+
+.me-card .me-row {
+  flex-wrap: wrap;
 }
 
 .me-check {
@@ -1354,4 +1362,47 @@ code,
 .me-budget tr.me-warn td {
   color: var(--gold);
   text-align: left;
+}
+
+/* --- A3-d: marquee, collection lists, sub-headings ------------------------ */
+
+/* Fixed, because the rect is measured in client coordinates — the same numbers
+   the pointer events report, which is the only way the box lands under the
+   cursor regardless of what the viewport is nested in. */
+.me-marquee {
+  position: fixed;
+  border: 1px solid var(--accent);
+  background: rgb(127 212 255 / 12%);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.me-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.me-link:hover:not(:disabled) {
+  color: var(--accent);
+}
+
+.me-link.is-on {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.me-link:disabled {
+  color: var(--text-dim);
+  cursor: default;
+}
+
+.me-card h3.me-subhead {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--hairline);
 }

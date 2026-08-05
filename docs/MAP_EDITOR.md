@@ -62,6 +62,32 @@ checks — not a game client).
 - **Physics sanity:** placements auto-report "floating" (>15 cm above ground) and "buried" — a
   fixable-list panel with select-and-snap-to-ground.
 
+#### As-built (A3-d)
+
+- **Multi-select**: click replaces, `Shift`+click toggles, `Shift`+drag boxes. The marquee hits
+  what it LOOKS like it hits — every marker's drawn position is projected to the screen and tested
+  against the box, rather than its ground point, because a marker stands up from the terrain and
+  the two are twenty pixels apart at map height.
+- **Prefab collections** are named groups with RELATIVE offsets, stored in Postgres
+  (`map_editor_collections`) rather than the browser: they are shared between the owner and any GM,
+  and months of collected prefabs must not die with a cache clear. Arm one and click the ground to
+  stamp it; the origin is the group's average position, so what lands under the cursor is its
+  middle. Stamping mints fresh ids against everything already placed AND against the ids minted
+  earlier in the same stamp — two members on the same metre would otherwise collide with each
+  other. Prefabs never reach the game: a stamp produces plain placements, so the bake never learns
+  they exist.
+- **Foliage scatter brush**: pick a set, paint density, hold `Ctrl` to clear it. Density lives in
+  the 16×16-per-chunk grid the format actually stores, so a forest is a couple of hundred bytes and
+  the bake re-scatters it deterministically. A stroke that straddles a chunk seam paints both
+  sides (or every chunk edge grows a bald stripe), the whole stroke is ONE save and ONE undo step,
+  and erasing a patch back to nothing DELETES the row instead of storing 256 zeroes.
+- **Scatter sets** are edited in the same card: name, the weighted model list, instances per 100 m²,
+  and the slope/height limits that keep ground cover off cliffs and out of the sea. They are
+  map-wide settings, so they ride world settings rather than the object table.
+- **Transform gizmos, snapping and jitter stamping are NOT built.** Position is edited numerically
+  in the inspector and by re-stamping; a drag-gizmo is worth having but it is polish on top of a
+  placement path that already works, and it was not worth delaying the §7 run for.
+
 ### 2.3 Spawns Mode
 
 - Place/edit **enemy spawners** (point/area; entries with weights/counts; rank override; respawn
@@ -155,6 +181,10 @@ checks — not a game client).
   interactables) — and per-zone **"Clear layer…"** action (the "start fresh" requirement: e.g.
   wipe all props in Emberwood but keep terrain+spawns; double-confirm + auto-draft-backup).
 - **Selection sets & isolation:** save named selections; isolate-mode dims everything else.
+  **As-built (A3-d):** a named set stores ids; loading one drops ids that no longer exist rather
+  than keeping ghosts, and says so. Isolation HIDES rather than fades — a translucent hundred
+  markers is still a hundred markers in the way — and it composes with layer hiding rather than
+  overriding it, so a hidden layer stays hidden while you isolate.
 - **Overlays:** chunk grid, walkability bake preview (green/red), slope heat, splat layer weights,
   spawn density, zone fills, collider wireframes, tri/instance budget per chunk (red when over).
 - **Measurements:** ruler tool, radius stamp (for planning camp spacing).
@@ -251,6 +281,16 @@ staging-clone flow (documented decision point at A3).
 `Del` delete · `Ctrl+Z/Y` undo/redo · `Ctrl+S` save draft · `1–9` camera slots · `T` top-down ·
 `O` overlay picker · `Space` tool options popover. Fully rebindable (same keybind UI component as
 the game's settings).
+
+#### As-built (A3-d)
+
+Every editor shortcut is a row in a keymap rather than a case in a `switch`: click a binding in
+the Keys card, press a key, done. Binding a key that another action holds takes it off that
+action and leaves it UNBOUND rather than swapping — a silent swap moves a key nobody asked to
+move, and two actions on one key means the second silently never fires. The keymap is stored per
+browser (localStorage), because it is a property of the hands and the hardware, not of the login;
+a stored map missing an action added in a later release falls back to that action's default
+rather than leaving it dead. `Ctrl+Z`/`Ctrl+S`/`1–9` camera slots are fixed and not rebindable.
 
 ## 7. Acceptance bar (A2/A3 DoD extract)
 

@@ -107,5 +107,13 @@ truth).
   clicks from markers standing on it and one Delete ate Dawnshore (markers now beat
   outlines, zone deletes confirm); and the zone tool required terrain under the cursor,
   making the half of every outline that runs over water untouchable.
-  Open in A3: selection sets + prefabs + scatter brush + keymap UI, then the §7 run.
-  121 tests green; `node tools/smoke/map-editor.mjs` passes end to end.
+  **A3-d (2026-08-05):** scatter brush painting the per-chunk density grid (seam-aware,
+  one save + one undo per stroke, emptied patches deleted) with a scatter-set editor;
+  multi-select by click / Shift+click / Shift+drag marquee testing DRAWN positions;
+  prefabs stamping plain placements from a stored relative layout (game migration 0015,
+  `map_editor_collections`); selection sets that drop dead ids; isolation that hides and
+  composes with layer hiding; and a fully rebindable keymap. The browser run caught one
+  more: scatter dabs re-read the store each dab, so a stroke kept only its last dab —
+  `strokeBase` owns that precedence now. Transform gizmos/snap/jitter deliberately not
+  built. Open in A3: the §7 acceptance run.
+  160 tests green; `node tools/smoke/map-editor.mjs` passes end to end.
