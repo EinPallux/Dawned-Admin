@@ -333,6 +333,39 @@ const run = async (browser) => {
   if (propsFinal !== propsBefore) fail(`delete left ${propsFinal} props, expected ${propsBefore}`);
   ok('deleted it again — the draft is back where it started');
 
+  // --- spawns mode (A3-b) ---------------------------------------------------
+  //
+  // The budget table is read from the imported world, so it is checked against
+  // what the import actually reported rather than a magic number.
+  const budget = await page.locator('.me-budget').innerText();
+  if (!/\d+ enemies/.test(budget)) {
+    await shoot(page, 'a3b-no-budget.png');
+    fail(`the spawn budget table shows no population: ${budget}`);
+  }
+  ok(`spawn budget: ${budget.split('\n').join(' · ')}`);
+
+  // Rings and camp links have to actually DRAW. Measuring pixels again,
+  // because "the button is now highlighted" says nothing about the viewport.
+  const beforeRings = await canvasCoverage(page);
+  for (const which of ['aggro', 'leash', 'camps']) {
+    await page
+      .locator('.me-card', { hasText: 'Spawns' })
+      .locator(`button:text-is("${which}")`)
+      .click();
+  }
+  await page.waitForTimeout(1200);
+  const afterRings = await canvasCoverage(page);
+  if (afterRings.colours <= beforeRings.colours) {
+    await shoot(page, 'a3b-no-rings.png');
+    fail(
+      `turning on aggro/leash/camp overlays changed nothing on screen (${beforeRings.colours} → ${afterRings.colours} colours)`,
+    );
+  }
+  ok(
+    `aggro, leash and camp-link overlays draw (${beforeRings.colours} → ${afterRings.colours} distinct colours)`,
+  );
+  await shoot(page, 'a3b-spawns.png');
+
   // --- validate -------------------------------------------------------------
   await page.click('button:has-text("Validate")');
   await page.waitForSelector('.me-publish', { timeout: 30000 });
