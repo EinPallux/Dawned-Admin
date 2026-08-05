@@ -16,7 +16,15 @@ const MARLA: NpcDef = validateNpcDef({
   name: 'Marla',
   title: 'Dawnhaven gate farmer',
   role: 'quest_giver',
-  modelRef: 'characters_villager_f',
+  appearance: {
+    body: 'f',
+    skin: 1,
+    outfit: 'peasant',
+    outfitTint: 0,
+    hair: 'buns',
+    hairColor: 2,
+    beard: false,
+  },
   barkCooldownSec: 0,
 });
 
@@ -37,14 +45,12 @@ interface CheckContext {
   npcs: Map<string, NpcDef>;
   items: Set<string>;
   enemies: Set<string>;
-  models: Set<string>;
 }
 
 const defaults = (): CheckContext => ({
   npcs: new Map([[MARLA.id, MARLA]]),
   items: new Set(['item_food_marlas_preserves']),
   enemies: new Set(['enemy_bog_blob']),
-  models: new Set(['characters_villager_f']),
 });
 
 const check = (quests: QuestDef[], over: Partial<CheckContext> = {}) => {
@@ -53,15 +59,8 @@ const check = (quests: QuestDef[], over: Partial<CheckContext> = {}) => {
     npcs: over.npcs ?? base.npcs,
     items: over.items ?? base.items,
     enemies: over.enemies ?? base.enemies,
-    models: over.models ?? base.models,
   };
-  return crossCheckQuests(
-    new Map(quests.map((q) => [q.id, q])),
-    c.npcs,
-    c.items,
-    c.enemies,
-    c.models,
-  );
+  return crossCheckQuests(new Map(quests.map((q) => [q.id, q])), c.npcs, c.items, c.enemies);
 };
 
 describe('publish cross-checks', () => {
@@ -104,20 +103,6 @@ describe('publish cross-checks', () => {
       steps: [{ type: 'kill', count: 3, trackerText: 'Kill things' }],
     });
     expect(check([broken]).problems.join(' ')).toContain('enemyId or an enemyTag');
-  });
-
-  it('blocks an NPC model that is not baked', () => {
-    expect(check([quest()], { models: new Set(['something_else']) }).problems.join(' ')).toContain(
-      'baked asset manifest',
-    );
-  });
-
-  /**
-   * An empty manifest means no game checkout is reachable (a bare dev box).
-   * Blocking every publish on that would be worse than the gate is worth.
-   */
-  it('skips the model gate when no manifest is readable', () => {
-    expect(check([quest()], { models: new Set() }).problems).toEqual([]);
   });
 
   it('warns — never blocks — on a quest that pays nothing', () => {

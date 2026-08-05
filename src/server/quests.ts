@@ -18,8 +18,6 @@
  * next server boot rather than at the publish button.
  */
 
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
 import { and, eq } from 'drizzle-orm';
 import { contentEnemies, contentItems, contentNpcs, contentQuests } from '@dawned/shared/schema';
 import {
@@ -309,8 +307,6 @@ export const diffQuests = async (db: Db): Promise<QuestDiff> => ({
  *  - every item a quest collects, delivers or rewards is a published item.
  *  - every enemy a KILL step names exists.
  *  - a chain prerequisite points at a quest that will be live.
- *  - an NPC's model is in the baked manifest (invisible until someone walks
- *    there — the same gate resource nodes get).
  *
  * Advisory (publish proceeds and says so):
  *  - a quest with no rewards at all (QUESTS_POI §1.5 wants gold + XP always).
@@ -322,7 +318,6 @@ export const crossCheckQuests = (
   npcs: ReadonlyMap<string, NpcDef>,
   itemIds: ReadonlySet<string>,
   enemyIds: ReadonlySet<string>,
-  bakedModels: ReadonlySet<string>,
 ): { problems: string[]; warnings: string[] } => {
   const problems: string[] = [];
   const warnings: string[] = [];
@@ -368,11 +363,9 @@ export const crossCheckQuests = (
   for (const npc of npcs.values()) {
     problems.push(...validateNpc(npc).filter((line) => !line.includes('will never speak')));
     warnings.push(...validateNpc(npc).filter((line) => line.includes('will never speak')));
-    // An empty manifest means no game checkout is reachable (a bare dev box);
-    // blocking every publish on that would be worse than the gate is worth.
-    if (bakedModels.size > 0 && !bakedModels.has(npc.modelRef)) {
-      problems.push(`${npc.id}: model "${npc.modelRef}" is not in the baked asset manifest`);
-    }
+    // No model gate: an NPC wears the composed PLAYER appearance (body +
+    // outfit + hair), whose pieces are guaranteed baked because the character
+    // creator draws from the same set. The zod enum is the whole check.
     const talkedTo = [...quests.values()].some((quest) => questNpcRefs(quest).includes(npc.id));
     if (!talkedTo && npc.role === 'quest_giver') {
       warnings.push(`${npc.id}: a quest giver no quest names`);
@@ -390,16 +383,6 @@ export interface QuestPublishResult {
   warnings: string[];
   reload: { ok: boolean; note: string };
 }
-
-const bakedModelIds = async (config: Config): Promise<Set<string>> => {
-  try {
-    const raw = await readFile(path.join(config.ASSETS_DIR, 'manifest.json'), 'utf8');
-    const parsed = JSON.parse(raw) as { assets?: Record<string, unknown> };
-    return new Set(Object.keys(parsed.assets ?? {}));
-  } catch {
-    return new Set();
-  }
-};
 
 const publishedIds = async (
   db: Db,
@@ -442,13 +425,7 @@ export const publishQuests = async (db: Db, config: Config): Promise<QuestPublis
 
   const itemIds = await publishedIds(db, contentItems, (raw) => itemDefSchema.safeParse(raw));
   const enemyIds = await publishedIds(db, contentEnemies, (raw) => enemyDefSchema.safeParse(raw));
-  const checked = crossCheckQuests(
-    overlay(questSets),
-    overlay(npcSets),
-    itemIds,
-    enemyIds,
-    await bakedModelIds(config),
-  );
+  const checked = crossCheckQuests(overlay(questSets), overlay(npcSets), itemIds, enemyIds);
   if (checked.problems.length > 0) {
     return {
       ok: false,
