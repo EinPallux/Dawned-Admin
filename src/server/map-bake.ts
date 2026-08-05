@@ -27,6 +27,7 @@ import {
   interactableSchema,
   placementsFileSchema,
   pointInPolygon,
+  nodePlacementSchema,
   poiSchema,
   propPlacementSchema,
   resolveScatter,
@@ -89,6 +90,8 @@ interface DraftBundle {
   /** Content ids that already exist, for reference checks. */
   knownEnemyIds: Set<string>;
   knownLootTableIds: Set<string>;
+  /** Published resource-node definition ids (P10) — placements must resolve. */
+  knownNodeIds: Set<string>;
   knownModelRefs: Set<string>;
 }
 
@@ -353,6 +356,25 @@ export const validateDraft = (bundle: DraftBundle): ValidationReport => {
     }
     if (!bundle.knownModelRefs.has(row.modelRef)) {
       problems.push(`${row.id}: model "${row.modelRef}" is not in the baked asset manifest`);
+    }
+  }
+
+  // --- resource nodes (P10) ------------------------------------------------
+  // A placement is thin: an id, a definition and a spot. Everything worth
+  // checking is therefore about the definition RESOLVING — a birch pointing at
+  // a node row someone renamed is a tree nobody can chop, and invisible in the
+  // viewport because the marker draws either way.
+  for (const object of nodes) {
+    const row = nodePlacementSchema.safeParse(object.def);
+    if (!row.success) {
+      problems.push(`node ${object.id}: ${row.error.issues[0]?.message ?? 'invalid'}`);
+      continue;
+    }
+    if (!bundle.knownNodeIds.has(row.data.nodeId)) {
+      problems.push(`node ${row.data.id}: "${row.data.nodeId}" is not a published resource node`);
+    }
+    if (sampler.heightAt(row.data.x, row.data.z) === null) {
+      problems.push(`node ${row.data.id} sits on a disabled chunk`);
     }
   }
 
@@ -658,6 +680,11 @@ const bakeInto = async (
     interactables: byLayer(bundle.objects, 'interactable').map((def) =>
       interactableSchema.parse(def),
     ),
+    // Nodes are PARSED into the baked shape, never cast. The scatter layer
+    // taught this lesson the expensive way (A2/A3-e): a draft row that merely
+    // looks right type-checks and then throws inside a `.strict()` schema half
+    // way through a publish, with nothing on screen to say why.
+    nodes: byLayer(bundle.objects, 'node').map((def) => nodePlacementSchema.parse(def)),
   });
   const placementsJson = JSON.stringify(placements);
   await writeFile(path.join(stageDir, 'placements.json'), placementsJson);

@@ -20,6 +20,7 @@ import { eq } from 'drizzle-orm';
 import {
   contentEnemies,
   contentLootTables,
+  contentResourceNodes,
   contentSpawners,
   mapEditorCollections,
   mapVersions,
@@ -527,20 +528,26 @@ export const registerMapRoutes = (app: FastifyInstance, deps: MapRouteDeps): voi
 
   // ----------------------------------------------------- validate / publish
   const gatherBundle = async (): Promise<DraftBundle> => {
-    const [chunks, objects, scatterSets, enemies, lootTables, models] = await Promise.all([
-      loadAllChunks(db),
-      listObjects(db),
-      readScatterSets(),
-      db
-        .select({ id: contentEnemies.id })
-        .from(contentEnemies)
-        .where(eq(contentEnemies.status, 'published')),
-      db
-        .select({ id: contentLootTables.id })
-        .from(contentLootTables)
-        .where(eq(contentLootTables.status, 'published')),
-      readAssetManifest(config),
-    ]);
+    const [chunks, objects, scatterSets, enemies, lootTables, nodeDefs, models] = await Promise.all(
+      [
+        loadAllChunks(db),
+        listObjects(db),
+        readScatterSets(),
+        db
+          .select({ id: contentEnemies.id })
+          .from(contentEnemies)
+          .where(eq(contentEnemies.status, 'published')),
+        db
+          .select({ id: contentLootTables.id })
+          .from(contentLootTables)
+          .where(eq(contentLootTables.status, 'published')),
+        db
+          .select({ id: contentResourceNodes.id })
+          .from(contentResourceNodes)
+          .where(eq(contentResourceNodes.status, 'published')),
+        readAssetManifest(config),
+      ],
+    );
     return {
       chunks,
       objects,
@@ -548,6 +555,7 @@ export const registerMapRoutes = (app: FastifyInstance, deps: MapRouteDeps): voi
       seaLevel: 0,
       knownEnemyIds: new Set(enemies.map((row) => row.id)),
       knownLootTableIds: new Set(lootTables.map((row) => row.id)),
+      knownNodeIds: new Set(nodeDefs.map((row) => row.id)),
       knownModelRefs: models,
     };
   };

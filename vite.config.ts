@@ -36,6 +36,22 @@ export default defineConfig({
   },
   server: {
     port: 5174,
+    /**
+     * Watch the linked `@dawned/shared` dist as well.
+     *
+     * Vite ignores everything under `node_modules/`, and `@dawned/shared` is a
+     * `file:` link INTO node_modules — so rebuilding it in the game repo left
+     * a dev server that had been running since before the rebuild serving the
+     * module text it read at boot. The symptom is identical to the stale
+     * pre-bundle `optimizeDeps.exclude` above already fixes ("does not provide
+     * an export named X" for a symbol that plainly exists in the file on
+     * disk), which is what makes it so easy to chase twice. Un-ignoring the
+     * package makes a game-side `pnpm --filter @dawned/shared build` reload the
+     * panel instead of requiring someone to know to restart it.
+     */
+    watch: {
+      ignored: ['!**/node_modules/@dawned/shared/**'],
+    },
     proxy: {
       '/admin/api': {
         target: 'http://127.0.0.1:8082',

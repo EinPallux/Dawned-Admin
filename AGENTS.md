@@ -56,6 +56,26 @@ truth).
   is the whole answer** and the page defaults it to 40, where a properly built level-12
   warrior measures 78 (an unspent one, 30). A guessed dps can be 3× off and send someone
   re-balancing a boss that was fine — worth a measured reference on the sim controls.
+  **A1-e — Professions is live** (2026-08-05, alongside game P10): Content → Professions
+  edits `content_resource_nodes` — what a birch, a vein, a herb patch or a shoal IS.
+  Definitions here, placements in the map editor's `node` layer, resolved against each
+  other at publish (the enemies/spawners split). The page's point is the **gathering
+  preview**, which runs the game's own `rollGather` at a chosen profession level: hold
+  time, profession XP with §1.3's back-country halving, proc chance, items per 100 gathers
+  with names resolved against the published catalogue, one node's yield per hour off its
+  own channel+respawn cycle, and gathers-to-the-next-gate. It previews the EDITOR BUFFER,
+  not the saved row — previewing the last save lies for exactly one save. Fishing nodes
+  also list each catch with the bar difficulty its rarity buys. Publish blocks on an
+  unpublished yield/proc item and on an unbaked model (both silent in the world); a
+  fishing spot with a depleted model warns. Map editor: kind picker in the Place tool,
+  thin placements, markers scaled by the placement and ringed at the DEFINITION's radius ×
+  that scale, bake refuses a placement whose definition is not published.
+  `node tools/smoke/professions-editor.mjs` checks the preview's ARITHMETIC against the
+  shared formulas in a browser. 196 tests green. **Trap closed:** a `@dawned/shared` rebuild used to need
+  the dev server restarted — Vite ignores `node_modules/` and the package is a `file:`
+  link into it, so the running server kept serving boot-time module text with the same
+  "does not provide an export named X" symptom `optimizeDeps.exclude` already fixed.
+  `server.watch` un-ignores the linked package now.
   **A2-a/A2-b — the map editor's foundations are in (2026-08-04).** Shared (game repo)
   owns brush math + deterministic scatter so preview, bake and server agree; draft
   tables are migration 0014. Here: chunk-granular draft CRUD behind a 45 s single-writer

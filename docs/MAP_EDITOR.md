@@ -92,8 +92,16 @@ checks — not a game client).
 
 - Place/edit **enemy spawners** (point/area; entries with weights/counts; rank override; respawn
   timer; camp-tag with visualized social-aggro link circles; patrol spline editor with per-node
-  wait times), **resource nodes** (profession/tier picker with model auto-suggest per zone tier,
-  respawn timer), **NPCs** (from content NPC list; routine waypoint editor with idle-clip picker).
+  wait times), **resource nodes**, **NPCs** (from content NPC list; routine waypoint editor with
+  idle-clip picker).
+- **As built (A1-e, 2026-08-05) — resource nodes.** The Place tool's `node` layer stamps a
+  placement of a definition authored in Content → Professions; the picker lists what is published
+  with its tier and profession. There is no per-placement profession/tier/respawn field and there
+  will not be: those live on the DEFINITION, so retuning a resource is one row rather than every
+  placement of it (the enemies/spawners split). A placement is id · nodeId · position · rotation ·
+  scale. Markers take the placement's scale and are ringed at the definition's radius × that
+  scale — the placement cannot answer its own size, so the viewport looks the definition up. A map
+  publish refuses a placement whose definition is not published.
 - Overlays: aggro radii, leash radii, patrol paths, spawn density heat (per-zone counts vs.
   CONTENT_0.1 targets — a live "content budget" meter per zone in the panel!).
 - "Simulate populate" preview: ghost-render one spawn resolution to eyeball camp compositions.
@@ -117,9 +125,11 @@ checks — not a game client).
   spawns with (`sqrt()` on the radius, or the shape bunches at the middle and a 20 m camp
   previews as a 6 m huddle). Deterministic from a seed, so changing a count shows the change
   rather than a fresh shuffle.
-- **Patrol splines are not implemented.** They need a `patrol` field on the spawner schema AND an
-  AI state that walks it; the game has neither, and an editor for a field nothing reads would
-  look finished and do nothing. Tracked as game-side work in the game repo's USER_QUESTIONS Q24.
+- **Patrol splines are out of 0.1.0** (owner decision, 2026-08-05 — USER_QUESTIONS Q24). They need
+  a `patrol` field on the spawner schema AND an AI state that walks it; the game has neither, and
+  an editor for a field nothing reads would look finished and do nothing. P9 was measured and
+  balanced against stationary camps. Post-0.1.0 this becomes a game-side slice (patrol state,
+  leash and social-aggro behaviour on a moving camp) with the editor half a day on top.
 
 ### 2.4 Zones & POI Mode
 
@@ -220,6 +230,13 @@ UI; typical incremental bake target <60 s (changed chunks only), full-map <10 mi
 - **Spawners are the one layer the GAME reads from the database, not from the bake**
   (`content_spawners`). Publishing the map republishes that layer — delete-then-insert in one
   transaction, so a camp deleted in the editor actually stops spawning.
+  **The map publish wins, and the map is where camps live** (owner decision, 2026-08-05 —
+  USER_QUESTIONS Q23). Camps are editable on both Content → Enemies → Spawners and here, and they
+  are the same rows; publishing the map overwrites a position moved on the Enemies page. That is
+  the accepted trade, because position is a spatial decision and the Enemies page cannot show you
+  the hill. The map editor's inspector edits the same full row (entries, counts, respawn timer),
+  so nothing is lost by doing all of a camp's authoring here; the Enemies page stays the surface
+  for the BESTIARY.
 - **Reachability is a real flood-fill**, not a heuristic: the bake builds the walkgrid, floods
   from the resolved spawn across walkable + water, and reports any POI, interactable or spawner
   further than 3 m from a reached cell. World metre → cell is FLOOR, matching the game's
@@ -329,7 +346,7 @@ game server, and is the phase's evidence rather than a checklist someone ticked:
 | scatter a forest           | the scatter brush, 13 077 density over the islet's chunks                |
 | a bandit camp              | 21 spawners placed, camp links and rings drawn at true size              |
 | …with a patrol             | **not authored** — no patrol field, no patrol AI state (game Q24)        |
-| ring it with T2 nodes      | **not possible yet** — no resource-node schema in shared (game Q25)      |
+| ring it with T2 nodes      | **possible since A1-e** (game P10-A schema) — awaiting authored T2 nodes |
 | zone it with custom fog    | a traced polygon, renamed, level-banded and given its own fog            |
 | …+ music                   | **not possible yet** — `zoneAmbienceSchema` has no audio fields (Q26)    |
 | chest + vista + shrine     | one of each, every row already passing `validateInteractable`            |
@@ -337,8 +354,10 @@ game server, and is the phase's evidence rather than a checklist someone ticked:
 | stand on it within minutes | the GAME's `/api/health` flips `dev-2 → map-<epoch>` with no restart     |
 | wipe just its props        | the zone-scoped "Clear layer…" removes 3 of 3, leaving the rest standing |
 
-The three "not possible yet" rows are recorded rather than faked; each carries a recommended
-default in the game repo's USER_QUESTIONS.md. Everything else is checked against artifacts, not
+The remaining "not possible yet" rows are recorded rather than faked; each carries a recommended
+default in the game repo's USER_QUESTIONS.md. The node row was one of them until game P10-A added
+the resource-node schema and A1-e turned the layer on; the scenario will stamp nodes for real once
+P10-E authors a T2 set to stamp. Everything else is checked against artifacts, not
 appearances: the islet's own chunk bin and the new zone are read back out of the published bake,
 and the map version is taken from the game server rather than from the panel that just wrote it.
 

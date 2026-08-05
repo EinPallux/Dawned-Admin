@@ -25,6 +25,7 @@ import {
   baseSplat,
   chunkIndexOf,
   interactableSchema,
+  nodePlacementSchema,
   poiSchema,
   propPlacementSchema,
   scatterSetSchema,
@@ -71,19 +72,18 @@ export const scatterPatchSchema = z
   })
   .strict();
 
-/** Resource node placement (P10 gathering; placed here so P12 can author it). */
-export const resourceNodeSchema = z
-  .object({
-    id: z.string().min(3).max(64),
-    profession: z.enum(['woodcutting', 'mining', 'herbalism', 'fishing']),
-    tier: z.number().int().min(1).max(5),
-    modelRef: z.string().min(1).max(64),
-    x: z.number(),
-    z: z.number(),
-    rotation: z.number().default(0),
-    respawnMs: z.number().int().min(1000).max(3_600_000).default(120_000),
-  })
-  .strict();
+/**
+ * Resource node placement (P10 gathering).
+ *
+ * This used to be an admin-local guess at the shape, written while the game had
+ * no node schema at all. It is now the GAME's `nodePlacementSchema` — the thing
+ * the bake actually carries — because an editor authoring its own idea of a row
+ * is exactly how a draft comes to validate cleanly and then fail to bake
+ * (A2/A3-e found that with scatter, once was enough).
+ *
+ * The placement is thin on purpose: WHAT a birch is lives on its definition in
+ * `content_resource_nodes`, and this says only which definition and where.
+ */
 
 /** NPC placement with a walk routine (P11 quests consume these). */
 export const npcPlacementSchema = z
@@ -110,7 +110,7 @@ export const layerSchemas = {
   prop: propPlacementSchema,
   scatter: scatterPatchSchema,
   spawner: spawnerDefSchema,
-  node: resourceNodeSchema,
+  node: nodePlacementSchema,
   npc: npcPlacementSchema,
   zone: zoneSchema,
   poi: poiSchema,

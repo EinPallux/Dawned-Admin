@@ -4,15 +4,15 @@
 > Same working agreements: phases close only on their DoD, statuses maintained in this table.
 > Sizes: S/M/L/XL relative effort.
 
-| Phase | Name                                          | Size | Starts after          | Status                                  |
-| ----- | --------------------------------------------- | ---- | --------------------- | --------------------------------------- |
-| A0    | Foundation: shell, auth, data link            | M    | game P1 (schema live) | ✅ done (2026-08-04)                    |
-| A1    | Content editors (items→curves) + publish v1   | L    | A0; serves P5–P8      | 🟨 abilities · progression · items live |
-| A2    | Map Editor I: viewport, terrain, publish/bake | XL   | game P2 formats       | ✅ done (2026-08-05)                    |
-| A3    | Map Editor II: placement, spawns, zones, POIs | XL   | A2 + game P9 systems  | ✅ built (2026-08-05) — owner run open  |
-| A4    | Quest & dialogue editor                       | M    | A1; serves P11        | 🔲                                      |
-| A5    | Live Ops: players, moderation, server, audit  | M    | game P13 ops API      | 🔲                                      |
-| A6    | Publish polish, validation depth, backups UI  | M    | with game P14         | 🔲                                      |
+| Phase | Name                                          | Size | Starts after          | Status                                                          |
+| ----- | --------------------------------------------- | ---- | --------------------- | --------------------------------------------------------------- |
+| A0    | Foundation: shell, auth, data link            | M    | game P1 (schema live) | ✅ done (2026-08-04)                                            |
+| A1    | Content editors (items→curves) + publish v1   | L    | A0; serves P5–P10     | 🟨 abilities · progression · items · enemies · professions live |
+| A2    | Map Editor I: viewport, terrain, publish/bake | XL   | game P2 formats       | ✅ done (2026-08-05)                                            |
+| A3    | Map Editor II: placement, spawns, zones, POIs | XL   | A2 + game P9 systems  | ✅ built (2026-08-05) — owner run open                          |
+| A4    | Quest & dialogue editor                       | M    | A1; serves P11        | 🔲                                                              |
+| A5    | Live Ops: players, moderation, server, audit  | M    | game P13 ops API      | 🔲                                                              |
+| A6    | Publish polish, validation depth, backups UI  | M    | with game P14         | 🔲                                                              |
 
 ## A0 — Foundation (M)
 
@@ -68,12 +68,13 @@ Publish History with revert; Asset Browser v1 (thumbnails via tools pipeline, li
 **DoD:** game P5 tunes Warrior ability numbers live through this panel; game P8's first 60 items
 are authored here start-to-finish (icons enforced unique); publish diff/revert demonstrated.
 
-**Status (2026-08-04): A1-a abilities, A1-b progression and A1-c items/loot/vendors are live;
-the P5 DoD hook is proven. The whole P8 catalogue — 62 items, 5 loot tables, 5 vendors and the
-enemy loot bindings — was authored and published through the A1-c surface. Game P0–P8 are all
-closed and owner-verified; **A1-d — the Enemies editor is live** (2026-08-04, alongside game P9):
-bestiary + spawners on one rail, with a time-to-kill simulator that runs the game's own ability
-selection rules.**
+**Status (2026-08-05): A1-a abilities, A1-b progression, A1-c items/loot/vendors, A1-d enemies
+and A1-e professions are live; the P5 DoD hook is proven. The whole P8 catalogue — 62 items, 5
+loot tables, 5 vendors and the enemy loot bindings — was authored and published through the A1-c
+surface, and the P9 bestiary through A1-d. Game P0–P9 are closed; **A1-e — the Professions
+editor is live** (2026-08-05, alongside game P10): resource-node definitions on their own publish
+rail with a gathering preview that rolls through the game's own `rollGather`, plus the map
+editor's `node` layer to place them.**
 
 - [x] Abilities editor (Content → Abilities): class-grouped list with binding
       badges + draft markers, quick tuning fields over a shared-schema-validated
@@ -111,6 +112,30 @@ selection rules.**
 - [ ] Remaining A1 editors (enemies, zones, NPCs…) land with their consuming
       game phases (P9 enemies…); the shared editor framework generalizes from
       the abilities/items surfaces as they arrive.
+
+- [x] **A1-e — the Professions editor + the map's node layer (2026-08-05, game P10).**
+      Content → Professions edits `content_resource_nodes`: profession-grouped list with tier and
+      gate badges, the def as shared-schema-validated JSON with Ctrl+S and prune-on-match, and a
+      **gathering preview** running the game's own `rollGather` — hold time, profession XP
+      (including §1.3's back-country halving), proc chance, items per 100 gathers with names
+      resolved against the published catalogue, one node's yield per hour off its own
+      channel+respawn cycle, and how many gathers walk the profession from this tier's gate to the
+      next. The preview takes the def from the EDITOR BUFFER, not the saved row, so a tuning loop
+      never lies for one save. Fishing nodes also list each catch with the bar difficulty its
+      rarity buys. Publish blocks on a yield/proc item that is not published and on a model that is
+      not in the baked manifest — both are silent in the world (a gather that hands over nothing, a
+      node standing invisible). The map editor's `node` layer places them: a kind picker in the
+      Place tool, thin placements (id · nodeId · position · rotation · scale), markers scaled by
+      the placement and ringed at the DEFINITION's radius × that scale, and a bake that refuses a
+      placement whose definition is not published. `node tools/smoke/professions-editor.mjs` drives
+      the page in a browser and checks the preview's arithmetic against the shared formulas rather
+      than only that a table appeared. **196 tests green.**
+      One trap closed while building it: rebuilding `@dawned/shared` in the game repo left a
+      running dev server serving the module text it read at boot, because Vite ignores everything
+      under `node_modules/` and the package is a `file:` link INTO it. The symptom is identical to
+      the stale pre-bundle `optimizeDeps.exclude` already fixed — "does not provide an export named
+      X" for a symbol plainly in the file — which is what makes it easy to chase twice. The dev
+      server watches the linked package now.
 
 ## A2 — Map Editor I: Terrain (XL) — ✅ done (2026-08-05)
 

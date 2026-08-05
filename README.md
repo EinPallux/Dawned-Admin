@@ -8,8 +8,9 @@ quests, vendors, zones, curves), and the live server (players, bans, broadcasts,
 > **Status (2026-08-05): A0 closed, A1 in progress, A2 and A3 built** — the panel shell, auth
 > against game accounts (gm/admin), the live dashboard and schema-driven World Settings shipped in
 > A0; A1 has the publish pipeline plus the **Abilities**, **Progression** (XP curve + skill trees),
-> **Items / Loot / Vendors** and **Enemies** (bestiary + spawners + a time-to-kill simulator)
-> editors live, and every ability, node and item the game runs was authored through them.
+> **Items / Loot / Vendors**, **Enemies** (bestiary + spawners + a time-to-kill simulator) and
+> **Professions** (resource nodes with a gathering preview that rolls through the game's own
+> roller) editors live, and every ability, node and item the game runs was authored through them.
 > Remaining A1 editors (zones, NPCs…) land with the game phases that consume them. **The Map
 > Editor is done**: open the island in 3D, sculpt and paint it, generate a new one, scatter a
 > forest, place props, camps, discovery points, chests and shrines, keep a group as a reusable
@@ -36,6 +37,8 @@ node tools/smoke/map-editor.mjs    # the map editor's tools, in a real browser
 node tools/smoke/map-scenario.mjs  # the MAP_EDITOR.md §7 run: sculpt an islet, publish
                                    # it, and check the GAME swapped onto it (needs the
                                    # game server on :8081 — it PUBLISHES a new map)
+node tools/smoke/professions-editor.mjs  # the Professions page: preview arithmetic against
+                                   # the shared formulas, publish gates, the map's node layer
 pnpm build && node tools/smoke/admin-prod-serve.mjs   # serve dist/ exactly like the VPS
                                    # (prefix strip + real CSP) — run after touching
                                    # serving, Caddy, CSP or the Vite build config

@@ -119,6 +119,31 @@ defaults it to 40. The measured number for a properly built level-12 warrior wit
 **78**, and an UNSPENT level 12 does 30 — so a preview run with a guessed dps can be off by
 3× and send someone re-balancing a boss that was fine. Worth surfacing on the sim controls
 (a measured reference row, or level-derived defaults) next time the Enemies page is touched.
+**A1-e — the Professions editor is live** (2026-08-05, alongside game P10): Content →
+Professions edits `content_resource_nodes` — what a birch, a copper vein, a herb patch or a
+shoal IS. Same definition/placement split enemies use: this page owns definitions, the map
+editor's `node` layer owns where they stand, and publish resolves one against the other. The
+page's point is the **gathering preview**, which runs the game's own `rollGather`: hold time,
+profession XP (with §1.3's back-country halving), proc chance, items per 100 gathers with
+names resolved against the published catalogue, one node's yield per hour off its own
+channel+respawn cycle, and how many gathers walk the profession from this tier's gate to the
+next. It previews the EDITOR BUFFER rather than the saved row — a preview of the last save
+lies for exactly one save, which is how a number gets halved twice. Fishing nodes list each
+catch with the bar difficulty its rarity buys (`fishingDifficulty`), because a rare nobody can
+land is invisible in the JSON. Publish blocks on a yield/proc item that is not published and
+on a model that is not in the baked manifest — both are silent in the world (a gather that
+hands over nothing, a node standing invisible); a fishing spot with a depleted model warns.
+The map editor's `node` layer landed with it: a kind picker in the Place tool, thin placements
+(id · nodeId · position · rotation · scale), markers scaled by the placement and ringed at the
+DEFINITION's radius × that scale (the placement cannot answer its own size), and a bake that
+refuses a placement whose definition is not published. `node tools/smoke/professions-editor.mjs`
+drives it in a browser and checks the preview's ARITHMETIC against the shared formulas, not
+just that a table appeared. 196 tests green. **One trap closed with it:** rebuilding `@dawned/shared` in the
+game repo left a running dev server serving the module text it read at boot — Vite ignores
+everything under `node_modules/` and the package is a `file:` link into it — with the exact
+symptom `optimizeDeps.exclude` already fixed ("does not provide an export named X" for a
+symbol plainly in the file), which is what makes it easy to chase twice. `server.watch` now
+un-ignores the linked package.
 **A2-a/A2-b — the map editor's foundations are in** (2026-08-04): the game repo's
 `@dawned/shared` now owns brush math and deterministic scatter (so the editor preview, the
 bake and the server cannot disagree), plus the draft tables (migration 0014). Here: chunk-
