@@ -89,6 +89,7 @@ const bundle = (over: Partial<DraftBundle> = {}): DraftBundle => ({
   seaLevel: 0,
   knownEnemyIds: new Set(['enemy_shore_glub']),
   knownLootTableIds: new Set(['loot_weald_gear']),
+  knownNodeIds: new Set(['node_woodcutting_birch']),
   knownModelRefs: new Set(['props_chest_a', 'nature_rock_a']),
   ...over,
 });

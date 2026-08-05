@@ -84,6 +84,18 @@ const num = (value: unknown, fallback: number): number =>
   typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 
 /**
+ * What a placement cannot answer about itself.
+ *
+ * Only resource nodes need this so far: their footprint is a property of the
+ * DEFINITION (`content_resource_nodes.radius`), not of the thin placement row,
+ * so drawing one at true size means looking the definition up.
+ */
+export interface PlacementContext {
+  /** Node definition id → radius in metres. */
+  nodeRadii?: ReadonlyMap<string, number>;
+}
+
+/**
  * Build the viewport representation of one object.
  *
  * `groundAt` answers null for terrain that is not loaded — and the object is
@@ -95,6 +107,7 @@ export const buildObjectView = (
   object: PlacedObject,
   groundAt: (x: number, z: number) => number | null,
   selected: boolean,
+  context: PlacementContext = {},
 ): THREE.Object3D | null => {
   if (object.layer === 'zone') return buildZoneView(object, groundAt, selected);
   if (object.layer === 'scatter') return buildScatterView(object, groundAt);
@@ -112,7 +125,10 @@ export const buildObjectView = (
   // The marker. Props get their authored scale; everything else gets a size
   // that reads at map scale, because a spawner has no model to be true to.
   const marker = new THREE.Mesh(boxGeometry, solidMaterial(object.layer, selected));
-  const scale = object.layer === 'prop' ? num(object.def.scale, 1) : 1;
+  // Props and resource nodes are the two layers whose placement carries its own
+  // scale (a sapling and an old oak off one definition), so a marker that
+  // ignored it would draw a forest of identical boxes.
+  const scale = object.layer === 'prop' || object.layer === 'node' ? num(object.def.scale, 1) : 1;
   // The authored proportions, kept separately: the viewport multiplies these by
   // a camera-distance factor so a marker stays clickable from map height, and
   // overwriting the base would turn every marker into a cube.
@@ -123,7 +139,7 @@ export const buildObjectView = (
   group.add(marker);
 
   // Rings: the numbers the owner is actually choosing.
-  const radius = ringRadiusFor(object);
+  const radius = ringRadiusFor(object, context);
   if (radius > 0) {
     const ring = new THREE.Line(ringGeometry, lineMaterial(object.layer, selected));
     ring.scale.set(radius, 1, radius);
@@ -134,8 +150,14 @@ export const buildObjectView = (
   return group;
 };
 
-/** Which radius, if any, this object wants drawn on the ground. */
-const ringRadiusFor = (object: PlacedObject): number => {
+/**
+ * Which radius, if any, this object wants drawn on the ground.
+ *
+ * Exported for the tests: it is the one part of drawing a marker that is a
+ * DECISION rather than geometry, and a ring at the wrong size is worse than no
+ * ring — the owner places against it.
+ */
+export const ringRadiusFor = (object: PlacedObject, context: PlacementContext = {}): number => {
   switch (object.layer) {
     case 'spawner':
       return num(object.def.radius, 0);
@@ -143,6 +165,16 @@ const ringRadiusFor = (object: PlacedObject): number => {
       return num(object.def.radius, 12);
     case 'prop':
       return object.def.solid === true ? num(object.def.radius, 0) : 0;
+    // A resource node's footprint lives on its DEFINITION — the placement is
+    // deliberately thin (id, position, rotation, scale). Without the lookup a
+    // node would be the one placed thing with no true size on screen, and
+    // "does this vein fit between those rocks" is exactly the question the
+    // editor exists to answer before someone walks there.
+    case 'node': {
+      const nodeId = typeof object.def.nodeId === 'string' ? object.def.nodeId : '';
+      const base = context.nodeRadii?.get(nodeId);
+      return base === undefined ? 0 : base * num(object.def.scale, 1);
+    }
     default:
       return 0;
   }

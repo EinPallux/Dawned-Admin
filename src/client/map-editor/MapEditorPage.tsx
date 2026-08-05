@@ -203,6 +203,8 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
   const [spawnOverlay, setSpawnOverlay] = useState({ aggro: false, leash: false, camps: false });
   const [simulateSeed, setSimulateSeed] = useState<number | null>(null);
   const [interactKind, setInteractKind] = useState<InteractableKind>('chest');
+  /** Which resource-node definition the Place tool stamps (P10-D). */
+  const [nodeKind, setNodeKind] = useState('');
   const [showTravel, setShowTravel] = useState(false);
   /** Bumped when a zone polygon changes, to rebuild the handles from the row. */
   const [handleEpoch, setHandleEpoch] = useState(0);
@@ -216,6 +218,7 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
   const paintRef = useRef(paint);
   const placeLayerRef = useRef(placeLayer);
   const interactKindRef = useRef(interactKind);
+  const nodeKindRef = useRef(nodeKind);
   const scatterBrushRef = useRef(scatterBrush);
   const keymapRef = useRef(keymap);
   const selectedRef = useRef<ReadonlySet<string>>(selectedIds);
@@ -534,19 +537,66 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
     queryKey: ['map-placement-refs'],
     staleTime: 60_000,
     queryFn: async () => {
-      const [models, enemies, loot] = await Promise.all([
+      const [models, enemies, loot, nodes] = await Promise.all([
         apiGet<{ models: string[] }>('/map/models').catch(() => ({ models: [] })),
         apiGet<{ enemies: { id: string }[] }>('/enemies').catch(() => ({ enemies: [] })),
         apiGet<{ tables: { id: string }[] }>('/loot-tables').catch(() => ({ tables: [] })),
+        apiGet<{ nodes: { id: string }[] }>('/resource-nodes').catch(() => ({ nodes: [] })),
       ]);
       return {
         modelRef: models.models[0] ?? '',
         models: models.models,
         enemyId: enemies.enemies[0]?.id ?? '',
         lootTableId: loot.tables[0]?.id ?? '',
+        nodeIds: nodes.nodes.map((row) => row.id),
       };
     },
   });
+
+  /**
+   * Published resource-node definitions, for the Place tool's picker (P10-D).
+   *
+   * Separate from `placementRefs` because the picker needs names and tiers to
+   * be readable — "Birch · T1 woodcutting" rather than `node_woodcutting_birch`
+   * — and a placement only stores the id.
+   */
+  const nodeDefs = useQuery({
+    queryKey: ['map-node-defs'],
+    staleTime: 60_000,
+    queryFn: () =>
+      apiGet<{
+        nodes: {
+          id: string;
+          name: string;
+          tier: number;
+          profession: string;
+          def: { radius: number };
+        }[];
+      }>('/resource-nodes').catch(() => ({ nodes: [] })),
+  });
+  const nodeChoices = useMemo(() => nodeDefs.data?.nodes ?? [], [nodeDefs.data]);
+  /**
+   * Footprints for the viewport. A node placement is deliberately thin, so the
+   * only place its true size exists is the definition — without this a node is
+   * the one placed thing drawn with no ring.
+   */
+  const nodeRadii = useMemo(
+    () => new Map(nodeChoices.map((node) => [node.id, node.def.radius])),
+    [nodeChoices],
+  );
+  /**
+   * Which definition the Place tool stamps. DERIVED rather than defaulted in an
+   * effect: the first published node is a fallback, not a decision, and writing
+   * it into state on arrival is a cascading render for something the render can
+   * simply compute.
+   */
+  const activeNodeKind = nodeKind || (nodeChoices[0]?.id ?? '');
+  // Its own sync rather than a line in the big ref effect above: the derived
+  // value depends on a query declared further down the component, so it does
+  // not exist yet up there.
+  useEffect(() => {
+    nodeKindRef.current = activeNodeKind;
+  }, [activeNodeKind]);
 
   // --- scatter sets + editor collections (A3-d) -----------------------------
 
@@ -659,8 +709,15 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
       mintId(layer, point.x, point.z, taken),
       point.x,
       point.z,
-      placementRefs.data ?? { modelRef: '', models: [], enemyId: '', lootTableId: '' },
+      placementRefs.data ?? {
+        modelRef: '',
+        models: [],
+        enemyId: '',
+        lootTableId: '',
+        nodeIds: [],
+      },
       kind,
+      nodeKindRef.current,
     );
     if ('error' in built) {
       say(built.error);
@@ -672,7 +729,9 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
       say(
         layer === 'interactable'
           ? `Placed ${kind.replace('_', ' ')}.`
-          : `Placed ${LAYER_LABEL[layer] ?? layer}.`,
+          : layer === 'node'
+            ? `Placed ${nodeKindRef.current || 'resource node'}.`
+            : `Placed ${LAYER_LABEL[layer] ?? layer}.`,
       );
     }
   };
@@ -1083,10 +1142,11 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
         object,
         (x, z) => session.store.heightAt(x, z),
         selectedIds.has(object.id),
+        { nodeRadii },
       );
       session.viewport.setObjectView(object.id, view);
     }
-  }, [objects, selectedIds, hiddenLayers, saveState]);
+  }, [objects, selectedIds, hiddenLayers, saveState, nodeRadii]);
 
   // --- spawns mode (A3-b) ---------------------------------------------------
   //
@@ -1749,6 +1809,26 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
                   ))}
                 </select>
               )}
+              {placeLayer === 'node' &&
+                (nodeChoices.length === 0 ? (
+                  <span className="me-warn">
+                    No published resource nodes — author one in Content → Professions first.
+                  </span>
+                ) : (
+                  <select
+                    className="ws-input"
+                    value={activeNodeKind}
+                    onChange={(event) => {
+                      setNodeKind(event.target.value);
+                    }}
+                  >
+                    {nodeChoices.map((node) => (
+                      <option key={node.id} value={node.id}>
+                        {node.name} · T{node.tier} {node.profession}
+                      </option>
+                    ))}
+                  </select>
+                ))}
               <span className="me-hint">
                 Click the ground to place. Click a marker to select it instead.
               </span>

@@ -14,7 +14,7 @@
  * the choice is the next thing in front of them.
  */
 
-export const PLACEABLE_LAYERS = ['prop', 'spawner', 'poi', 'interactable'] as const;
+export const PLACEABLE_LAYERS = ['prop', 'spawner', 'node', 'poi', 'interactable'] as const;
 export type PlaceableLayer = (typeof PLACEABLE_LAYERS)[number];
 
 /**
@@ -53,6 +53,8 @@ export interface PlacementDefaults {
   enemyId: string;
   /** First published loot table, for a new chest. */
   lootTableId: string;
+  /** Published resource-node definitions (P10), for the node layer's picker. */
+  nodeIds: readonly string[];
 }
 
 /**
@@ -67,6 +69,8 @@ export const newObjectDef = (
   z: number,
   defaults: PlacementDefaults,
   kind: InteractableKind = 'chest',
+  /** Which resource-node definition to stamp (node layer only). */
+  nodeId = defaults.nodeIds[0] ?? '',
 ): { def: Record<string, unknown> } | { error: string } => {
   const at = { x: Number(x.toFixed(2)), z: Number(z.toFixed(2)) };
   switch (layer) {
@@ -89,6 +93,12 @@ export const newObjectDef = (
       };
     case 'poi':
       return { def: { id, name: 'New point', kind: 'landmark', ...at, radius: 12, xpBasis: 250 } };
+    case 'node':
+      // A node placement is an id, a definition and a spot — everything about
+      // WHAT it is lives on the definition, so the only real decision here is
+      // which one, and the picker in the tool bar has already made it.
+      if (!nodeId) return { error: 'no published resource nodes — author one in Professions' };
+      return { def: { id, nodeId, ...at, rotation: 0, scale: 1 } };
     case 'interactable':
       return newInteractable(kind, id, at, defaults);
     default:

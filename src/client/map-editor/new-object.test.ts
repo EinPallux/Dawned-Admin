@@ -10,6 +10,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   interactableSchema,
+  nodePlacementSchema,
   poiSchema,
   propPlacementSchema,
   spawnerDefSchema,
@@ -21,6 +22,7 @@ const defaults: PlacementDefaults = {
   modelRef: 'world_nature_tree_1_a_color1',
   models: ['world_nature_rock_1_a_color1', 'world_nature_tree_1_a_color1'],
   enemyId: 'enemy_glub',
+  nodeIds: ['node_woodcutting_birch'],
   lootTableId: 'loot_shore_common',
 };
 
@@ -46,6 +48,24 @@ describe('a new row is valid the moment it is stamped', () => {
     expect(() =>
       poiSchema.parse(def(newObjectDef('poi', 'poi_1', 10, -20, defaults))),
     ).not.toThrow();
+  });
+
+  /**
+   * A resource node's placement is thin on purpose — the tool bar's picker has
+   * already made the only decision, and it must reach the row. A stamp that
+   * dropped `nodeId` would parse fine as a shape and place nothing in the game.
+   */
+  it('resource node, carrying the kind the picker chose', () => {
+    const row = def(
+      newObjectDef('node', 'node_1', 10, -20, defaults, undefined, 'node_mining_copper'),
+    );
+    expect(() => nodePlacementSchema.parse(row)).not.toThrow();
+    expect(row.nodeId).toBe('node_mining_copper');
+  });
+
+  it('resource node, defaulting to the first published definition', () => {
+    const row = def(newObjectDef('node', 'node_1', 10, -20, defaults));
+    expect(row.nodeId).toBe(defaults.nodeIds[0]);
   });
 
   it('every interactable kind — schema AND the per-kind rules', () => {
@@ -110,5 +130,11 @@ describe('refusals say what is missing', () => {
     expect(
       refusal(newObjectDef('spawner', 'spawner_1', 0, 0, { ...defaults, enemyId: '' })),
     ).toMatch(/enemies/);
+  });
+
+  it('a resource node with nothing published to place', () => {
+    expect(refusal(newObjectDef('node', 'node_1', 0, 0, { ...defaults, nodeIds: [] }))).toMatch(
+      /resource nodes/,
+    );
   });
 });

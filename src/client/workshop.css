@@ -938,6 +938,55 @@ code,
   font-size: 10px;
 }
 
+/* --- professions editor (A1-e) -------------------------------------------- */
+/* The gate note sits on the sim line and must not push the button off it. */
+.professions-gate-note {
+  margin: 0 auto 0 0;
+  align-self: center;
+}
+/* Yield/bar rows: the label owns the slack so the number sits beside its unit
+   rather than a hand-span away from it (the enemies rotation table stretches
+   its middle column, which reads as two unrelated tables side by side). */
+.professions-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 6px;
+  font-size: 11px;
+}
+.professions-table td {
+  padding: 2px 0;
+  border-bottom: 1px solid var(--hairline);
+  white-space: nowrap;
+}
+.professions-table td:first-child {
+  width: 100%;
+  padding-right: 12px;
+}
+.professions-table td + td {
+  text-align: right;
+  padding-left: 10px;
+  color: var(--text-bright);
+}
+.professions-table td:last-child {
+  color: var(--text-dim);
+}
+/* A count that is plainly a count — "Woodcutting 1" reads as a name. */
+.professions-group-count {
+  margin-left: 6px;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+.professions-fishing-head {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--hairline);
+}
+.professions-publish-note {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--hairline);
+}
+
 /* --- Map Editor (A2) ------------------------------------------------------
  * Full-bleed: the viewport is the page. Chrome is a 40 px toolbar, a 300 px
  * inspector rail and a 26 px status bar — everything else is world. Same

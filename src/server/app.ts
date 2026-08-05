@@ -26,6 +26,7 @@ import {
   abilityDefSchema,
   enemyDefSchema,
   itemDefSchema,
+  resourceNodeDefSchema,
   lootTableDefSchema,
   skillNodeDefSchema,
   spawnerDefSchema,
@@ -71,6 +72,14 @@ import {
   saveVendorDraft,
   type ItemTableName,
 } from './items.js';
+import {
+  diffResourceNodes,
+  discardResourceNodeDraft,
+  listResourceNodes,
+  previewGathering,
+  publishResourceNodes,
+  saveResourceNodeDraft,
+} from './professions.js';
 import {
   diffEnemies,
   discardEnemyDraft,
@@ -705,6 +714,107 @@ export const buildApp = async (config: Config): Promise<App> => {
     await audit({
       actorAccountId: admin.accountId,
       action: 'items.publish',
+      args: { published: result.published, problems: result.problems },
+      result: result.ok ? 'ok' : 'denied',
+    });
+    if (!result.ok) return reply.code(422).send(result);
+    return result;
+  });
+
+  // --- professions: resource nodes (game P10) -------------------------------
+  /**
+   * The gathering half of the content surface. Nodes publish on their OWN rail
+   * rather than with items: a node references items, but items never reference
+   * a node, so shipping them apart cannot strand a ref in the direction that
+   * matters. The publish still cross-checks every yield against the published
+   * catalogue, which is what actually keeps the two honest.
+   */
+  app.get('/api/resource-nodes', async (request, reply) => {
+    if (!requireRole(request, reply, 'gm')) return;
+    return { nodes: await listResourceNodes(dbHandle.db) };
+  });
+
+  app.put('/api/resource-nodes/:id', async (request, reply) => {
+    const admin = requireRole(request, reply, 'admin');
+    if (!admin) return;
+    const { id } = request.params as { id: string };
+    const parsed = resourceNodeDefSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        error: 'validation',
+        message: parsed.error.issues
+          .map((issue) => `${issue.path.join('.') || '<root>'}: ${issue.message}`)
+          .join('; '),
+      });
+    }
+    if (parsed.data.id !== id) {
+      return reply.code(400).send({ error: 'bad_request', message: 'Body id must match the URL.' });
+    }
+    const result = await saveResourceNodeDraft(dbHandle.db, parsed.data, admin.accountId);
+    await audit({
+      actorAccountId: admin.accountId,
+      action: 'resource_nodes.save_draft',
+      args: { id, pruned: result.pruned },
+      result: 'ok',
+    });
+    return { ok: true, ...result };
+  });
+
+  app.delete('/api/resource-nodes/:id/draft', async (request, reply) => {
+    const admin = requireRole(request, reply, 'admin');
+    if (!admin) return;
+    const { id } = request.params as { id: string };
+    const removed = await discardResourceNodeDraft(dbHandle.db, id);
+    if (removed) {
+      await audit({
+        actorAccountId: admin.accountId,
+        action: 'resource_nodes.discard_draft',
+        args: { id },
+        result: 'ok',
+      });
+    }
+    return { removed };
+  });
+
+  /**
+   * Preview a node's gathering. Runs the GAME's own `rollGather`, so what this
+   * shows is what the server will drop — the same argument the loot simulator
+   * makes, and the reason neither reimplements a roll.
+   *
+   * Takes the def in the BODY rather than reading a saved row, so the preview
+   * answers for what is in the editor right now. A preview of the last SAVED
+   * version is a tuning loop that lies for one save: you halve a yield, the
+   * numbers do not move, and you halve it again.
+   */
+  app.post('/api/resource-nodes/preview', async (request, reply) => {
+    if (!requireRole(request, reply, 'gm')) return;
+    const body = request.body as { def?: unknown; profLevel?: unknown };
+    const parsed = resourceNodeDefSchema.safeParse(body.def);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        error: 'validation',
+        message: parsed.error.issues
+          .map((issue) => `${issue.path.join('.') || '<root>'}: ${issue.message}`)
+          .join('; '),
+      });
+    }
+    const level = Math.min(30, Math.max(1, Number(body.profLevel ?? 1) || 1));
+    const items = new Map((await listItems(dbHandle.db)).map((row) => [row.id, row.def]));
+    return previewGathering(parsed.data, level, items);
+  });
+
+  app.get('/api/publish/resource-nodes/diff', async (request, reply) => {
+    if (!requireRole(request, reply, 'gm')) return;
+    return diffResourceNodes(dbHandle.db);
+  });
+
+  app.post('/api/publish/resource-nodes', async (request, reply) => {
+    const admin = requireRole(request, reply, 'admin');
+    if (!admin) return;
+    const result = await publishResourceNodes(dbHandle.db, config);
+    await audit({
+      actorAccountId: admin.accountId,
+      action: 'resource_nodes.publish',
       args: { published: result.published, problems: result.problems },
       result: result.ok ? 'ok' : 'denied',
     });

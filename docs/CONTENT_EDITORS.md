@@ -131,3 +131,38 @@ versus the spec above.
   abilities, branch cell collisions, one capstone per branch) and ends in the same hot
   reload. The §4 lattice "tree preview" upgrades when the game client's tree UI (P7-D)
   settles the visual language.
+- **Items / Loot / Vendors (2026-08-04, game P8):** three tabs on one publish rail, per §2 and
+  §5. Items carry a budget meter against the shared ITEMS_LOOT §2 formulas with ƒ-suggests for
+  value, weapon band and stat rescale, plus a live duplicate-icon warning; loot tables get a
+  1 000-roll simulator driven through the SAME shared roller the server drops with (killer
+  level and rolls-per-kill adjustable, `nothing` shown as its own share); vendors price their
+  stock off the shared value/sell formulas. Publish cross-checks icon uniqueness, item/table/
+  vendor ref resolution, loot cycles and the tables live enemies still roll; budget deviations
+  are advisory warnings, not blocks.
+- **Enemies + Spawners (2026-08-04, game P9):** §3's editor, both tables on one rail because a
+  spawner without its enemy is a camp that silently never populates. Level-banded bestiary with
+  rank badges, and the **time-to-kill simulator** running the game's own
+  `selectableEnemyAbilities` — so the rotation previewed is the rotation fought. It answers both
+  directions of the trade, hides abilities unusable at the tested range, sees a boss's whole
+  unlocked kit rather than phase 0, and names the COMBAT.md §12 60–120 s window when a fight
+  misses it. Publish blocks on unresolvable spawner refs and unpublished loot; judgement calls
+  (a boss with no phases, a `ranged` row with nothing ranged) warn.
+- **Professions / resource nodes (2026-08-05, game P10):** Content → Professions edits
+  `content_resource_nodes` — what a birch, a vein, a herb patch or a shoal IS. The
+  definition/placement split matches enemies/spawners: this page owns definitions, the map
+  editor's `node` layer owns where they stand, and the two resolve against each other at
+  publish. The list groups by profession with tier and gate badges; the def edits as
+  shared-schema-validated JSON (`resourceNodeDefSchema`) with Ctrl+S and prune-on-match.
+  The **gathering preview** is the point of the page: 1 000 rolls through the game's own
+  `rollGather` at a chosen profession level, reporting the hold time, profession XP (including
+  §1.3's back-country halving), proc chance, expected items per 100 gathers with names resolved
+  against the published catalogue, one node's yield per hour off its own channel+respawn cycle,
+  and how many gathers of it walk the profession from this tier's gate to the next. It takes the
+  def from the EDITOR BUFFER rather than the saved row, so a tuning loop never lies for one
+  save. Fishing nodes get an extra block: each catch with the bar difficulty its rarity buys
+  (`fishingDifficulty`), because a legendary on a low-tier shoal is a fish nobody lands and that
+  is invisible in the JSON. Publish blocks on a yield or proc whose item is not published and on
+  a model that is not in the baked manifest (both are silent failures in the world — a gather
+  that hands over nothing, a node standing invisible); a fishing spot with a depleted model
+  warns. Node PLACEMENTS publish with the map, not here.
+  Browser run: `node tools/smoke/professions-editor.mjs`.

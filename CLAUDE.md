@@ -119,6 +119,53 @@ defaults it to 40. The measured number for a properly built level-12 warrior wit
 **78**, and an UNSPENT level 12 does 30 — so a preview run with a guessed dps can be off by
 3× and send someone re-balancing a boss that was fine. Worth surfacing on the sim controls
 (a measured reference row, or level-derived defaults) next time the Enemies page is touched.
+**A1-e — the Professions editor is live** (2026-08-05, alongside game P10): Content →
+Professions edits `content_resource_nodes` — what a birch, a copper vein, a herb patch or a
+shoal IS. Same definition/placement split enemies use: this page owns definitions, the map
+editor's `node` layer owns where they stand, and publish resolves one against the other. The
+page's point is the **gathering preview**, which runs the game's own `rollGather`: hold time,
+profession XP (with §1.3's back-country halving), proc chance, items per 100 gathers with
+names resolved against the published catalogue, one node's yield per hour off its own
+channel+respawn cycle, and how many gathers walk the profession from this tier's gate to the
+next. It previews the EDITOR BUFFER rather than the saved row — a preview of the last save
+lies for exactly one save, which is how a number gets halved twice. Fishing nodes list each
+catch with the bar difficulty its rarity buys (`fishingDifficulty`), because a rare nobody can
+land is invisible in the JSON. Publish blocks on a yield/proc item that is not published and
+on a model that is not in the baked manifest — both are silent in the world (a gather that
+hands over nothing, a node standing invisible); a fishing spot with a depleted model warns.
+The map editor's `node` layer landed with it: a kind picker in the Place tool, thin placements
+(id · nodeId · position · rotation · scale), markers scaled by the placement and ringed at the
+DEFINITION's radius × that scale (the placement cannot answer its own size), and a bake that
+refuses a placement whose definition is not published. `node tools/smoke/professions-editor.mjs`
+drives it in a browser and checks the preview's ARITHMETIC against the shared formulas, not
+just that a table appeared. 196 tests green. **One trap closed with it:** rebuilding `@dawned/shared` in the
+game repo left a running dev server serving the module text it read at boot — Vite ignores
+everything under `node_modules/` and the package is a `file:` link into it — with the exact
+symptom `optimizeDeps.exclude` already fixed ("does not provide an export named X" for a
+symbol plainly in the file), which is what makes it easy to chase twice. `server.watch` now
+un-ignores the linked package.
+**Game P10-E ran the whole gathering catalogue through this panel (2026-08-05)** —
+`tools/content/author-nodes.mjs`: 42 material/gem/proc/fish items, all 21 resource-node
+definitions and 65 T1–T2 placements, each published on its own rail, ending with a map
+publish the game hot-swapped onto. That is the Professions editor's first real load, and it
+held. Two things the run taught the tooling: a content script must be **safe to re-run** (an
+unchanged draft prunes itself, so "nothing to publish" is success, not failure — otherwise
+fixing one placement means re-authoring everything), and a placement pass must **clear its
+layer first**, because overwriting by id leaves the previous run's rows standing wherever they
+were. Moving a cluster fifty metres left two trees at the old spot: published, invisible in
+the diff, findable only by walking there.
+
+**Game P10-F is built (2026-08-05) — nothing here needed changing, but one shared number
+moved.** `MARKER_MAX_SPEED` in `@dawned/shared` went 1.5 → 0.9: measured against a live
+server, the reel bar could not be won at all through one tick of command delay (the crude
+strategy the game's own tests use lands 20/20 offline and landed 0/12 on the wire), because a
+delayed tick at 1.5/s carried the marker half a catch zone. Rebuild `@dawned/shared` in the
+game repo and re-run `pnpm install` here, as after any game-side shared change. Nothing in the
+Professions editor reads it today — but the moment this panel grows a fishing PREVIEW the way
+the Enemies page has a TTK simulator, it has to run the shared reel rather than a copy, for
+exactly the reason the TTK sim runs `selectableEnemyAbilities`. The open feel question is the
+game repo's Q27 (how hard a T5 legendary should be); the whole ladder is two numbers in
+`fishingDifficulty`, so it is a natural candidate for a tuning surface here later.
 **A2-a/A2-b — the map editor's foundations are in** (2026-08-04): the game repo's
 `@dawned/shared` now owns brush math and deterministic scatter (so the editor preview, the
 bake and the server cannot disagree), plus the draft tables (migration 0014). Here: chunk-

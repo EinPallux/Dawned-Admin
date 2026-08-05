@@ -5,6 +5,62 @@ versions track the game's release trains (0.1.0 = tooling that shipped Dawned 0.
 
 ## [Unreleased]
 
+### Changed — pull in the game's shared rebuild (2026-08-05, game P10-F)
+
+- `@dawned/shared` moved `MARKER_MAX_SPEED` (the fishing marker's top speed) from 1.5 to 0.9,
+  because the reel bar turned out to be unwinnable through one tick of command delay. No panel
+  code changes, but rebuild shared in the game checkout and re-run `pnpm install` here, as after
+  any game-side shared change.
+
+### Added — the gathering catalogue was authored here (2026-08-05, game P10-E)
+
+- **`tools/content/author-nodes.mjs`** puts the whole P10 catalogue through the panel: 42
+  material/gem/proc/fish items, all 21 resource-node definitions, and 65 T1–T2 placements into
+  the map editor's node layer, then publishes each on its own rail. Safe to re-run — an
+  unchanged draft prunes itself and "nothing to publish" is treated as success rather than
+  failure, so fixing one placement does not mean re-authoring the catalogue.
+- The placement pass **checks the ground before planting**. Cluster entries are hints, not
+  coordinates: it searches outward for terrain that suits the cluster (dry for a tree, wet for a
+  shoal), drops members the terrain still refuses, and refuses loudly if nothing within 90 m
+  works. The first pass without it put every fishing cluster on dry land and planted zero shoals.
+- It **clears the node layer before writing**, because a re-run that only overwrites leaves the
+  previous run's placements standing wherever they were — two trees were left behind at old
+  coordinates, published, invisible in the diff.
+
+### Added — the Professions editor (2026-08-05, A1-e, alongside game P10)
+
+- **Content → Professions** edits what a birch, a copper vein, a herb patch or a shoal IS.
+  Grouped by profession with tier and gate badges, the definition edits as JSON validated by the
+  same schema the game boots with, Ctrl+S saves a draft and a draft identical to what is live
+  prunes itself.
+- **A gathering preview that runs the game's own roller.** Pick a profession level and it reports
+  the hold time, the profession XP (halved when the tier is back country, which is a design rule
+  and easy to lose), the proc chance, what a hundred gathers actually yield with item names
+  resolved against the published catalogue, what one node gives per hour off its own hold +
+  respawn cycle, and roughly how many gathers of it walk the profession from this tier's gate to
+  the next. It previews **what is in the editor**, not what was last saved — a preview of the
+  saved row lies for exactly one save, which is how you halve a number twice.
+- **Fishing nodes show the bar.** Every catch listed with the drift speed and marker width its
+  rarity buys, so a rare that nobody can land is visible before it is placed.
+- **Publish refuses what would be silent in the world**: a yield or rare drop whose item is not
+  published (the player holds for three seconds and receives nothing) and a model that was never
+  baked (the node stands there invisible). A fishing spot with a "depleted" model warns —
+  ripples leave no stump.
+- **The map editor can place them.** The Place tool grows a resource-node layer with a kind
+  picker reading what Professions has; markers take the placement's scale and are ringed at the
+  DEFINITION's radius, because a node placement is deliberately thin and its true size lives on
+  the definition. A map publish refuses a placement whose definition is not published.
+- **`node tools/smoke/professions-editor.mjs`** drives the page in a real browser and checks the
+  preview's arithmetic against the shared formulas — not merely that a table appeared.
+
+### Fixed
+
+- **A rebuild of `@dawned/shared` no longer needs the dev server restarted.** Vite ignores
+  everything under `node_modules/`, and the game's shared package is linked into it, so a running
+  panel kept serving the module text it read at boot and reported brand-new exports as missing —
+  the same symptom as the stale pre-bundle that was fixed earlier, which is what made it easy to
+  chase twice. The dev server watches the linked package now.
+
 ### Fixed — publishing a map you had painted (2026-08-05, A2/A3-e)
 
 - **A publish that contained a scattered forest failed, and said nothing.** It stopped between
