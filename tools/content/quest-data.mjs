@@ -50,7 +50,7 @@ export const NPC_DEFS = [
     title: 'Dawnhaven gate farmer',
     role: 'quest_giver',
     appearance: look(),
-    idleClip: 'Idle',
+    idleClip: 'Idle_Loop',
     talkClip: '',
     vendorId: null,
     barks: [
@@ -66,7 +66,7 @@ export const NPC_DEFS = [
     title: 'harbourmaster',
     role: 'quest_giver',
     appearance: look({ body: 'm', skin: 3, outfit: 'ranger', hair: 'buzzed', beard: true }),
-    idleClip: 'Idle',
+    idleClip: 'Idle_Loop',
     talkClip: '',
     vendorId: null,
     barks: [
@@ -82,7 +82,7 @@ export const NPC_DEFS = [
     title: 'warden of the Weald',
     role: 'quest_giver',
     appearance: look({ skin: 2, outfit: 'ranger', outfitTint: 1, hair: 'long', hairColor: 0 }),
-    idleClip: 'Idle',
+    idleClip: 'Idle_Loop',
     talkClip: '',
     vendorId: null,
     barks: [
@@ -98,7 +98,7 @@ export const NPC_DEFS = [
     title: 'logger',
     role: 'villager',
     appearance: look({ body: 'm', skin: 0, outfit: 'peasant', outfitTint: 1, hair: 'parted' }),
-    idleClip: 'Idle',
+    idleClip: 'Idle_Loop',
     talkClip: '',
     vendorId: null,
     barks: [{ text: '…quiet. Please.', emote: '' }],

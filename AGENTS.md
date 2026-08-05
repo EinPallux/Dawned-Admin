@@ -208,3 +208,10 @@ truth).
   **Layer ownership decides whether a script may clear a layer.** `npc` is the script's alone
   → clear first (the author-nodes lesson). `interactable` and `poi` are SHARED with hand
   placement in the editor → upsert by id only, or you delete the owner's shrines.
+
+  **Game P11-D (2026-08-05) found one thing here.** The four pilot NPCs were authored with
+  `idleClip: 'Idle'`; the UAL library's standing clip is `Idle_Loop`, and a composed rig plays
+  NOTHING for a name it lacks — every villager stood in a T-pose. Re-authored and re-published.
+  Clearest case yet for a **clip-name check on the NPC form**: publish already refuses a model
+  that is not in the baked manifest, and an authored clip that names nothing is the same silent
+  mistake.

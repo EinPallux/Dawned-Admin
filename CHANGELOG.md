@@ -5,6 +5,18 @@ versions track the game's release trains (0.1.0 = tooling that shipped Dawned 0.
 
 ## [Unreleased]
 
+### Fixed — the pilot NPCs were authored with a clip that does not exist (2026-08-05, game P11-D)
+
+- All four pilot villagers carried `idleClip: 'Idle'`. The animation library's name for standing
+  still is **`Idle_Loop`**, and a composed rig plays nothing at all for a clip it does not have —
+  so every one of them stood in Dawnhaven in a bind-pose T until a screenshot caught it. Re-authored
+  here and re-published; the game moved its schema default to `Idle_Loop` and its client now falls
+  back to a clip that exists rather than rendering a T-pose, so this cannot be silent again.
+- Nothing about the editor changed. It is worth a **clip-name check** on the NPC form next time
+  that surface is touched, the same way publish already refuses a model that is not in the baked
+  manifest: an authored string that names nothing is exactly the failure mode this panel exists
+  to catch before the world does.
+
 ### Added — the quest & dialogue editor (2026-08-05, A4, alongside game P11)
 
 - **Content → Quests** edits quests and NPCs on ONE publish rail, because they reference each

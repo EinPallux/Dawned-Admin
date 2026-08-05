@@ -344,6 +344,15 @@ bake accepts must survive the draft store, for every layer — rather than re-ch
 Two more from the same run: the bake **counted** NPCs and never wrote them (the scatter lesson
 again — a count is not evidence a row was written), and an NPC placement whose definition is
 not published now BLOCKS publish, like a node's.
+**Game P11-D (the client) found one thing that is this panel's business.** All four pilot NPCs
+were authored here with `idleClip: 'Idle'`, and the UAL library's standing-still clip is
+`Idle_Loop` — a composed rig plays NOTHING for a name it does not have, so every villager stood
+in a T-pose until a screenshot caught it. Re-authored and re-published (the game shipped the
+repair as migration 0020 and moved its schema default). Nothing here changed, but it is the
+clearest case yet for a **clip-name check on the NPC form**: publish already refuses a model that
+is not in the baked manifest, and an authored clip that names nothing is the same class of silent
+mistake. Worth doing next time Content → Quests is touched.
+
 **Two script rules this run reinforced.** A content script must be safe to re-run ("nothing to
 publish" is success). And **layer ownership decides whether you may clear**: the `npc` layer is
 the script's alone, so it clears first; `interactable` and `poi` are SHARED with hand placement
