@@ -11,7 +11,8 @@ quests, vendors, zones, curves), and the live server (players, bans, broadcasts,
 > **Items / Loot / Vendors**, **Enemies** (bestiary + spawners + a time-to-kill simulator) and
 > **Professions** (resource nodes with a gathering preview that rolls through the game's own
 > roller) editors live, and every ability, node and item the game runs was authored through them.
-> Remaining A1 editors (zones, NPCs…) land with the game phases that consume them. **The Map
+> Remaining A1 editors (zones, NPCs…) land with the game phases that consume them — next up is
+> **A4** (quests & dialogue), since the game closed P10 on 2026-08-05 and moves to P11. **The Map
 > Editor is done**: open the island in 3D, sculpt and paint it, generate a new one, scatter a
 > forest, place props, camps, discovery points, chests and shrines, keep a group as a reusable
 > prefab, draw a zone and re-shape one you already drew corner by corner, then validate and
