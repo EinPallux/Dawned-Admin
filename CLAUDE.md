@@ -93,9 +93,10 @@ live through this surface — 62 items, 5 loot tables, 5 Dawnhaven vendors and t
 weald enemy loot bindings (`tools/content/author-items.mjs`, numbers derived from the
 shared budget formulas) — and the game froze the published result into its seed
 migration 0012. **Current: game P0–P10 are all closed and owner-accepted (P9 + P10 on
-2026-08-05, on their measured DoDs — the game is on protocol v13). P11 — Quests, POIs &
-Interactables is next, which is this panel's A4 (quest & dialogue editor) sync point — the
-next piece of work in this repo.** Phases close on the measured DoD, not on a playtest; all
+2026-08-05, on their measured DoDs). Game P11 — Quests, POIs & Interactables is 🟨 in
+progress (A/B/C built, protocol v14; its client half D and DoD run E remain), and this
+panel's A4 sync point — the quest & dialogue editor — is BUILT and carried the whole P11
+pilot set.** Phases close on the measured DoD, not on a playtest; all
 feel/number tuning is one deliberate pass at the end of the project.
 **A1-d — the Enemies editor is live** (2026-08-04, alongside game P9): Content → Enemies
 with bestiary + spawners on one publish rail (they reference each other), the level-banded
@@ -314,6 +315,41 @@ end: `map-editor.mjs` (import → sculpt/undo/redo → paint → overlays → au
 place/inspect/delete → spawn budget + rings → shrines and the travel graph →
 drag/insert/remove a zone corner → validate → clean up after itself) and `map-scenario.mjs`.
 
+**A4 — the quest & dialogue editor is live** (2026-08-05, alongside game P11): Content →
+Quests edits `content_quests` and `content_npcs` on ONE publish rail, because they reference
+each other and shipping them apart guarantees a window where a live quest points at an NPC
+that is not there yet — the same argument enemies and spawners ship on. The validation worth
+naming is the GAME's `validateQuestFlow`, not a copy: a quest this page calls valid and the
+server refuses to load would land at the next server BOOT rather than at the publish button.
+On top of it, the cross-checks a single row cannot make (every NPC, item, enemy and
+prerequisite resolves in the would-be-published set) and four advisory warnings that never
+block: a quest that pays nothing, a chain link nothing unlocks, a giver no quest names, and a
+`zoneId` no zone on the map carries. The **chain graph is built from `prerequisites`, not from
+`chainId`** — the label groups the journal, the prerequisites are what the game gates on, and
+drawing the label would draw a graph that disagrees with the game, which is the same mistake
+the TTK simulator avoids by running `selectableEnemyAbilities`. Rewards ƒ-suggest off the
+shared formulas; the grant-to-GM hook proxies to the game's `/ops/quest` (rule 3).
+`node tools/smoke/quest-editor.mjs` drives it in a browser and cleans up its probe rows in a
+`finally`. **219 tests green.**
+**Game P11-C ran the whole pilot set through this surface** (`tools/content/author-quests.mjs`:
+4 NPCs, 8 quests, then 4 NPC / 7 interactable / 6 POI placements and a map publish the game
+hot-swapped onto), and that run found the bug that mattered: **the map editor and the game
+disagreed about what an NPC placement IS.** A2 shipped a local guess at the row — `name`,
+`modelRef`, a walk `routine` — months before P11 defined the real one in `@dawned/shared`
+(`npcId` + a composed appearance, so no mesh and no patrol state). The draft store and the bake
+then each validated with the schema they had, and the editor refused, with a 500, exactly the
+row the bake was written to emit. Both were real zod schemas, so nothing typechecked; the
+file's own comment already forbade it. `map-bake.test.ts` now asserts the PROPERTY — a def the
+bake accepts must survive the draft store, for every layer — rather than re-checking shapes.
+Two more from the same run: the bake **counted** NPCs and never wrote them (the scatter lesson
+again — a count is not evidence a row was written), and an NPC placement whose definition is
+not published now BLOCKS publish, like a node's.
+**Two script rules this run reinforced.** A content script must be safe to re-run ("nothing to
+publish" is success). And **layer ownership decides whether you may clear**: the `npc` layer is
+the script's alone, so it clears first; `interactable` and `poi` are SHARED with hand placement
+in the editor, so clearing them would delete the owner's shrines — those upsert by id and the
+script prints exactly which ids it owns.
+
 ### Running it locally
 
 ```bash
@@ -322,4 +358,6 @@ pnpm check                          # needs the game repo's migrated local Postg
 node tools/smoke/map-editor.mjs     # the editor's tools, in a real browser
 node tools/smoke/map-scenario.mjs   # MAP_EDITOR §7 — needs the GAME server on :8081,
                                     # and PUBLISHES a map (it leaves the islet live)
+node tools/smoke/quest-editor.mjs   # the quest editor, in a real browser (cleans up after itself)
+node tools/content/author-quests.mjs  # re-author + re-place the P11 pilot set (PUBLISHES a map)
 ```

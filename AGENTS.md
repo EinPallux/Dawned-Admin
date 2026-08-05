@@ -42,9 +42,9 @@ truth).
   (`tools/content/author-items.mjs`) — and the game froze the result into its seed
   migration 0012. Current:
   game P0–P10 are all closed and owner-accepted (P9 + P10 on 2026-08-05, on their measured
-  DoDs); the game is on protocol v13. **A4 — the quest & dialogue editor — is the next work
-  in this repo**, syncing to game P11. Phases close on the measured DoD, not on a playtest;
-  all feel/number tuning is one pass at the end of the project.
+  DoDs); game P11 is 🟨 in progress (A/B/C built, protocol v14) and **A4 — the quest &
+  dialogue editor — is BUILT and carried its whole pilot set**. Phases close on the measured
+  DoD, not on a playtest; all feel/number tuning is one pass at the end of the project.
   **A1-d — Enemies is live** (2026-08-04): bestiary + spawners on one publish rail, level-
   banded list with rank badges, and a time-to-kill simulator that runs the game's own
   `selectableEnemyAbilities` so the previewed rotation is the fought rotation (both sides
@@ -184,3 +184,27 @@ truth).
   both against one world found a third thing: `map-editor.mjs` measured its scatter erase
   against EVERY patch in the draft, so the islet's deliberately-left forest read as
   "erasing left 13 077 density behind". It counts its own set now.)
+
+  **A4 — the quest & dialogue editor is live** (2026-08-05, with game P11): quests + NPCs on
+  ONE publish rail (they reference each other, so shipping them apart guarantees a window
+  where a live quest points at a missing NPC), validated by the GAME's own
+  `validateQuestFlow` rather than a copy — a quest this page calls valid and the server
+  refuses would fail at the next server BOOT, not at the button. Plus the cross-checks a row
+  cannot make (every NPC/item/enemy/prerequisite resolves) and four advisory warnings that
+  never block. The **chain graph reads `prerequisites`, not `chainId`** — the label groups
+  the journal, the prerequisites are what the game gates on. Journal preview, ƒ-suggested
+  rewards from the shared formulas, grant-to-GM via the game's `/ops/quest` (rule 3),
+  `tools/smoke/quest-editor.mjs` in a real browser. **219 tests green.**
+  Game P11-C authored its whole pilot set through it (`tools/content/author-quests.mjs`: 4
+  NPCs, 8 quests, 4 NPC / 7 interactable / 6 POI placements, then a map publish the game
+  hot-swapped onto), and that run found **the map editor and the game disagreeing about what
+  an NPC placement IS**: A2 shipped a local guess (`name` + `modelRef` + a walk routine)
+  before P11 defined the real shared row (`npcId` + a composed appearance — no mesh, no
+  patrol state), so the draft store refused with a 500 exactly the row the bake emits. Both
+  were real zod schemas; nothing typechecked it. `map-bake.test.ts` asserts the property now:
+  a def the BAKE accepts must survive the DRAFT store, for every layer. Also from that run:
+  the bake **counted** NPCs and never wrote them, and an unpublished NPC definition now
+  blocks publish like a node's does.
+  **Layer ownership decides whether a script may clear a layer.** `npc` is the script's alone
+  → clear first (the author-nodes lesson). `interactable` and `poi` are SHARED with hand
+  placement in the editor → upsert by id only, or you delete the owner's shrines.

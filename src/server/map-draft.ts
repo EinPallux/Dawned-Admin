@@ -26,6 +26,7 @@ import {
   chunkIndexOf,
   interactableSchema,
   nodePlacementSchema,
+  npcPlacementSchema,
   poiSchema,
   propPlacementSchema,
   scatterSetSchema,
@@ -85,25 +86,19 @@ export const scatterPatchSchema = z
  * `content_resource_nodes`, and this says only which definition and where.
  */
 
-/** NPC placement with a walk routine (P11 quests consume these). */
-export const npcPlacementSchema = z
-  .object({
-    id: z.string().min(3).max(64),
-    name: z.string().min(1).max(64),
-    modelRef: z.string().min(1).max(64),
-    x: z.number(),
-    z: z.number(),
-    rotation: z.number().default(0),
-    idleClip: z.string().max(64).default('Idle'),
-    /** Waypoints with a wait at each; empty = stands still. */
-    routine: z
-      .array(
-        z.object({ x: z.number(), z: z.number(), waitMs: z.number().int().min(0).max(120_000) }),
-      )
-      .max(32)
-      .default([]),
-  })
-  .strict();
+/**
+ * NPC placements are validated by the SHARED `npcPlacementSchema` (imported
+ * above), like every other layer here.
+ *
+ * A2 shipped a local guess at this row while P11 was still unwritten — `name`,
+ * `modelRef` and a walk `routine` — and P11 defined the real one differently:
+ * an NPC points at a definition (`npcId`) and wears a COMPOSED appearance, so
+ * it has no `modelRef` at all, and there is no patrol state to walk. Nothing
+ * caught the divergence, because the draft store and the bake each parsed with
+ * the schema they had: the editor refused the row the bake was written to emit.
+ * The comment directly above is the rule that was broken — this file may not
+ * hold its own idea of a row the game will read.
+ */
 
 /** Which zod schema validates a given layer's `def`. */
 export const layerSchemas = {

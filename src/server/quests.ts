@@ -19,7 +19,13 @@
  */
 
 import { and, eq } from 'drizzle-orm';
-import { contentEnemies, contentItems, contentNpcs, contentQuests } from '@dawned/shared/schema';
+import {
+  contentEnemies,
+  contentItems,
+  contentNpcs,
+  contentQuests,
+  mapDraftObjects,
+} from '@dawned/shared/schema';
 import {
   enemyDefSchema,
   itemDefSchema,
@@ -312,12 +318,17 @@ export const diffQuests = async (db: Db): Promise<QuestDiff> => ({
  *  - a quest with no rewards at all (QUESTS_POI §1.5 wants gold + XP always).
  *  - a chain link nothing unlocks — usually a `prerequisites` typo.
  *  - an NPC nobody talks to.
+ *  - a `zoneId` no zone on the map carries. Advisory rather than fatal because
+ *    quests and the map publish on separate rails and a zone can legitimately
+ *    be sculpted after the quest that names it — but the journal GROUPS by this
+ *    id, so a typo silently files a quest under a heading nothing else uses.
  */
 export const crossCheckQuests = (
   quests: ReadonlyMap<string, QuestDef>,
   npcs: ReadonlyMap<string, NpcDef>,
   itemIds: ReadonlySet<string>,
   enemyIds: ReadonlySet<string>,
+  zoneIds: ReadonlySet<string> = new Set(),
 ): { problems: string[]; warnings: string[] } => {
   const problems: string[] = [];
   const warnings: string[] = [];
@@ -347,6 +358,11 @@ export const crossCheckQuests = (
     }
     if (def.rewards.xp === 0 && def.rewards.gold === 0 && def.rewards.items.length === 0) {
       warnings.push(`${def.id}: pays nothing — QUESTS_POI §1.5 wants gold + XP on every quest`);
+    }
+    if (zoneIds.size > 0 && !zoneIds.has(def.zoneId)) {
+      warnings.push(
+        `${def.id}: zone "${def.zoneId}" is not a zone on the map — the journal will group it alone`,
+      );
     }
     if (def.chainId && def.prerequisites.questIds.length === 0) {
       const isFirst = [...quests.values()].some((other) =>
@@ -398,6 +414,28 @@ const publishedIds = async (
   return ids;
 };
 
+/**
+ * Zone ids the map draft carries, for the advisory `zoneId` check.
+ *
+ * The DRAFT rather than a published bake: the editor's zone layer is what the
+ * next map publish will ship, and an author who has just traced a zone and not
+ * published it yet should not be told their brand-new quest is filed nowhere.
+ * Read straight off the layer — no schema parse, because a malformed zone is
+ * the map publish's problem to report, not this one's.
+ */
+const mapZoneIds = async (db: Db): Promise<Set<string>> => {
+  const rows = await db
+    .select({ def: mapDraftObjects.def })
+    .from(mapDraftObjects)
+    .where(eq(mapDraftObjects.layer, 'zone'));
+  const ids = new Set<string>();
+  for (const row of rows) {
+    const id = (row.def as { id?: unknown }).id;
+    if (typeof id === 'string') ids.add(id);
+  }
+  return ids;
+};
+
 export const publishQuests = async (db: Db, config: Config): Promise<QuestPublishResult> => {
   const questSets = await loadQuestRows(db);
   const npcSets = await loadNpcRows(db);
@@ -425,7 +463,14 @@ export const publishQuests = async (db: Db, config: Config): Promise<QuestPublis
 
   const itemIds = await publishedIds(db, contentItems, (raw) => itemDefSchema.safeParse(raw));
   const enemyIds = await publishedIds(db, contentEnemies, (raw) => enemyDefSchema.safeParse(raw));
-  const checked = crossCheckQuests(overlay(questSets), overlay(npcSets), itemIds, enemyIds);
+  const zoneIds = await mapZoneIds(db);
+  const checked = crossCheckQuests(
+    overlay(questSets),
+    overlay(npcSets),
+    itemIds,
+    enemyIds,
+    zoneIds,
+  );
   if (checked.problems.length > 0) {
     return {
       ok: false,

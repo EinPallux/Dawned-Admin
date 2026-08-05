@@ -101,6 +101,32 @@ time-to-kill both directions vs. the COMBAT.md targets (the balance sanity tool)
 - **Test hook:** "grant to my GM character at step n" button (via ops API) — author → test in
   seconds (used heavily in game P11).
 
+### 6.1 As built (A4, 2026-08-05)
+
+Quests and NPCs share **one publish rail** — they reference each other, so publishing them apart
+would guarantee a window where a live quest points at an NPC that is not there yet. Publish runs
+the GAME's `validateQuestFlow` (never a copy — a quest this page calls valid and the server
+refuses to load would fail at the next server BOOT rather than at the button), then the
+cross-checks a single row cannot make: every NPC, item, enemy and prerequisite a quest names has
+to be in the would-be-published set. Advisory, never blocking: a quest that pays nothing, a chain
+link nothing unlocks, a quest giver no quest names, and a `zoneId` naming no zone the map carries.
+
+The **chain graph is built from `prerequisites`, not from `chainId`** — the id is a label the
+journal groups by, the prerequisites are what the game gates on, and drawing the label would draw
+a graph the game disagrees with. Same reason the Enemies page's TTK simulator runs
+`selectableEnemyAbilities` instead of re-implementing selection.
+
+Deferred, deliberately, to when someone wants them rather than up front: drag-reorder of steps
+(the list is JSON-over-schema, which reorders fine), the typewriter preview and 220-char lint,
+the emote thumbnail loop, and the playthrough estimate. The step list, dialogue nodes, metadata,
+rewards ƒ-suggests, journal preview, flow validation and the test hook are all live.
+
+**One thing the game's P11-C run proved about NPCs specifically:** an NPC has **no `modelRef`**.
+A character in this game is composed — base body + outfit + hair on one skeleton — so a villager
+carries an `appearance` exactly like a player, which is also how they get the whole UAL clip
+library for free. The map editor briefly held its own guess at this row and refused the real one;
+see MAP_EDITOR §5.1.
+
 ## 7. Publish Semantics (per content type)
 
 | Type                                                                                          | Hot-reloadable?                                                                                                            |

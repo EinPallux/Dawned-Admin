@@ -10,7 +10,7 @@
 | A1    | Content editors (items→curves) + publish v1   | L    | A0; serves P5–P10     | 🟨 abilities · progression · items · enemies · professions live |
 | A2    | Map Editor I: viewport, terrain, publish/bake | XL   | game P2 formats       | ✅ done (2026-08-05)                                            |
 | A3    | Map Editor II: placement, spawns, zones, POIs | XL   | A2 + game P9 systems  | ✅ built (2026-08-05) — owner run open                          |
-| A4    | Quest & dialogue editor                       | M    | A1; serves P11        | 🔲                                                              |
+| A4    | Quest & dialogue editor                       | M    | A1; serves P11        | ✅ built (2026-08-05) — owner run open                          |
 | A5    | Live Ops: players, moderation, server, audit  | M    | game P13 ops API      | 🔲                                                              |
 | A6    | Publish polish, validation depth, backups UI  | M    | with game P14         | 🔲                                                              |
 
@@ -291,6 +291,30 @@ metadata/rewards builders with ƒ-suggests, flow validation + chain graph, journ
 grant-to-GM test hook.
 **DoD:** game P11's pilot chain ("The Loggers' Silence") authored 100% in-editor by a non-coder
 flow (owner drives, we watch); validation catches seeded errors in a fixture quest.
+
+**Status (2026-08-05): built; the owner's own unassisted run is the last word.**
+
+- [x] Content → Quests with two tabs (quests, NPCs) on ONE publish rail — they reference each
+      other, and shipping them apart guarantees a window where a live quest points at an NPC
+      that is not there yet.
+- [x] Flow validation is the GAME's `validateQuestFlow`, not a copy, plus cross-checks the row
+      cannot see: every NPC, item, enemy and prerequisite a quest names must be in the
+      would-be-published set. Advisory: a quest that pays nothing, a chain link nothing
+      unlocks, a quest giver no quest names, and a `zoneId` no zone on the map carries.
+- [x] Journal preview (the prose + tracker lines a player will read) and the chain graph, built
+      from **prerequisites** rather than from `chainId` — the label groups, the prerequisites
+      gate, and drawing the label would draw a graph the game disagrees with.
+- [x] ƒ-suggests for XP and gold from the shared `suggestedQuestXp`/`suggestedQuestGold`.
+- [x] Grant-to-GM test hook, proxied to the game's `/ops/quest` (rule 3 — the panel never
+      reaches into game memory).
+- [x] `node tools/smoke/quest-editor.mjs` drives it in a real browser: seeds a two-link chain
+      through the real endpoints, checks the ƒ-suggests against the shared formulas, proves an
+      explore step shows its clue and no map hint, reads the chain graph back, proves publish
+      refuses an unpublished giver BY NAME, and cleans up its `zz_probe` rows in a `finally`.
+- [x] **The whole P11 pilot set went through this surface** —
+      `tools/content/author-quests.mjs`: 4 NPCs, 8 quests, then 4 NPC / 7 interactable / 6 POI
+      placements into the map draft and a map publish the game hot-swapped onto. That run is
+      what found the NPC schema split below.
 
 ## A5 — Live Ops (M) — with game P13
 

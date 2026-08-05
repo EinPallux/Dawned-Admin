@@ -28,6 +28,7 @@ import {
   placementsFileSchema,
   pointInPolygon,
   nodePlacementSchema,
+  npcPlacementSchema,
   poiSchema,
   propPlacementSchema,
   resolveScatter,
@@ -92,6 +93,8 @@ interface DraftBundle {
   knownLootTableIds: Set<string>;
   /** Published resource-node definition ids (P10) — placements must resolve. */
   knownNodeIds: Set<string>;
+  /** Published NPC definition ids (P11) — same rule, same failure mode. */
+  knownNpcIds: Set<string>;
   knownModelRefs: Set<string>;
 }
 
@@ -375,6 +378,25 @@ export const validateDraft = (bundle: DraftBundle): ValidationReport => {
     }
     if (sampler.heightAt(row.data.x, row.data.z) === null) {
       problems.push(`node ${row.data.id} sits on a disabled chunk`);
+    }
+  }
+
+  // --- NPCs (P11) ----------------------------------------------------------
+  // Identical rule to resource nodes, for an identical reason: the placement is
+  // thin, the marker draws whatever the definition says, and a villager whose
+  // row was renamed is simply not there in-game — silent in the viewport, and
+  // silent in the diff.
+  for (const object of npcs) {
+    const row = npcPlacementSchema.safeParse(object.def);
+    if (!row.success) {
+      problems.push(`npc ${object.id}: ${row.error.issues[0]?.message ?? 'invalid'}`);
+      continue;
+    }
+    if (!bundle.knownNpcIds.has(row.data.npcId)) {
+      problems.push(`npc ${row.data.id}: "${row.data.npcId}" is not a published NPC`);
+    }
+    if (sampler.heightAt(row.data.x, row.data.z) === null) {
+      problems.push(`npc ${row.data.id} sits on a disabled chunk`);
     }
   }
 
@@ -685,6 +707,7 @@ const bakeInto = async (
     // looks right type-checks and then throws inside a `.strict()` schema half
     // way through a publish, with nothing on screen to say why.
     nodes: byLayer(bundle.objects, 'node').map((def) => nodePlacementSchema.parse(def)),
+    npcs: byLayer(bundle.objects, 'npc').map((def) => npcPlacementSchema.parse(def)),
   });
   const placementsJson = JSON.stringify(placements);
   await writeFile(path.join(stageDir, 'placements.json'), placementsJson);

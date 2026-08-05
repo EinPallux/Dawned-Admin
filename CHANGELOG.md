@@ -5,6 +5,41 @@ versions track the game's release trains (0.1.0 = tooling that shipped Dawned 0.
 
 ## [Unreleased]
 
+### Added — the quest & dialogue editor (2026-08-05, A4, alongside game P11)
+
+- **Content → Quests** edits quests and NPCs on ONE publish rail, because they reference each
+  other: a quest names its giver, an NPC exists to be talked to. Shipping them apart would
+  guarantee a window where a live quest points at an NPC that is not there yet.
+- The flow validation is the **game's own** `validateQuestFlow`, not a copy — a quest this page
+  calls valid and the server refuses to load would land at the next server boot instead of at the
+  publish button. On top of it, the cross-checks a single row cannot make: every NPC, item, enemy
+  and prerequisite a quest names has to be in the would-be-published set.
+- **Journal preview** shows the prose and tracker lines a player will actually read, and the
+  **chain graph** is built from `prerequisites` rather than from `chainId` — the label is what
+  the journal groups by, the prerequisites are what the game gates on, and drawing the label
+  would draw a graph that disagrees with the game.
+- ƒ-suggests for XP and gold off the shared `suggestedQuestXp`/`suggestedQuestGold`; a
+  grant-to-GM test hook proxied to the game's `/ops/quest` so an author can jump to step 3
+  instead of replaying steps 1 and 2.
+- Advisory warnings that do not block: a quest that pays nothing, a chain link nothing unlocks,
+  a quest giver no quest names, and a `zoneId` naming no zone the map carries.
+- `node tools/smoke/quest-editor.mjs` drives it in a real browser and cleans up after itself.
+
+### Fixed — the map editor and the game disagreed about what an NPC placement IS (2026-08-05)
+
+- A2 shipped a **local guess** at the NPC placement row — `name`, `modelRef` and a walk routine —
+  months before game P11 defined the real one in `@dawned/shared`: an NPC points at a definition
+  (`npcId`) and wears a composed appearance, so it has no mesh of its own and there is no patrol
+  state to walk. The draft store and the bake then each validated with the schema they had, so
+  the editor refused — with a 500 and nothing useful on screen — **exactly the row the bake was
+  written to emit**. Both were real zod schemas, so nothing typechecked. The draft store imports
+  the shared one now, and `map-bake.test.ts` asserts the property rather than the shapes: a def
+  the BAKE accepts must survive the DRAFT store, for every layer.
+- **The bake counted NPCs and never wrote them.** Same shape as the scatter bug A2/A3-e found,
+  and a reminder that a count in the report is not evidence a row reached `placements.json`.
+- Publish now **blocks** an NPC placement whose definition is not published — a villager standing
+  invisible is silent in the world and invisible in the diff, exactly like the node rule.
+
 ### Changed — game P10 closed; two things it hands this panel (2026-08-05, game P10-G)
 
 - The Professions editor's gathering preview estimates how many gathers walk a profession from

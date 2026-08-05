@@ -20,6 +20,7 @@ import { eq } from 'drizzle-orm';
 import {
   contentEnemies,
   contentLootTables,
+  contentNpcs,
   contentResourceNodes,
   contentSpawners,
   mapEditorCollections,
@@ -528,8 +529,8 @@ export const registerMapRoutes = (app: FastifyInstance, deps: MapRouteDeps): voi
 
   // ----------------------------------------------------- validate / publish
   const gatherBundle = async (): Promise<DraftBundle> => {
-    const [chunks, objects, scatterSets, enemies, lootTables, nodeDefs, models] = await Promise.all(
-      [
+    const [chunks, objects, scatterSets, enemies, lootTables, nodeDefs, npcDefs, models] =
+      await Promise.all([
         loadAllChunks(db),
         listObjects(db),
         readScatterSets(),
@@ -545,9 +546,12 @@ export const registerMapRoutes = (app: FastifyInstance, deps: MapRouteDeps): voi
           .select({ id: contentResourceNodes.id })
           .from(contentResourceNodes)
           .where(eq(contentResourceNodes.status, 'published')),
+        db
+          .select({ id: contentNpcs.id })
+          .from(contentNpcs)
+          .where(eq(contentNpcs.status, 'published')),
         readAssetManifest(config),
-      ],
-    );
+      ]);
     return {
       chunks,
       objects,
@@ -556,6 +560,7 @@ export const registerMapRoutes = (app: FastifyInstance, deps: MapRouteDeps): voi
       knownEnemyIds: new Set(enemies.map((row) => row.id)),
       knownLootTableIds: new Set(lootTables.map((row) => row.id)),
       knownNodeIds: new Set(nodeDefs.map((row) => row.id)),
+      knownNpcIds: new Set(npcDefs.map((row) => row.id)),
       knownModelRefs: models,
     };
   };

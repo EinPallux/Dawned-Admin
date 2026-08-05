@@ -25,6 +25,7 @@ import {
   reachableFrom,
   type DraftBundle,
 } from './map-bake.js';
+import { layerSchemas } from './map-draft.js';
 import type { DraftChunk, DraftObject } from './map-draft.js';
 
 /** A flat, enabled chunk at `height`. */
@@ -90,6 +91,7 @@ const bundle = (over: Partial<DraftBundle> = {}): DraftBundle => ({
   knownEnemyIds: new Set(['enemy_shore_glub']),
   knownLootTableIds: new Set(['loot_weald_gear']),
   knownNodeIds: new Set(['node_woodcutting_birch']),
+  knownNpcIds: new Set(['npc_marla']),
   knownModelRefs: new Set(['props_chest_a', 'nature_rock_a']),
   ...over,
 });
@@ -238,6 +240,76 @@ describe('interactables', () => {
       bundle({ objects: [zoneOver(4, 4), chest({ lootTableId: null })] }),
     );
     expect(report.problems.join(' ')).toContain('needs a lootTableId');
+  });
+});
+
+/**
+ * The draft store and the bake must parse a placement with the SAME schema.
+ *
+ * A2 shipped its own guess at an NPC row (`name` + `modelRef` + a walk routine)
+ * months before P11 defined the real one in `@dawned/shared` (`npcId`, and a
+ * composed appearance instead of a mesh). Each half then validated with the
+ * schema it had, so the editor refused — with a 500 — exactly the row the bake
+ * was written to emit. Nothing typechecked it, because both were real schemas.
+ *
+ * This asserts the property rather than the shapes: a def the BAKE accepts must
+ * survive the DRAFT store, for every layer. It fails the moment either side
+ * grows a field the other does not know about.
+ */
+describe('draft and bake agree on every layer schema', () => {
+  const centre = centreOf(4, 4);
+  const samples: Record<string, Record<string, unknown>> = {
+    npc: { id: 'npc_marla_gate', npcId: 'npc_marla', x: centre.x, z: centre.z, rotation: 0 },
+    node: { id: 'node_birch_0', nodeId: 'node_woodcutting_birch', x: centre.x, z: centre.z },
+    poi: {
+      id: 'poi_gullspit',
+      name: 'Gullspit',
+      kind: 'vista',
+      x: centre.x,
+      z: centre.z,
+      radius: 12,
+    },
+    interactable: {
+      id: 'shrine_haven',
+      kind: 'shrine',
+      name: 'Dawnhaven Shrine',
+      x: centre.x,
+      z: centre.z,
+      modelRef: 'props_chest_a',
+    },
+  };
+
+  for (const [layer, def] of Object.entries(samples)) {
+    it(`accepts a baked ${layer} row in the draft store`, () => {
+      const parsed = layerSchemas[layer as keyof typeof layerSchemas].safeParse(def);
+      expect(parsed.success ? [] : parsed.error.issues.map((i) => i.message)).toEqual([]);
+    });
+  }
+});
+
+describe('npc placements', () => {
+  const centre = centreOf(4, 4);
+  const villager = (over: Record<string, unknown> = {}) =>
+    object('npc', {
+      id: 'npc_marla_gate',
+      npcId: 'npc_marla',
+      x: centre.x,
+      z: centre.z,
+      yOffset: 0,
+      rotation: 0,
+      ...over,
+    });
+
+  it('accepts a placement whose definition is published', () => {
+    const report = validateDraft(bundle({ objects: [zoneOver(4, 4), villager()] }));
+    expect(report.problems).toEqual([]);
+  });
+
+  it('blocks a placement pointing at an NPC nobody published', () => {
+    const report = validateDraft(
+      bundle({ objects: [zoneOver(4, 4), villager({ npcId: 'npc_imaginary' })] }),
+    );
+    expect(report.problems.join(' ')).toContain('is not a published NPC');
   });
 });
 
@@ -455,6 +527,31 @@ describe('bakeDraft', () => {
     expect(placements.scatter[0]).not.toHaveProperty('id');
     expect(placements.scatter[0]?.setId).toBe('scatter_cover');
     expect(result.scatterInstances).toBeGreaterThan(0);
+  });
+
+  /**
+   * The same class of bug the scatter layer taught, found the same way: the
+   * report COUNTED npcs and the placements file never carried them, so every
+   * villager the editor placed vanished at publish with nothing on screen to
+   * say so. A count is not evidence that a row was written.
+   */
+  it('carries npc placements into the baked placements file', async () => {
+    const centre = centreOf(4, 4);
+    const { placements } = await bakeInto({
+      objects: [
+        zoneOver(4, 4),
+        object('npc', {
+          id: 'npc_marla_gate',
+          npcId: 'npc_marla',
+          x: centre.x,
+          z: centre.z,
+          yOffset: 0,
+          rotation: 2.4,
+        }),
+      ],
+    });
+    expect(placements.npcs).toHaveLength(1);
+    expect(placements.npcs[0]?.npcId).toBe('npc_marla');
   });
 
   it('leaves no staging directory behind when the bake throws', async () => {

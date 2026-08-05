@@ -299,6 +299,32 @@ UI; typical incremental bake target <60 s (changed chunks only), full-map <10 mi
 - **The lock renews itself.** While the tab holds it, the 15 s poll POSTs (renew) instead of
   GETting — a lease that lapsed mid-session would start refusing saves with no warning.
 
+### 5.0 The layer schemas are the game's, not ours (P11-C, 2026-08-05)
+
+Every `map_draft_objects` layer validates its `def` with the schema `@dawned/shared` exports —
+`propPlacementSchema`, `zoneSchema`, `poiSchema`, `interactableSchema`, `spawnerDefSchema`,
+`nodePlacementSchema`, `npcPlacementSchema` — with exactly one panel-local exception,
+`scatterPatchSchema`, because a draft scatter row carries a row `id` the baked format has no
+place for (which is its own scar; see §4.1).
+
+This was broken once and is worth the paragraph. A2 needed an `npc` layer before game P11 existed,
+so it wrote a **local guess** at the row: `name`, `modelRef`, and a walk `routine`. P11 then
+defined the real one differently — an NPC points at a definition (`npcId`) and wears a COMPOSED
+appearance, so it has no mesh of its own, and the AI has no patrol state to walk. The draft store
+and the bake each kept validating with the schema they had. The result: the editor refused, with
+a 500 and nothing readable on screen, **exactly the row the bake was written to emit**. Nothing
+typechecked it, because both were real zod schemas sitting behind the same `parse` call.
+
+Two guards now: `map-draft.ts` imports the shared row, and `map-bake.test.ts` asserts the
+_property_ rather than the shapes — a def the BAKE accepts must survive the DRAFT store, for
+every layer. That test fails the moment either side grows a field the other does not know about,
+which is the only version of this check that keeps working as the game adds layers.
+
+The related emission bug found in the same run: the bake report **counted** npcs and the
+`placements.json` writer never included them, so every villager placed in the editor vanished at
+publish. A count in the report is not evidence a row was written — the same lesson scatter taught
+in §4.1, and the reason both now have a bake-and-read-it-back test.
+
 ## 5. Play-test Bridge
 
 "Play-test ▸" button: opens the game client (new tab) pointed at a **draft preview channel** —
