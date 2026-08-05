@@ -73,7 +73,24 @@ import {
 import { buildSpawnOverlay, disposeSpawnOverlay } from './spawn-overlay.js';
 import { spawnerDefSchema, zoneAmbienceSchema } from '@dawned/shared';
 import { ObjectInspector } from './ObjectInspector.js';
-import { LAYER_LABEL, PLACEABLE_LAYERS, newObjectDef, type PlaceableLayer } from './new-object.js';
+import {
+  INTERACTABLE_KINDS,
+  LAYER_LABEL,
+  PLACEABLE_LAYERS,
+  newObjectDef,
+  type InteractableKind,
+  type PlaceableLayer,
+} from './new-object.js';
+import {
+  ZoneHandles,
+  deleteVertex,
+  finaliseRing,
+  insertVertex,
+  moveVertex,
+  polygonOf,
+} from './zone-edit.js';
+import { graphHops, shrinesFrom, travelProblems } from './travel-graph.js';
+import { buildTravelOverlay, disposeTravelOverlay } from './travel-overlay.js';
 
 type ToolId = 'sculpt' | 'paint' | 'water' | 'board' | 'place' | 'zone' | 'measure';
 
@@ -93,6 +110,7 @@ interface EditorSession {
   brushRing: THREE.Line;
   measureLine: THREE.Line;
   sketch: ZoneSketch;
+  handles: ZoneHandles;
   slots: Map<number, CameraState>;
 }
 
@@ -148,6 +166,10 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
   const [previewZone, setPreviewZone] = useState(false);
   const [spawnOverlay, setSpawnOverlay] = useState({ aggro: false, leash: false, camps: false });
   const [simulateSeed, setSimulateSeed] = useState<number | null>(null);
+  const [interactKind, setInteractKind] = useState<InteractableKind>('chest');
+  const [showTravel, setShowTravel] = useState(false);
+  /** Bumped when a zone polygon changes, to rebuild the handles from the row. */
+  const [handleEpoch, setHandleEpoch] = useState(0);
 
   // Tool settings are read inside imperative pointer handlers that are
   // registered once; refs keep them current without re-registering listeners.
@@ -157,13 +179,15 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
   const brushRef = useRef(brush);
   const paintRef = useRef(paint);
   const placeLayerRef = useRef(placeLayer);
+  const interactKindRef = useRef(interactKind);
   const lockRef = useRef<LockState | null>(null);
   useEffect(() => {
     toolRef.current = tool;
     brushRef.current = brush;
     paintRef.current = paint;
     placeLayerRef.current = placeLayer;
-  }, [tool, brush, paint, placeLayer]);
+    interactKindRef.current = interactKind;
+  }, [tool, brush, paint, placeLayer, interactKind]);
 
   /**
    * Say something. The toast fades, the status-bar line does NOT: "imported 271
@@ -244,6 +268,9 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
     const sketch = new ZoneSketch();
     viewport.addGizmo(sketch.line);
 
+    const handles = new ZoneHandles();
+    viewport.addGizmo(handles.group);
+
     const session: EditorSession = {
       viewport,
       rig,
@@ -253,6 +280,7 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
       brushRing,
       measureLine,
       sketch,
+      handles,
       slots: new Map(),
     };
     sessionRef.current = session;
@@ -315,6 +343,57 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
           return { sum, max, chunks: chunks.length };
         },
         heightAt: (x: number, z: number): number | null => store.heightAt(x, z),
+        /**
+         * The placed rows as the store holds them. A2/A3 assertions about
+         * objects — a zone that grew a corner, a shrine that joined the travel
+         * graph — are about DATA, and reading the panel's own list back is the
+         * only way to check the thing that will be published.
+         */
+        objects: (): { id: string; layer: string; def: Record<string, unknown> }[] =>
+          objectStore.all().map(({ id, layer, def }) => ({ id, layer, def })),
+        /**
+         * Where a placed object's marker is ON SCREEN.
+         *
+         * A marker stands UP from the ground, so the pixel you clicked to
+         * place it is not the pixel its body occupies — clicking the original
+         * spot again can miss by twenty pixels. A test that hard-codes the
+         * placement coordinates is testing its own arithmetic.
+         */
+        screenOf: (id: string): { x: number; y: number } | null => {
+          const view = viewport.viewOf(id);
+          if (!view) return null;
+          const rect = canvas.getBoundingClientRect();
+          const centre = new THREE.Box3().setFromObject(view).getCenter(new THREE.Vector3());
+          const projected = centre.project(viewport.camera);
+          return {
+            x: rect.left + ((projected.x + 1) / 2) * rect.width,
+            y: rect.top + ((1 - projected.y) / 2) * rect.height,
+          };
+        },
+        /**
+         * Where the zone corner handles are ON SCREEN.
+         *
+         * The smoke drives real mouse events at real handles rather than
+         * calling the edit functions — those already have unit tests, and what
+         * a browser run is FOR is proving the pointer path in between. Nothing
+         * else can tell you a handle is unclickable.
+         */
+        handles: (): { kind: string; index: number; x: number; y: number }[] => {
+          const rect = canvas.getBoundingClientRect();
+          const out: { kind: string; index: number; x: number; y: number }[] = [];
+          for (const child of handles.group.children) {
+            const tag = (child.userData as { handle?: { kind: string; index: number } }).handle;
+            if (!tag) continue;
+            const projected = child.position.clone().project(viewport.camera);
+            out.push({
+              kind: tag.kind,
+              index: tag.index,
+              x: rect.left + ((projected.x + 1) / 2) * rect.width,
+              y: rect.top + ((1 - projected.y) / 2) * rect.height,
+            });
+          }
+          return out;
+        },
       };
     }
 
@@ -377,6 +456,7 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
       ]);
       return {
         modelRef: models.models[0] ?? '',
+        models: models.models,
         enemyId: enemies.enemies[0]?.id ?? '',
         lootTableId: loot.tables[0]?.id ?? '',
       };
@@ -388,12 +468,14 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
     if (!session) return;
     const layer = placeLayerRef.current;
     const taken = new Set(session.objects.all().map((object) => object.id));
+    const kind = interactKindRef.current;
     const built = newObjectDef(
       layer,
       mintId(layer, point.x, point.z, taken),
       point.x,
       point.z,
-      placementRefs.data ?? { modelRef: '', enemyId: '', lootTableId: '' },
+      placementRefs.data ?? { modelRef: '', models: [], enemyId: '', lootTableId: '' },
+      kind,
     );
     if ('error' in built) {
       say(built.error);
@@ -402,7 +484,11 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
     const saved = await session.objects.save(layer, built.def, `Place ${layer}`);
     if (saved) {
       setSelectedId(String(built.def.id));
-      say(`Placed ${LAYER_LABEL[layer] ?? layer}.`);
+      say(
+        layer === 'interactable'
+          ? `Placed ${kind.replace('_', ' ')}.`
+          : `Placed ${LAYER_LABEL[layer] ?? layer}.`,
+      );
     }
   };
 
@@ -417,12 +503,71 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
     const rect = canvas.getBoundingClientRect();
     const ndcX = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     const ndcY = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-    return session.viewport.pick(ndcX, ndcY);
+    const ground = session.viewport.pick(ndcX, ndcY);
+    // The zone tool falls back to the world plane. Zone borders run out over
+    // open water and past the streamed region — requiring terrain under the
+    // cursor would make half of every zone's outline untouchable, which is
+    // exactly what it did before this fallback existed.
+    if (ground || toolRef.current !== 'zone') return ground;
+    return session.viewport.pickPlane(ndcX, ndcY);
   };
 
   const painting = useRef(false);
   const lastPointer = useRef<{ x: number; y: number } | null>(null);
   const clock = useRef(new StrokeClock());
+
+  // --- zone vertex editing (A3-c) -------------------------------------------
+  //
+  // A corner drag is previewed locally and saved ONCE on release. Saving per
+  // pointer-move would be a row write every few milliseconds and would make
+  // each pixel of the drag its own undo step.
+
+  const vertexDrag = useRef<{
+    zoneId: string;
+    index: number;
+    polygon: [number, number][];
+    moved: boolean;
+    refused: string | null;
+  } | null>(null);
+
+  /** Draw a polygon the store does not have yet (mid-drag). */
+  const previewZonePolygon = (zoneId: string, polygon: [number, number][]): void => {
+    const session = sessionRef.current;
+    const zone = session?.objects.get(zoneId);
+    if (!session || !zone) return;
+    const groundAt = (x: number, z: number): number | null => session.store.heightAt(x, z);
+    session.viewport.setObjectView(
+      zoneId,
+      buildObjectView({ ...zone, def: { ...zone.def, polygon } }, groundAt, true),
+    );
+    session.handles.build(polygon, groundAt);
+  };
+
+  /**
+   * Commit an edit to a zone's outline, or explain why it was refused.
+   *
+   * The refusal path re-draws from the STORED row: after a rejected edit the
+   * viewport must show what is saved, never the shape the owner was reaching
+   * for — an editor that keeps drawing a polygon the server does not have is
+   * how you publish something you never saw.
+   */
+  const applyZoneEdit = async (
+    zone: PlacedObject,
+    result: { polygon: [number, number][] } | { error: string },
+    label: string,
+  ): Promise<void> => {
+    const session = sessionRef.current;
+    if (!session) return;
+    if ('error' in result) {
+      say(result.error);
+      setHandleEpoch((epoch) => epoch + 1);
+      return;
+    }
+    const polygon = finaliseRing(result.polygon);
+    const saved = await session.objects.save('zone', { ...zone.def, polygon }, label);
+    setHandleEpoch((epoch) => epoch + 1);
+    if (saved) say(`${label} — ${polygon.length} corners.`);
+  };
 
   const onPointerDown = (event: React.PointerEvent<HTMLCanvasElement>): void => {
     const session = sessionRef.current;
@@ -449,6 +594,39 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
     if (!lockRef.current?.mine) {
       say('You are read-only — take the editing lock first.');
       return;
+    }
+
+    // Zone corner handles come first of all: they sit ON the polygon they
+    // edit, so an object pick would win every time and the corners would be
+    // undraggable.
+    const canvasEl = canvasRef.current;
+    if (toolRef.current === 'zone' && selected?.layer === 'zone' && canvasEl) {
+      const rect = canvasEl.getBoundingClientRect();
+      const hit = session.viewport.pickHandle(
+        ((event.clientX - rect.left) / rect.width) * 2 - 1,
+        -((event.clientY - rect.top) / rect.height) * 2 + 1,
+      );
+      const polygon = polygonOf(selected.def);
+      if (hit && polygon) {
+        if (hit.kind === 'edge') {
+          void applyZoneEdit(
+            selected,
+            insertVertex(polygon, hit.index, point.x, point.z),
+            'Added a corner',
+          );
+        } else if (event.shiftKey) {
+          void applyZoneEdit(selected, deleteVertex(polygon, hit.index), 'Removed a corner');
+        } else {
+          vertexDrag.current = {
+            zoneId: selected.id,
+            index: hit.index,
+            polygon,
+            moved: false,
+            refused: null,
+          };
+        }
+        return;
+      }
     }
 
     // A click on an existing marker always SELECTS it, whatever the tool —
@@ -536,7 +714,10 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
 
     const point = worldUnderPointer(event);
     if (point) {
-      setCursor({ x: point.x, z: point.z, y: point.y });
+      // The height comes from the STORE, not the ray: with the zone tool the
+      // ray may have hit the world plane rather than ground, and reporting
+      // "0.0 m" for terrain that has not streamed would be a lie.
+      setCursor({ x: point.x, z: point.z, y: session.store.heightAt(point.x, point.z) });
       const radius =
         toolRef.current === 'paint' ? paintRef.current.radius : brushRef.current.radius;
       session.brushRing.visible = toolRef.current === 'sculpt' || toolRef.current === 'paint';
@@ -544,6 +725,20 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
       session.brushRing.scale.set(radius, 1, radius);
     } else {
       session.brushRing.visible = false;
+    }
+
+    // A corner being dragged: keep the last LEGAL position, so pulling a corner
+    // through the far edge stops at the fold instead of saving a bow tie.
+    const drag = vertexDrag.current;
+    if (drag && point && (event.buttons & 1) !== 0) {
+      const moved = moveVertex(drag.polygon, drag.index, point.x, point.z);
+      if ('error' in moved) drag.refused = moved.error;
+      else {
+        drag.polygon = moved.polygon;
+        drag.moved = true;
+        previewZonePolygon(drag.zoneId, moved.polygon);
+      }
+      return;
     }
 
     if (toolRef.current === 'zone') {
@@ -564,6 +759,15 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
     if (painting.current) {
       painting.current = false;
       session.journal.commit(session.store);
+    }
+    const drag = vertexDrag.current;
+    vertexDrag.current = null;
+    if (drag?.moved) {
+      const zone = session.objects.get(drag.zoneId);
+      if (zone) void applyZoneEdit(zone, { polygon: drag.polygon }, 'Moved a corner');
+      if (drag.refused) say(drag.refused);
+    } else if (drag?.refused) {
+      say(drag.refused);
     }
     lastPointer.current = null;
   };
@@ -699,6 +903,43 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
       disposeSpawnOverlay(overlay);
     };
   }, [spawners, links, spawnOverlay, simulateSeed, selected, enemyFacts.data, saveState]);
+
+  // --- zone corner handles (A3-c) -------------------------------------------
+  //
+  // Shown only with the zone tool in hand and a zone selected: handles over
+  // every polygon at once would bury the terrain you are sculpting, and a
+  // corner you can grab by accident while painting is a shape you break
+  // without noticing.
+
+  useEffect(() => {
+    const session = sessionRef.current;
+    if (!session) return;
+    const polygon = tool === 'zone' && selected?.layer === 'zone' ? polygonOf(selected.def) : null;
+    if (polygon) session.handles.build(polygon, (x, z) => session.store.heightAt(x, z));
+    else session.handles.clear();
+  }, [tool, selected, handleEpoch, saveState]);
+
+  // --- shrines & the travel graph (A3-c) ------------------------------------
+
+  const shrines = useMemo(() => shrinesFrom(objects), [objects]);
+  const hops = useMemo(() => graphHops(shrines), [shrines]);
+  const travelIssues = useMemo(() => travelProblems(shrines), [shrines]);
+
+  useEffect(() => {
+    const session = sessionRef.current;
+    if (!session || !showTravel) return;
+    const overlay = buildTravelOverlay({
+      shrines,
+      hops,
+      groundAt: (x, z) => session.store.heightAt(x, z),
+    });
+    if (overlay) session.viewport.addGizmo(overlay);
+    return () => {
+      if (!overlay) return;
+      session.viewport.removeGizmo(overlay);
+      disposeTravelOverlay(overlay);
+    };
+  }, [showTravel, shrines, hops, saveState]);
 
   // --- zone ambience preview ------------------------------------------------
   //
@@ -970,6 +1211,12 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
       const cx = chunkIndexOf(session.rig.target.x);
       const cy = chunkIndexOf(session.rig.target.z);
       await session.store.loadRegion(cx - radius, cy - radius, cx + radius, cy + radius);
+      // The import writes OBJECTS too — zones, spawners, props. Without this
+      // the editor keeps showing the object list it loaded on mount, so an
+      // import that restored a zone leaves the panel insisting the zone is
+      // gone (and every spawner "in no zone"). The terrain reload alone was
+      // the whole story here for one release; it isn't.
+      await session.objects.load();
       say(
         `Imported ${report.chunks} chunks, ${report.zones} zones and ${report.spawners} spawners.`,
       );
@@ -1151,6 +1398,21 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
                   </option>
                 ))}
               </select>
+              {placeLayer === 'interactable' && (
+                <select
+                  className="ws-input"
+                  value={interactKind}
+                  onChange={(event) => {
+                    setInteractKind(event.target.value as InteractableKind);
+                  }}
+                >
+                  {INTERACTABLE_KINDS.map((kind) => (
+                    <option key={kind} value={kind}>
+                      {kind.replace('_', ' ')}
+                    </option>
+                  ))}
+                </select>
+              )}
               <span className="me-hint">
                 Click the ground to place. Click a marker to select it instead.
               </span>
@@ -1159,10 +1421,29 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
 
           {tool === 'zone' && (
             <>
+              {/* Picking a zone by clicking its outline works, but a border is
+                  a line a few pixels wide from map height — this is the way
+                  you reach for the one you mean. */}
+              <select
+                className="ws-input"
+                value={selected?.layer === 'zone' ? selected.id : ''}
+                onChange={(event) => {
+                  setSelectedId(event.target.value || null);
+                }}
+              >
+                <option value="">— pick a zone to edit —</option>
+                {zoneFacts.map((zone) => (
+                  <option key={zone.id} value={zone.id}>
+                    {zone.name}
+                  </option>
+                ))}
+              </select>
               <span className="me-hint">
-                {sketchLength === 0
-                  ? 'Click the ground to trace a zone border.'
-                  : `${sketchLength} corners — Enter closes it, Backspace undoes one, Esc cancels.`}
+                {sketchLength > 0
+                  ? `${sketchLength} corners — Enter closes it, Backspace undoes one, Esc cancels.`
+                  : selected?.layer === 'zone'
+                    ? 'Drag a corner to move it, click an edge dot to add one, Shift+click a corner to remove it.'
+                    : 'Click the ground to trace a zone border, or click a zone to edit its corners.'}
               </span>
               <button
                 type="button"
@@ -1502,6 +1783,53 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
                 {links[0]?.spawnerIds.length} spawners.
               </p>
             )}
+          </section>
+
+          <section className="ws-panel me-card">
+            <h3>Travel</h3>
+            <div className="me-row">
+              <button
+                type="button"
+                className={`ws-btn me-tiny${showTravel ? ' me-on' : ''}`}
+                title="Draw the fast-travel graph on the world"
+                onClick={() => {
+                  setShowTravel((current) => !current);
+                }}
+              >
+                graph
+              </button>
+              <span className="me-hint">
+                {shrines.length === 0
+                  ? 'No shrines yet.'
+                  : `${shrines.length} shrine${shrines.length === 1 ? '' : 's'}, ${hops.length} hop${hops.length === 1 ? '' : 's'}`}
+              </span>
+            </div>
+
+            {hops.length > 0 && (
+              <table className="me-budget">
+                <tbody>
+                  {hops.slice(0, 8).map((hop) => (
+                    <tr key={`${hop.from.id}:${hop.to.id}`}>
+                      <td>
+                        {hop.from.name} ↔ {hop.to.name}
+                      </td>
+                      <td>{hop.gold} g</td>
+                      <td>{hop.metres} m</td>
+                    </tr>
+                  ))}
+                  {hops.length > 8 && (
+                    <tr>
+                      <td colSpan={3}>…and {hops.length - 8} more</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            )}
+            {travelIssues.map((issue) => (
+              <p key={issue.text} className="me-hint">
+                {issue.text}
+              </p>
+            ))}
           </section>
 
           <section className="ws-panel me-card">

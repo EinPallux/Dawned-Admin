@@ -32,6 +32,19 @@ const LAYER_RGB = SPLAT_LAYERS.map((layer) => {
 /** Overlays the O picker cycles (MAP_EDITOR.md §3). */
 export type OverlayKind = 'none' | 'slope' | 'walkable' | 'splat' | 'height';
 
+/** The world plane zone geometry lives on (y = 0). */
+const GROUND_PLANE = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+
+/**
+ * The tag a draggable gizmo mesh carries on its `userData`, so `pickHandle`
+ * can answer "which part of which thing is under the cursor?" without the
+ * viewport knowing what a zone corner is.
+ */
+export interface GizmoHandle {
+  kind: string;
+  index: number;
+}
+
 export interface ViewportChunk {
   cx: number;
   cy: number;
@@ -311,6 +324,11 @@ export class MapViewport {
     }
   }
 
+  /** The drawn view of a placed object, if it has one on screen. */
+  viewOf(id: string): THREE.Object3D | null {
+    return this.objectViews.get(id) ?? null;
+  }
+
   clearObjectViews(): void {
     for (const id of [...this.objectViews.keys()]) this.setObjectView(id, null);
   }
@@ -334,14 +352,49 @@ export class MapViewport {
    */
   pickObject(ndcX: number, ndcY: number): string | null {
     this.raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), this.camera);
+    // A zone is drawn as a LINE, and three's default 1 m pick threshold is
+    // roughly one pixel from map height — selecting a zone border would be a
+    // pixel-hunt. Widen it with distance so the grab area stays a few pixels.
+    this.raycaster.params.Line = { threshold: Math.max(1, this.camera.position.y / 120) };
     const hits = this.raycaster.intersectObjects(this.objectGroup.children, true);
+    // Solid markers beat outlines. A zone border runs across the whole map and
+    // with the widened threshold above it grabs clicks several pixels away —
+    // so a shrine standing on a border would select the ZONE, and the next
+    // thing the owner presses is Delete. You clicked the thing that stands
+    // there, not the line passing behind it.
+    return this.ownerOf(hits, false) ?? this.ownerOf(hits, true);
+  }
+
+  /** First hit that is (or is not) a line, resolved to the object it belongs to. */
+  private ownerOf(hits: readonly THREE.Intersection[], lines: boolean): string | null {
     for (const hit of hits) {
+      if (hit.object instanceof THREE.Line !== lines) continue;
       let node: THREE.Object3D | null = hit.object;
       while (node) {
         const data = node.userData as { objectId?: string };
         if (typeof data.objectId === 'string') return data.objectId;
         node = node.parent;
       }
+    }
+    return null;
+  }
+
+  /**
+   * The gizmo handle under the cursor, or null.
+   *
+   * `GizmoHandle` is the tag a draggable gizmo mesh puts on its `userData` —
+   * see `zone-edit.ts` for the only producer today.
+   *
+   * Checked BEFORE `pickObject` by the zone tool: a vertex handle sits on top
+   * of the polygon it edits, so "select the zone" would always win and the
+   * corners would be undraggable.
+   */
+  pickHandle(ndcX: number, ndcY: number): GizmoHandle | null {
+    this.raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), this.camera);
+    const hits = this.raycaster.intersectObjects(this.gizmoGroup.children, true);
+    for (const hit of hits) {
+      const handle = (hit.object.userData as { handle?: GizmoHandle }).handle;
+      if (handle) return handle;
     }
     return null;
   }
@@ -360,6 +413,21 @@ export class MapViewport {
       return hit.point;
     }
     return null;
+  }
+
+  /**
+   * Where the cursor ray crosses the world plane, ignoring terrain entirely.
+   *
+   * Zones are 2D shapes on that plane and they legitimately extend past the
+   * coast — all three shipped zones reach 620 m out, well into open water. So
+   * zone authoring cannot require ground under the cursor: with only a terrain
+   * pick, a corner over the sea (or over a chunk that has not streamed) is a
+   * corner you can see and cannot touch.
+   */
+  pickPlane(ndcX: number, ndcY: number): THREE.Vector3 | null {
+    this.raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), this.camera);
+    const hit = new THREE.Vector3();
+    return this.raycaster.ray.intersectPlane(GROUND_PLANE, hit) ? hit : null;
   }
 
   // --- gizmos ---------------------------------------------------------------
@@ -402,16 +470,22 @@ export class MapViewport {
   private scaleMarkers(): void {
     const distance = this.camera.position.y;
     const scale = Math.max(1, distance / 90);
-    for (const view of this.objectViews.values()) {
-      const marker = view.userData as { markerScale?: number };
-      if (marker.markerScale === scale) continue;
-      marker.markerScale = scale;
-      for (const child of view.children) {
-        if (!(child instanceof THREE.Mesh)) continue;
-        const base = (child.userData as { baseScale?: number[] }).baseScale;
-        if (!base) continue;
-        child.scale.set(base[0]! * scale, base[1]! * scale, base[2]! * scale);
-      }
+    for (const view of this.objectViews.values()) this.rescale(view, scale);
+    // Gizmos follow the same rule: a zone's vertex handles have to stay
+    // grabbable from the height you judge a coastline at, or editing a polygon
+    // means zooming in on every corner in turn.
+    for (const gizmo of this.gizmoGroup.children) this.rescale(gizmo, scale);
+  }
+
+  private rescale(view: THREE.Object3D, scale: number): void {
+    const marker = view.userData as { markerScale?: number };
+    if (marker.markerScale === scale) return;
+    marker.markerScale = scale;
+    for (const child of view.children) {
+      if (!(child instanceof THREE.Mesh)) continue;
+      const base = (child.userData as { baseScale?: number[] }).baseScale;
+      if (!base) continue;
+      child.scale.set(base[0]! * scale, base[1]! * scale, base[2]! * scale);
     }
   }
 

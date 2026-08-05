@@ -164,7 +164,19 @@ export const ObjectInspector = ({
           type="button"
           className="ws-btn ws-btn--danger"
           disabled={readOnly}
-          onClick={onDelete}
+          onClick={() => {
+            // Zones are the one placed thing whose loss is expensive: the
+            // ambience is hand-tuned, and publish BLOCKS on land that belongs
+            // to no zone, so a stray delete turns into "why can I not publish?"
+            // twenty minutes later. It is also the easiest to hit by accident —
+            // a zone is selected by clicking its border, which runs across the
+            // whole map. Undo covers it; a question covers it sooner.
+            if (object.layer === 'zone') {
+              const name = typeof object.def.name === 'string' ? object.def.name : object.id;
+              if (!window.confirm(`Delete the zone "${name}"? Its ambience goes with it.`)) return;
+            }
+            onDelete();
+          }}
         >
           Delete
         </button>

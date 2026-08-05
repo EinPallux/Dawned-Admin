@@ -79,9 +79,18 @@ const segmentsCross = (a1: Point, a2: Point, b1: Point, b2: Point): boolean => {
 };
 
 /**
- * The polygon the game expects: counter-clockwise (the schema's comment), with
- * duplicate consecutive points dropped. The editor accepts either winding from
- * the owner's hand and normalises here rather than making them care.
+ * The polygon the game expects: counter-clockwise on the (x, z) plane (the
+ * `zoneSchema` comment), with duplicate consecutive points dropped. The editor
+ * accepts either winding from the owner's hand and normalises here rather than
+ * making them care.
+ *
+ * The sign convention matters and was wrong once: `polygonArea2` is the
+ * shoelace variant whose POSITIVE result means counter-clockwise here, which is
+ * what all three shipped zones are. Reversing on positive — the first version
+ * of this — flipped every zone drawn in the editor away from the convention the
+ * live world uses. Nothing at runtime noticed (`pointInPolygon` is an even-odd
+ * ray cast, blind to winding), which is exactly why it is pinned by a test
+ * against a known-good ring rather than left to "both hands agree".
  */
 export const normalisePolygon = (points: readonly Point[]): [number, number][] => {
   const cleaned: [number, number][] = [];
@@ -92,7 +101,7 @@ export const normalisePolygon = (points: readonly Point[]): [number, number][] =
     }
     cleaned.push([Number(point[0].toFixed(2)), Number(point[1].toFixed(2))]);
   }
-  return polygonArea2(cleaned) > 0 ? cleaned.reverse() : cleaned;
+  return polygonArea2(cleaned) < 0 ? cleaned.reverse() : cleaned;
 };
 
 /** Problems worth telling the owner about BEFORE they save the zone. */

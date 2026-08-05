@@ -55,6 +55,14 @@ const provision = async () => {
     [ACCOUNT, hash],
   );
   await db.query('DELETE FROM map_lock');
+  // A run that died mid-way leaves its shrines in the draft, and clicking the
+  // same spot again SELECTS the old marker rather than placing a new one —
+  // which is the right behaviour, and would make the next run fail on a stale
+  // artifact. Only rows still carrying the stamped default name are removed, so
+  // a shrine the owner named and kept is never touched.
+  await db.query(
+    `DELETE FROM map_draft_objects WHERE layer = 'interactable' AND def->>'name' = 'New shrine'`,
+  );
 };
 
 const cleanup = async () => {
@@ -337,7 +345,10 @@ const run = async (browser) => {
   //
   // The budget table is read from the imported world, so it is checked against
   // what the import actually reported rather than a magic number.
-  const budget = await page.locator('.me-budget').innerText();
+  const budget = await page
+    .locator('.me-card', { hasText: 'Spawns' })
+    .locator('.me-budget')
+    .innerText();
   if (!/\d+ enemies/.test(budget)) {
     await shoot(page, 'a3b-no-budget.png');
     fail(`the spawn budget table shows no population: ${budget}`);
@@ -366,6 +377,143 @@ const run = async (browser) => {
   );
   await shoot(page, 'a3b-spawns.png');
 
+  // --- shrines + the travel graph (A3-c) ------------------------------------
+  //
+  // §7 of MAP_EDITOR.md needs a shrine placeable, and the graph it joins is
+  // priced by a shared formula — so the check is that the row the panel WROTE
+  // is a graph member, and that the hop it quotes reaches the panel.
+  await page.click('button:has-text("Place")');
+  await page.waitForTimeout(300);
+  const shrinesBefore = (await readObjects(page)).filter(
+    (object) => object.layer === 'interactable' && object.def.kind === 'shrine',
+  ).length;
+  await page.locator('.me-options select').first().selectOption('interactable');
+  await page.locator('.me-options select').nth(1).selectOption('shrine');
+  for (const [dx, dy] of SHRINE_SPOTS) {
+    await page.mouse.click(centre.x + dx, centre.y + dy);
+    await page.waitForTimeout(900);
+  }
+  const shrines = (await readObjects(page)).filter(
+    (object) => object.layer === 'interactable' && object.def.kind === 'shrine',
+  );
+  if (shrines.length !== shrinesBefore + 2) {
+    await shoot(page, 'a3c-no-shrines.png');
+    fail(`placing 2 shrines took the draft from ${shrinesBefore} to ${shrines.length}`);
+  }
+  if (!shrines.every((shrine) => shrine.def.travelNode === true)) {
+    fail('a placed shrine did not join the travel graph');
+  }
+  const travelCard = page.locator('.me-card', { hasText: 'Travel' });
+  const hopRow = await travelCard.locator('.me-budget tr').first().innerText();
+  if (!/\d+ g/.test(hopRow)) {
+    await shoot(page, 'a3c-no-hop.png');
+    fail(`the travel table quoted no price: ${hopRow}`);
+  }
+  ok(`two shrines placed, both on the graph — ${hopRow.split('\n').join(' · ')}`);
+
+  const beforeGraph = await canvasCoverage(page);
+  await travelCard.locator('button:text-is("graph")').click();
+  await page.waitForTimeout(900);
+  const afterGraph = await canvasCoverage(page);
+  if (afterGraph.colours <= beforeGraph.colours) {
+    await shoot(page, 'a3c-no-graph.png');
+    fail(`the travel graph drew nothing (${beforeGraph.colours} → ${afterGraph.colours} colours)`);
+  }
+  ok(`the travel graph draws (${beforeGraph.colours} → ${afterGraph.colours} distinct colours)`);
+  await shoot(page, 'a3c-travel.png');
+  await travelCard.locator('button:text-is("graph")').click();
+
+  // --- zone vertex editing (A3-c) -------------------------------------------
+  //
+  // Driven through REAL mouse events at the handles' real screen positions —
+  // the edit functions have unit tests already, and what a browser proves is
+  // the pointer path in between: that a corner is where it is drawn, that it
+  // is grabbable, and that the drag lands in the stored row.
+  await page.click('button:has-text("Zone")');
+  await page.waitForTimeout(300);
+  const zonePicker = page.locator('.me-options select').first();
+  const zoneId = await zonePicker.locator('option').nth(1).getAttribute('value');
+  await zonePicker.selectOption(zoneId);
+  await page.waitForTimeout(700);
+
+  const cornersOf = async () => {
+    const zone = (await readObjects(page)).find((object) => object.id === zoneId);
+    return Array.isArray(zone?.def.polygon) ? zone.def.polygon : [];
+  };
+  const cornersBefore = await cornersOf();
+  if (cornersBefore.length < 3) fail(`zone ${zoneId} has no polygon to edit`);
+
+  const handles = await readHandles(page);
+  const box2 = await canvas.boundingBox();
+  const onScreen = (handle) =>
+    handle.x > box2.x + 8 &&
+    handle.x < box2.x + box2.width - 8 &&
+    handle.y > box2.y + 8 &&
+    handle.y < box2.y + box2.height - 8;
+  const corner = handles.find((handle) => handle.kind === 'vertex' && onScreen(handle));
+  const edge = handles.find((handle) => handle.kind === 'edge' && onScreen(handle));
+  if (!corner || !edge) {
+    await shoot(page, 'a3c-no-handles.png');
+    fail(`the zone drew ${handles.length} handles, none reachable inside the viewport`);
+  }
+
+  await page.mouse.move(corner.x, corner.y);
+  await page.mouse.down();
+  for (let step = 1; step <= 6; step++) {
+    await page.mouse.move(corner.x + step * 5, corner.y + step * 3);
+    await page.waitForTimeout(45);
+  }
+  await page.mouse.up();
+  await page.waitForTimeout(1000);
+  const cornersMoved = await cornersOf();
+  if (cornersMoved.length !== cornersBefore.length) {
+    fail(
+      `dragging a corner changed the corner COUNT (${cornersBefore.length} → ${cornersMoved.length})`,
+    );
+  }
+  const shifted = cornersMoved.filter(
+    (point, index) =>
+      Math.abs(point[0] - cornersBefore[index][0]) > 0.5 ||
+      Math.abs(point[1] - cornersBefore[index][1]) > 0.5,
+  );
+  if (shifted.length !== 1) {
+    await shoot(page, 'a3c-drag-failed.png');
+    fail(`a corner drag moved ${shifted.length} corners, expected exactly 1`);
+  }
+  ok(`dragged one zone corner — the stored polygon moved with it`);
+
+  // Add a corner on an edge, then take it back off.
+  const edgeHandles = await readHandles(page);
+  const freshEdge = edgeHandles.find((handle) => handle.kind === 'edge' && onScreen(handle));
+  await page.mouse.click(freshEdge.x, freshEdge.y);
+  await page.waitForTimeout(1000);
+  const cornersGrown = await cornersOf();
+  if (cornersGrown.length !== cornersBefore.length + 1) {
+    await shoot(page, 'a3c-insert-failed.png');
+    fail(
+      `clicking an edge handle left ${cornersGrown.length} corners, expected ${cornersBefore.length + 1}`,
+    );
+  }
+  ok(`clicked an edge handle — the zone grew to ${cornersGrown.length} corners`);
+
+  const withNew = await readHandles(page);
+  const removable = withNew.find(
+    (handle) =>
+      handle.kind === 'vertex' && handle.index === freshEdge.index + 1 && onScreen(handle),
+  );
+  if (!removable) fail('the corner that was just added has no handle on screen');
+  await page.keyboard.down('Shift');
+  await page.mouse.click(removable.x, removable.y);
+  await page.keyboard.up('Shift');
+  await page.waitForTimeout(1000);
+  const cornersFinal = await cornersOf();
+  if (cornersFinal.length !== cornersBefore.length) {
+    await shoot(page, 'a3c-delete-failed.png');
+    fail(`Shift+click left ${cornersFinal.length} corners, expected ${cornersBefore.length}`);
+  }
+  ok(`Shift+click removed it again — back to ${cornersFinal.length} corners`);
+  await shoot(page, 'a3c-zone-edit.png');
+
   // --- validate -------------------------------------------------------------
   await page.click('button:has-text("Validate")');
   await page.waitForSelector('.me-publish', { timeout: 30000 });
@@ -376,6 +524,28 @@ const run = async (browser) => {
   if (!/chunks/.test(publishText)) fail(`validation reported no stats: ${publishText}`);
   ok(`validation ran: ${publishText.split('\n').slice(0, 3).join(' · ')}`);
   await shoot(page, 'a2-validate.png');
+  await page.locator('.me-publish button:has-text("Close")').click();
+
+  // --- leave the draft as it was found --------------------------------------
+  //
+  // The two shrines were placed by this run; leaving them behind would make
+  // every later run start from a world the last one edited.
+  const cleaned = await removeMarkersAt(
+    page,
+    shrines.map((shrine) => shrine.id),
+    'interactable',
+  );
+  const leftovers = (await readObjects(page)).filter(
+    (object) => object.layer === 'interactable' && object.def.kind === 'shrine',
+  );
+  if (leftovers.length > shrinesBefore) {
+    await shoot(page, 'a3c-cleanup-failed.png');
+    fail(
+      `${leftovers.length - shrinesBefore} smoke shrines were left in the draft; ` +
+        `the cleanup clicks selected: ${cleaned.join(' / ')}`,
+    );
+  }
+  ok('the shrines were cleaned up — the draft is back where it started');
 
   const fatal = errors.filter(
     (message) => !/favicon|ResizeObserver loop|Download the React DevTools/i.test(message),
@@ -384,12 +554,70 @@ const run = async (browser) => {
   ok('no console errors');
 };
 
+/** Where this run puts its two shrines, as offsets from the viewport centre. */
+const SHRINE_SPOTS = [
+  [-170, 40],
+  [150, -20],
+];
+
+/**
+ * Select each object by clicking WHERE ITS MARKER IS DRAWN, and delete it —
+ * but only if the inspector really opened on the layer asked for.
+ *
+ * Two bugs are baked into this shape. The clicks used to reuse the coordinates
+ * the objects were PLACED at; a marker stands up from the ground, so its body
+ * is ~20 px above that point and both clicks missed — landing on the terrain,
+ * where the zone tool read them as new outline corners. And the first version
+ * deleted whatever happened to be selected, which near a zone border is the
+ * ZONE: it ate Dawnshore. Read the position from the app, read the header
+ * before deleting.
+ */
+const removeMarkersAt = async (page, ids, layer) => {
+  const seen = [];
+  for (const id of ids) {
+    const at = await page.evaluate((target) => window.__dawnedMapEditor.screenOf(target), id);
+    if (!at) {
+      seen.push(`${id}: not drawn`);
+      continue;
+    }
+    await page.mouse.click(at.x, at.y);
+    await page.waitForTimeout(600);
+    const inspector = page.locator('.me-inspector');
+    if ((await inspector.count()) === 0) {
+      seen.push('nothing selected');
+      continue;
+    }
+    const head = await inspector.locator('h3').innerText();
+    seen.push(head);
+    if (!new RegExp(layer, 'i').test(head)) continue;
+    await inspector.locator('button:has-text("Delete")').click();
+    await page.waitForTimeout(700);
+  }
+  return seen;
+};
+
 /** How many rows the layers panel counts for a layer. */
 const layerCount = async (page, label) => {
   const row = page.locator('.me-layer-row', { hasText: label }).first();
   const text = await row.locator('b').innerText();
   return Number(text);
 };
+
+/** The placed rows the editor is holding, straight out of its own store. */
+const readObjects = (page) =>
+  page.evaluate(() => {
+    const probe = window.__dawnedMapEditor;
+    if (!probe) throw new Error('editor probe missing (window.__dawnedMapEditor)');
+    return probe.objects();
+  });
+
+/** Where the zone corner handles are on screen right now. */
+const readHandles = (page) =>
+  page.evaluate(() => {
+    const probe = window.__dawnedMapEditor;
+    if (!probe) throw new Error('editor probe missing (window.__dawnedMapEditor)');
+    return probe.handles();
+  });
 
 /** Total ground displacement across every enabled chunk, from the live store. */
 const sampleHeights = (page) =>

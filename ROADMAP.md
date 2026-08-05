@@ -203,7 +203,20 @@ with it).
       wrong fog, no discovery XP, and unfindable by eye), or one enclosing no ground. 10 tests.
       A selected zone can push its fog/sky/light into the viewport, off by default because a
       zone's dusk hides the terrain being shaped.
-- [ ] A3-c (rest) — vertex editing on an existing polygon, the shrine/fast-travel graph view.
+- [x] **A3-c (rest) — editing a zone you already drew, and the shrine graph.** Pick a zone from
+      the tool bar (or click its border — solid markers now beat outlines in the pick, so a
+      shrine standing on a border selects the shrine), then drag a corner, click an edge dot to
+      add one, `Shift`+click a corner to remove it. Every edit is refused if the result would
+      cross itself — including the delete case, which can break a ring that was fine a moment
+      earlier. The zone tool picks against the world PLANE when no terrain is under the cursor:
+      zone borders run out over open water and past the streamed region, and requiring ground
+      made half of every outline untouchable. Shrines are placeable (with campfires, signposts,
+      portals and quest props — the Place tool grew a kind picker, each kind defaulting to a row
+      that passes `validateInteractable`), and the Travel card lists every hop with the price the
+      game will charge — `fastTravelCost` moved into `@dawned/shared` for exactly that reason —
+      plus warnings for shrines off the graph and hops too short to be worth paying for. 36 new
+      tests (121 total); the browser smoke drives real mouse events at real handles, and four
+      bugs came out of that run — see CHANGELOG.
 - [ ] A3-d (rest) — selection sets + isolation, prefab collections, scatter brush, keymap UI.
 
 ## A4 — Quest & Dialogue Editor (M) — with game P11

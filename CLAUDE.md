@@ -165,7 +165,7 @@ a permanent "Save failed". Both fixed with retry-on-refusal, pinned by `draft-st
 Neither reproduces on a fast machine, which is exactly why the browser run matters.
 **A3-c zone drawing** (2026-08-05): trace a border on the ground, `Enter` closes,
 `Backspace` takes a corner back, `Esc` abandons; the polygon is normalised to the winding
-`pointInPolygon` expects. The editor refuses a self-crossing ring — it looks like a normal
+the shipped world uses (`pointInPolygon` itself is even-odd and does not care). The editor refuses a self-crossing ring — it looks like a normal
 shape and then contains half of itself (wrong fog, no discovery XP), which no amount of
 looking would catch, so it is tested (10 tests). A selected zone can push its fog/sky/light
 into the viewport, off by default. This is the piece that unblocks the §7 scenario: publish
@@ -181,9 +181,31 @@ uniform-over-AREA scatter. 11 tests. **Patrol splines were deliberately NOT buil
 spawner schema has no patrol field and the AI no patrol state, so the editor would author
 data nothing reads; the game-side slice it needs is written out in the game repo's
 USER_QUESTIONS Q24.
-**Still open in A3:** vertex editing on an existing polygon and the shrine graph (rest of c),
-selection sets/isolation/prefab collections/scatter brush and the rebindable keymap UI
-(rest of d), then the §7 run.
+**A3-c zone editing + the shrine graph** (2026-08-05): pick a zone from the tool bar (or click
+its outline) and every corner gets a draggable handle with an insert dot on each edge;
+`Shift`+click removes one. Each edit is refused if the ring would cross itself — including the
+DELETE case, which can break a polygon that was legal a moment before (a brute-force search
+found the fixture; it is not obvious). Shrines/campfires/signposts/portals/quest props are
+placeable through a kind picker, each stamping a row that already passes shared
+`validateInteractable`, and the Travel card lists every hop at the price the game will charge —
+`fastTravelCost` went into `@dawned/shared` (game `formulas/travel.ts`, +7 tests) rather than
+being copied here. Four real bugs fell out of driving it in a browser, none of which a unit
+test could have reached: (1) **"Import live map" never reloaded the OBJECT list**, so an import
+that restored a zone left the panel insisting it was gone and every camp "in no zone";
+(2) **`normalisePolygon` reversed the winding the live world ships**, rewriting every zone the
+editor touched — invisible at runtime (`pointInPolygon` is even-odd) and now pinned against a
+ring copied from the bake; (3) **a zone border stole clicks from markers standing on it** and
+the next thing you press is Delete — it ate Dawnshore during a smoke run, so solid markers beat
+outlines in the pick and deleting a zone asks first; (4) **the zone tool required terrain under
+the cursor**, which made half of every outline untouchable (all three zones reach 620 m out over
+water) — it picks against the world plane now. Also: `@dawned/shared` is excluded from Vite's
+dep pre-bundling, because the cached bundle survived a rebuild in the game repo and reported a
+brand-new export as missing.
+**Still open in A3:** selection sets/isolation/prefab collections/scatter brush and the
+rebindable keymap UI (rest of d), then the §7 run. **121 tests green**, and
+`node tools/smoke/map-editor.mjs` passes end to end (import → sculpt/undo/redo → paint →
+overlays → autosave → place/inspect/delete → spawn budget + rings → two shrines and the
+travel graph → drag/insert/remove a zone corner → validate → clean up after itself).
 
 ### Running it locally
 

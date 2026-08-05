@@ -5,6 +5,45 @@ versions track the game's release trains (0.1.0 = tooling that shipped Dawned 0.
 
 ## [Unreleased]
 
+### Added — editing a zone you already drew, and the shrine graph (2026-08-05, A3-c)
+
+- **Zone corner handles.** Pick a zone from the tool bar (or click its border) and every corner
+  gets a diamond you can drag, with a smaller dot on each edge that adds a corner where you click
+  it. `Shift`+click a corner removes it. The handles stay the same size on screen as you pull the
+  camera back, so editing a coastline does not mean zooming in on each corner in turn.
+- **Edits that would break the shape are refused, with a reason.** Dragging a corner across the
+  far edge, or removing the one corner holding two lobes apart, produces a ring that crosses
+  itself — it looks like a normal polygon and then contains half of itself. A refused drag stops
+  at the last good position instead of snapping back.
+- **Shrines, campfires, signposts, portals and quest props** are placeable: the Place tool grew a
+  kind picker, and each kind starts as a row that is already valid (a chest points at a real loot
+  table, a signpost has words, a portal has a destination — itself, visibly, rather than one
+  invented for you). A new shrine joins the travel graph by default.
+- **Travel card**: every shrine-to-shrine hop with the gold it will cost, cheapest first, plus the
+  graph drawn on the world coloured by price. Warnings for shrines left off the graph, a lone node
+  with nowhere to travel to, and hops so short nobody would pay for them. The price comes from the
+  game's own `fastTravelCost` (new in `@dawned/shared`) — the panel cannot quote a number the game
+  will not charge.
+
+### Fixed — three ways the editor could lie about the map (2026-08-05)
+
+- **"Import live map" left the object list stale.** It reloaded the terrain and nothing else, so
+  zones, spawners and props stayed as the draft had them — an import that restored a zone left the
+  panel insisting the zone was gone and every camp "in no zone".
+- **A zone border stole clicks from things standing on it**, and the next thing you press after
+  selecting is often Delete. Solid markers now win the pick over outlines, and deleting a zone
+  asks first — losing one takes its ambience with it and blocks publishing on "land in no zone".
+- **Zone polygons were normalised to the opposite winding from the live world's.** Invisible at
+  runtime (the game's point-in-polygon is even-odd and does not care) but it rewrote every zone the
+  editor touched, and it renumbered corners mid-edit. Pinned now against a ring copied from the
+  published bake.
+- **The zone tool required ground under the cursor.** Zone borders run out over open water and past
+  the streamed region, so half of every outline was untouchable; the tool now falls back to the
+  world plane, which is where zone geometry lives anyway.
+- **`@dawned/shared` is excluded from Vite's dependency pre-bundling.** It is the sibling game
+  checkout on a `file:` link, and the cached pre-bundle survived rebuilds — a fresh export from the
+  game repo showed up as "does not provide an export named …" for a symbol plainly there.
+
 ### Added — seeing what a camp layout actually does (2026-08-05, A3-b)
 
 - **Aggro and leash rings** on every spawner, drawn at true size from the

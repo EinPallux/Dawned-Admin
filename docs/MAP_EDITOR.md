@@ -107,6 +107,46 @@ checks — not a game client).
   props, portals (destination picker) — kind-specific inspectors from zod schemas.
 - **Shrine/fast-travel graph view:** all shrines + travel cost preview matrix.
 
+#### As-built (A3-c)
+
+- **Drawing** a zone traces a border on the ground: `Enter` closes it, `Backspace` takes back a
+  corner, `Esc` abandons it. The ring is normalised to the winding the live world uses — see the
+  winding note below, which is a trap worth reading before touching `normalisePolygon`.
+- **Editing** an existing zone: pick it from the tool bar (a border is a few pixels wide from map
+  height; a dropdown is how you reach for the one you mean) or click its outline. Each corner gets
+  a draggable diamond and each edge a smaller dot that inserts a corner where you click it;
+  `Shift`+click a corner removes it. Handles scale with camera distance for the same reason
+  markers do — you cannot grab what you cannot see.
+- **Every edit is checked for self-intersection before it is allowed**, including deletes: removing
+  one corner can cross a ring that was fine a moment earlier. A self-crossing zone passes the
+  schema, looks normal, and then contains half of itself — wrong fog, wrong level band, discovery
+  XP for the wrong ground. A refused drag stops at the last legal position rather than snapping
+  back, so the shape you are left with is one you can see.
+- **The zone tool picks against the world PLANE when no terrain is under the cursor.** Zone borders
+  legitimately run out over open water and past the streamed region — all three shipped zones reach
+  620 m out — so requiring ground made half of every outline untouchable. Zone geometry is 2D on
+  that plane, so this is not a fallback so much as the correct question.
+- **Winding.** `polygonArea2` here is the shoelace variant whose POSITIVE result is the
+  counter-clockwise order `zoneSchema` documents and all three shipped zones use. The first version
+  reversed on positive, which flipped every zone the editor touched. Nothing at runtime noticed —
+  the game's `pointInPolygon` is an even-odd ray cast, blind to winding — so it is pinned by a test
+  against a ring copied verbatim from the published bake, not by "both hands agree".
+- **Interactables**: the Place tool has a kind picker (chest · shrine · campfire · signpost ·
+  portal · quest prop). Each kind stamps a row that already passes shared `validateInteractable`,
+  and picks the closest baked model by name — the world pack is nature props until the interactable
+  phase bakes real ones, so the reference is a starting point the inspector lets you change, not a
+  reason to refuse the placement.
+- **The travel graph** lists every shrine-to-shrine hop with its price, cheapest first, and draws
+  it on the world tinted by cost across the design's own 5–40 g band. The price is the game's
+  `fastTravelCost` from `@dawned/shared` (ITEMS_LOOT.md §5: `2 × distance-in-chunks`), never a copy
+  — a panel quoting a number the game will not charge is worse than no preview. Judgement calls
+  (a shrine left off the graph, one lone node, a hop under 120 m) warn here and never block a
+  publish; the hard gate — a shrine nobody can walk to — is the bake's flood-fill.
+- **Deleting a zone asks first.** It is the one placed thing whose loss is expensive (hand-tuned
+  ambience, and publish blocks on land in no zone) and the easiest to hit by accident, because a
+  zone is selected by clicking a border that runs across the whole map. Solid markers also beat
+  outlines in the pick now, so a shrine standing on a border selects the shrine.
+
 ## 3. Cross-cutting Editor Systems
 
 - **Undo/redo:** command-pattern journal (≥200 steps, grouped brush strokes), scoped per session,

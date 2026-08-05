@@ -91,10 +91,21 @@ truth).
   field on the schema, no patrol state in the AI, so the editor would author data nothing
   reads (game repo USER_QUESTIONS Q24).
   **A3-c zone drawing (2026-08-05):** trace a border, Enter closes, Backspace takes a
-  corner back, Esc abandons; the polygon is normalised to the winding `pointInPolygon`
-  expects, and a self-crossing ring is REFUSED — it looks normal and then contains half of
+  corner back, Esc abandons; the polygon is normalised to the winding the shipped world
+  uses, and a self-crossing ring is REFUSED — it looks normal and then contains half of
   itself (wrong fog, no discovery XP), so it is tested rather than left to the eye. A
   selected zone previews its fog/sky/light in the viewport. This unblocks §7: publish
-  blocks on land in no zone. 71 tests green.
-  Open in A3: patrol splines/camp links/density heat, vertex editing + shrine graph,
-  selection sets + prefabs + scatter brush + keymap UI, then the §7 run.
+  blocks on land in no zone.
+  **A3-c zone editing + shrine graph (2026-08-05):** draggable corner handles with
+  insert dots on the edges and Shift+click to remove, every edit refused if the ring
+  would cross itself (including the delete case). Shrines/campfires/signposts/portals/
+  quest props placeable via a kind picker, each stamping a row that passes shared
+  `validateInteractable`. The Travel card prices every hop with `fastTravelCost`, new in
+  `@dawned/shared` so the panel cannot quote a number the game will not charge. Four bugs
+  came out of the browser run: the live-map import never reloaded the object list;
+  `normalisePolygon` reversed the winding the shipped world uses; a zone border stole
+  clicks from markers standing on it and one Delete ate Dawnshore (markers now beat
+  outlines, zone deletes confirm); and the zone tool required terrain under the cursor,
+  making the half of every outline that runs over water untouchable.
+  Open in A3: selection sets + prefabs + scatter brush + keymap UI, then the §7 run.
+  121 tests green; `node tools/smoke/map-editor.mjs` passes end to end.

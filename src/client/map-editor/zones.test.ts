@@ -26,6 +26,22 @@ describe('winding', () => {
     expect(Math.sign(polygonArea2(clockwise))).toBe(Math.sign(polygonArea2(counter)));
   });
 
+  it('agrees with the winding the LIVE world ships', () => {
+    // The Verdant Weald, verbatim from the published map bake. An editor whose
+    // idea of "normalised" is the opposite of the shipped data rewrites every
+    // zone it touches — invisible at runtime (`pointInPolygon` is even-odd) and
+    // wrong against `zoneSchema`'s stated contract. "Both hands agree" cannot
+    // catch that; a known-good ring can.
+    const weald: [number, number][] = [
+      [-620, -620],
+      [0, -620],
+      [0, -70],
+      [-620, -70],
+    ];
+    expect(normalisePolygon(weald)).toEqual(weald);
+    expect(normalisePolygon([...weald].reverse())).toEqual(weald);
+  });
+
   it('keeps the shape the owner drew, whichever way they went round', () => {
     for (const ring of [square, [...square].reverse()]) {
       const normalised = normalisePolygon(ring);
