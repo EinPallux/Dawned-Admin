@@ -5,6 +5,19 @@ versions track the game's release trains (0.1.0 = tooling that shipped Dawned 0.
 
 ## [Unreleased]
 
+### Fixed — autosave could quietly leave work unsaved (2026-08-05)
+
+- **Editing while a save was in flight lost that work.** The second save was
+  dropped instead of queued, so anything changed during the previous save sat
+  unwritten — the editor kept saying "Unsaved changes" and only caught up if
+  you happened to edit again. Saves now queue and settle.
+- **Running a generator failed to save at all.** Island synthesis, erosion and
+  auto-splat touch hundreds of chunks; the save was sent as one oversized
+  request the server refused, and the editor showed a permanent "Save failed".
+  Large saves are now split into batches the server accepts.
+- **A refused save now retries by itself** instead of waiting for you to make
+  another edit.
+
 ### Added — drawing zones (2026-08-05, A3-c)
 
 - **Zone mode**: click along the ground to trace a border, `Enter` to close it,

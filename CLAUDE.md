@@ -157,6 +157,12 @@ waits for autosave, places and deletes an object, and validates. Four bugs came 
 LOOKING that no test would have caught: the camera opened inside a hillside, toolbar
 selects stretched across the bar, the camera-follow poll stacked ~9 MB region requests
 until the tab died, and the 17×17 region above.
+**Autosave hardening** (2026-08-05, found by the slow smoke run): a flush landing during
+another flush was DROPPED rather than queued — every chunk dirtied during the previous save
+sat unwritten while the editor said "Unsaved changes"; and a generator-sized save (hundreds
+of chunks) exceeded the endpoint's 64-row limit, so running Island/Erode/Auto-splat produced
+a permanent "Save failed". Both fixed with retry-on-refusal, pinned by `draft-store.test.ts`.
+Neither reproduces on a fast machine, which is exactly why the browser run matters.
 **A3-c zone drawing** (2026-08-05): trace a border on the ground, `Enter` closes,
 `Backspace` takes a corner back, `Esc` abandons; the polygon is normalised to the winding
 `pointInPolygon` expects. The editor refuses a self-crossing ring — it looks like a normal

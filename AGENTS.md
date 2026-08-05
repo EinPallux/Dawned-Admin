@@ -78,6 +78,11 @@ truth).
   (17×17 measured at 7.5 M triangles/frame). `tools/smoke/map-editor.mjs` drives it all
   in a real browser and measures PIXELS — four bugs came out of looking, none from a
   failing assertion.
+  **Autosave hardening (2026-08-05):** a flush landing during another flush was DROPPED
+  rather than queued (losing everything dirtied meanwhile), and a generator-sized save
+  blew the endpoint's 64-chunk limit and failed permanently. Both fixed + retry-on-refusal,
+  pinned by `draft-store.test.ts`. Neither reproduces on a fast machine — the slow browser
+  run is what found them.
   **A3-c zone drawing (2026-08-05):** trace a border, Enter closes, Backspace takes a
   corner back, Esc abandons; the polygon is normalised to the winding `pointInPolygon`
   expects, and a self-crossing ring is REFUSED — it looks normal and then contains half of

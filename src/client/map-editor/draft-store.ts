@@ -27,6 +27,9 @@ import { apiGet, apiPut } from '../api.js';
 
 const AUTOSAVE_IDLE_MS = 2000;
 
+/** The chunk PUT accepts 64 rows a call (`map-routes.ts`). */
+const SAVE_BATCH = 64;
+
 export interface EditorChunk {
   cx: number;
   cy: number;
@@ -123,7 +126,7 @@ export class DraftStore {
    * growing view re-fetches only the new ring. */
   private readonly loaded = new Set<string>();
   private readonly dirty = new Set<string>();
-  private saveTimer: number | null = null;
+  private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private saving = false;
   /** The region fetch currently in flight, if any. */
   private loading: Promise<void> | null = null;
@@ -268,16 +271,27 @@ export class DraftStore {
     this.scheduleSave();
   }
 
+  /** Bare `setTimeout`, not `window.setTimeout`: identical in the browser, and
+   * it lets the autosave rules be tested outside a DOM. */
   private scheduleSave(): void {
-    if (this.saveTimer !== null) window.clearTimeout(this.saveTimer);
-    this.saveTimer = window.setTimeout(() => {
+    if (this.saveTimer !== null) clearTimeout(this.saveTimer);
+    this.saveTimer = setTimeout(() => {
       void this.flush();
     }, AUTOSAVE_IDLE_MS);
   }
 
   /** Push every dirty chunk. Safe to call directly (Ctrl+S) or on the timer. */
   async flush(): Promise<void> {
-    if (this.saving || this.dirty.size === 0) return;
+    // A save already in flight: re-arm rather than drop this one. Returning
+    // here without rescheduling loses every chunk dirtied during the previous
+    // save — the editor keeps saying "Unsaved changes" and the work is only
+    // written if the owner happens to edit again. Found by a slow test run,
+    // which is the only place the two ever overlapped.
+    if (this.saving) {
+      this.scheduleSave();
+      return;
+    }
+    if (this.dirty.size === 0) return;
     this.saving = true;
     const batch = [...this.dirty];
     this.dirty.clear();
@@ -287,19 +301,31 @@ export class DraftStore {
         .map((key) => this.chunks.get(key))
         .filter((chunk): chunk is EditorChunk => chunk !== undefined)
         .map(toWire);
-      await apiPut('/map/chunks', { chunks });
-      this.events.onSaveState(this.dirty.size > 0 ? 'dirty' : 'clean');
+      // The endpoint takes 64 chunks a call, and a generator dirties hundreds
+      // at once — sending them in one body is a 400 the editor would then
+      // report as a permanent save failure.
+      for (let at = 0; at < chunks.length; at += SAVE_BATCH) {
+        await apiPut('/map/chunks', { chunks: chunks.slice(at, at + SAVE_BATCH) });
+      }
+      if (this.dirty.size > 0) {
+        // Dirtied while we were saving — settle it rather than sit on it.
+        this.events.onSaveState('dirty');
+        this.scheduleSave();
+      } else {
+        this.events.onSaveState('clean');
+      }
     } catch (error) {
       // Put them back: an unsaved change must not be silently forgotten, and
-      // the next stroke's autosave will retry the whole set.
+      // the retry is scheduled rather than waiting on the owner's next stroke.
       for (const key of batch) this.dirty.add(key);
       this.events.onSaveState('error', error instanceof Error ? error.message : 'save failed');
+      this.scheduleSave();
     } finally {
       this.saving = false;
     }
   }
 
   dispose(): void {
-    if (this.saveTimer !== null) window.clearTimeout(this.saveTimer);
+    if (this.saveTimer !== null) clearTimeout(this.saveTimer);
   }
 }

@@ -154,6 +154,10 @@ in the live game; full-map bake under 10 min on the VPS; undo survives a 200-ste
       per touched chunk buys an undo that cannot be subtly wrong.
       Verified in a real browser (`tools/smoke/map-editor.mjs`) — it imports the live world,
       measures PIXELS to prove terrain rendered, sculpts, and proves undo/redo restore exactly.
+      That run also surfaced two autosave bugs a fast machine hides: a flush landing during
+      another flush was DROPPED (losing everything dirtied meanwhile), and a generator-sized
+      save exceeded the endpoint's 64-chunk limit and failed permanently. Both fixed, both
+      pinned by `draft-store.test.ts`, along with retry-on-refusal.
 
 ## A3 — Map Editor II: World Population (XL) — in progress, before game P12
 

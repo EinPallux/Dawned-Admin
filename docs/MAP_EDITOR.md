@@ -156,7 +156,19 @@ UI; typical incremental bake target <60 s (changed chunks only), full-map <10 mi
   chunk is a fine price for an undo that cannot be subtly wrong.
 - **Autosave is per chunk, 2 s after the last dab.** During a stroke nothing is sent; a save per
   mousemove would put hundreds of 25 kB bodies on a 1-core VPS. Everything saved is durable, so
-  a closed tab loses at most two seconds.
+  a closed tab loses at most two seconds. Three rules make that promise true rather than
+  approximate, and all three were bugs first:
+  - a flush that lands while another is in flight **re-arms** instead of returning — dropping it
+    loses every chunk dirtied during the previous save, and the editor sits on "Unsaved changes"
+    until the owner happens to edit again;
+  - a save larger than the endpoint's 64-chunk limit is **split into batches** — a generator
+    dirties hundreds at once, and one oversized body is a 400 the editor reports as a permanent
+    save failure;
+  - a **refused** save keeps its chunks and schedules a retry rather than waiting for the next
+    stroke.
+
+  All three are pinned by `draft-store.test.ts`, because none of them reproduce on a fast machine.
+
 - **The lock renews itself.** While the tab holds it, the 15 s poll POSTs (renew) instead of
   GETting — a lease that lapsed mid-session would start refusing saves with no warning.
 
