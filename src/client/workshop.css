@@ -937,3 +937,421 @@ code,
   padding-left: 8px;
   font-size: 10px;
 }
+
+/* --- Map Editor (A2) ------------------------------------------------------
+ * Full-bleed: the viewport is the page. Chrome is a 40 px toolbar, a 300 px
+ * inspector rail and a 26 px status bar — everything else is world. Same
+ * hairlines and 2 px corners as the rest of the Workshop; no floating panels
+ * over the canvas except the publish modal and transient toasts.
+ */
+
+.map-editor {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  height: 100%;
+  min-height: 0;
+  margin: -16px;
+}
+
+.me-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 10px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.me-modes,
+.me-options,
+.me-right,
+.me-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.me-options {
+  flex: 1;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+/* Selects inherit .ws-input's width:100% from the form pages; in a toolbar row
+ * that makes one dropdown eat the bar. Size them to their content instead. */
+.me-options select.ws-input {
+  width: auto;
+  min-width: 108px;
+}
+
+.me-right {
+  margin-left: auto;
+}
+
+.ws-btn.me-on {
+  border-color: var(--blue);
+  color: var(--text-bright);
+  background: #22334a;
+}
+
+.me-body {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  min-height: 0;
+}
+
+.me-viewport {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  background: #0d1014;
+}
+
+.me-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* The canvas owns the right button — the browser menu would eat orbiting. */
+  touch-action: none;
+}
+
+.me-busy,
+.me-toast {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 14px;
+  background: #0f1319e8;
+  border: 1px solid var(--hairline);
+  color: var(--text-bright);
+  font-size: 12px;
+}
+
+.me-busy {
+  top: 50%;
+}
+
+.me-toast {
+  bottom: 14px;
+}
+
+.me-side {
+  border-left: 1px solid var(--hairline);
+  background: var(--panel);
+  overflow-y: auto;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.me-card {
+  padding: 10px;
+}
+
+.me-card h3 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.me-field,
+.me-num {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.me-num .ws-input {
+  width: 74px;
+}
+
+.me-field .ws-input {
+  flex: 1;
+}
+
+.me-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0;
+  font-size: 12px;
+}
+
+.me-hint {
+  margin: 6px 0 0;
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.me-ok {
+  color: var(--green);
+}
+
+.me-warn {
+  color: var(--gold);
+}
+
+.me-layers {
+  display: flex;
+  gap: 3px;
+}
+
+.me-swatch {
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--hairline);
+  border-radius: 0;
+  cursor: pointer;
+  padding: 0;
+}
+
+.me-swatch.me-on {
+  outline: 2px solid var(--blue);
+  outline-offset: 1px;
+}
+
+.me-status {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  padding: 4px 10px;
+  background: var(--panel);
+  border-top: 1px solid var(--hairline);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.me-save.is-clean {
+  color: var(--green);
+}
+
+.me-save.is-dirty {
+  color: var(--gold);
+}
+
+.me-save.is-saving {
+  color: var(--blue);
+}
+
+.me-save.is-error {
+  color: var(--red);
+}
+
+/* The last thing that happened, kept until the next thing happens. */
+.me-last {
+  margin-left: auto;
+  max-width: 46%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+/* --- publish modal --- */
+
+.me-modal-backdrop {
+  display: grid;
+  place-items: center;
+}
+
+.me-publish {
+  width: min(760px, 92vw);
+  max-height: 84vh;
+  overflow-y: auto;
+  padding: 14px 16px;
+}
+
+.me-publish-head,
+.me-publish-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.me-publish-head h2 {
+  margin: 0;
+  font-size: 15px;
+  flex: 1;
+}
+
+.me-publish-foot {
+  justify-content: flex-end;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--hairline);
+}
+
+.me-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 10px 0;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.me-stats b {
+  color: var(--text-bright);
+  font-family: var(--font-mono);
+}
+
+.me-problems,
+.me-warnings {
+  margin: 10px 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--red);
+  background: #21161680;
+}
+
+.me-warnings {
+  border-left-color: var(--gold);
+  background: #211d1480;
+}
+
+.me-problems h3,
+.me-warnings h3 {
+  margin: 0 0 4px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.me-problems ul,
+.me-warnings ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+}
+
+.me-steps {
+  margin: 12px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.me-step {
+  display: grid;
+  grid-template-columns: 190px 1fr 70px;
+  gap: 8px;
+  align-items: center;
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+
+.me-step progress {
+  width: 100%;
+  height: 6px;
+}
+
+/* --- A3: layers panel + object inspector ---------------------------------- */
+
+.me-layer-row {
+  display: grid;
+  grid-template-columns: 20px 1fr auto auto;
+  gap: 6px;
+  align-items: center;
+  padding: 2px 0;
+  font-size: 12px;
+}
+
+.me-layer-row b {
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+  min-width: 26px;
+  text-align: right;
+}
+
+.me-layer-off {
+  color: var(--text-dim);
+  text-decoration: line-through;
+}
+
+.me-eye {
+  background: none;
+  border: 1px solid var(--hairline);
+  padding: 2px;
+  cursor: pointer;
+  line-height: 0;
+}
+
+.me-eye.is-off {
+  opacity: 0.3;
+}
+
+.me-dot {
+  display: block;
+  width: 10px;
+  height: 10px;
+}
+
+.ws-btn.me-tiny {
+  padding: 1px 6px;
+  font-size: 10px;
+}
+
+.me-quick {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.me-more summary {
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 11px;
+  margin: 6px 0;
+}
+
+.me-json {
+  width: 100%;
+  min-height: 180px;
+  font-size: 11px;
+}
+
+.me-json.is-invalid {
+  border-color: var(--red);
+}
+
+/* --- A3-b: the spawn budget table ----------------------------------------- */
+
+.me-budget {
+  width: 100%;
+  margin-top: 8px;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.me-budget td {
+  padding: 2px 0;
+  color: var(--text-dim);
+  border-top: 1px solid var(--hairline);
+}
+
+.me-budget td:first-child {
+  color: var(--text);
+}
+
+.me-budget td:nth-child(2) {
+  text-align: right;
+  font-family: var(--font-mono);
+}
+
+.me-budget td:last-child {
+  text-align: right;
+  font-family: var(--font-mono);
+  padding-left: 8px;
+}
+
+.me-budget tr.me-warn td {
+  color: var(--gold);
+  text-align: left;
+}

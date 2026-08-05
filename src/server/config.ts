@@ -4,7 +4,15 @@
  * API — production must configure both explicitly (docs/ARCHITECTURE.md §2–§3).
  */
 
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+/** The sibling game checkout — `file:../Dawned/packages/shared` already assumes it. */
+const GAME_REPO = path.resolve(HERE, '../../../Dawned');
+const DEV_MAP_DIR = path.join(GAME_REPO, 'assets_baked/map');
+const DEV_ASSETS_DIR = path.join(GAME_REPO, 'assets_baked');
 
 const DEV_DATABASE_URL = 'postgres://dawned:dawned@127.0.0.1:5432/dawned';
 const DEV_OPS_SECRET = 'dev-only-ops-secret-change-me';
@@ -21,6 +29,15 @@ const envSchema = z.object({
   GAME_OPS_URL: z.url().default('http://127.0.0.1:8081'),
   /** Shared secret for /ops/* (mirrors the game server's OPS_SECRET). */
   OPS_SECRET: z.string().min(8).default(DEV_OPS_SECRET),
+
+  /**
+   * Where baked map artifacts live (A2 publish writes here; the game server
+   * reads the same directory as its MAP_DIR). Defaults to the sibling game
+   * checkout's assets_baked/map, which is what a dev box has.
+   */
+  MAP_DIR: z.string().default(DEV_MAP_DIR),
+  /** Baked asset root — publish checks placement modelRefs against its manifest. */
+  ASSETS_DIR: z.string().default(DEV_ASSETS_DIR),
 
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
 });

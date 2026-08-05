@@ -5,12 +5,17 @@ developers and admins edit _everything_ about the game through a friendly UI: th
 (a full 3D map editor), every database-driven piece of content (items, enemies, abilities, loot,
 quests, vendors, zones, curves), and the live server (players, bans, broadcasts, metrics).
 
-> **Status (2026-08-04): A0 closed, A1 in progress** — the panel shell, auth against game
-> accounts (gm/admin), the live dashboard and schema-driven World Settings shipped in A0; A1
+> **Status (2026-08-04): A0 closed, A1 in progress, A2 complete, A3 under way** — the panel shell, auth against
+> game accounts (gm/admin), the live dashboard and schema-driven World Settings shipped in A0; A1
 > has the publish pipeline plus the **Abilities**, **Progression** (XP curve + skill trees),
 > **Items / Loot / Vendors** and **Enemies** (bestiary + spawners + a time-to-kill simulator)
 > editors live, and every ability, node and item the game runs was authored through them.
-> Remaining A1 editors (zones, NPCs…) land with the game phases that consume them. Phase status: [ROADMAP.md](ROADMAP.md) · what shipped:
+> Remaining A1 editors (zones, NPCs…) land with the game phases that consume them. **The Map
+> Editor is live** (A2 complete, A3 under way): open the island in 3D, sculpt and paint it,
+> generate a new one, place props, camps, discovery points, chests and shrines, draw a zone and
+> re-shape one you already drew corner by corner, then validate and publish — the game hot-loads
+> the new map without a deploy. Phase status: [ROADMAP.md](ROADMAP.md) ·
+> what shipped:
 > [CHANGELOG.md](CHANGELOG.md). The game repo's planning docs are the design source of truth for
 > game systems; this repo's docs specify the _editing tools_ for them.
 

@@ -72,6 +72,29 @@ checks — not a game client).
   CONTENT_0.1 targets — a live "content budget" meter per zone in the panel!).
 - "Simulate populate" preview: ghost-render one spawn resolution to eyeball camp compositions.
 
+#### As-built (A3-b)
+
+- **Rings are drawn at TRUE size** from the enemies a spawner actually rolls — the widest aggro
+  and leash among its entries, plus the spawn radius, because that is what a player walking past
+  will feel. A ring that lies about its metres is worse than no ring.
+- **Camp links** join tagged spawners through their group centre and report the spread in metres,
+  longest first. `campTag` is what the server groups social aggro by, so this is the real
+  relationship rather than an editor-side grouping — and a tag that accidentally spans a ridge
+  reads instantly as one shape rather than two camps.
+- **Population per zone** counts spawners, enemies standing at once, camps and the rank mix, over
+  the same `pointInPolygon` the game assigns zones with. A spawner in NO zone is reported on its
+  own line; folding it into a total would hide an authoring mistake in a number that looks fine.
+- **Overlapping pulls** lists pairs of camps whose aggro envelopes touch, with the overlap in
+  metres. Same-tag pairs are skipped — they are MEANT to pull together. Reported, never blocked:
+  P9-C shipped two deliberately mixed camps, so this is a decision to make rather than an error.
+- **Simulate populate** rolls one resolution with the same uniform-over-area scatter the server
+  spawns with (`sqrt()` on the radius, or the shape bunches at the middle and a 20 m camp
+  previews as a 6 m huddle). Deterministic from a seed, so changing a count shows the change
+  rather than a fresh shuffle.
+- **Patrol splines are not implemented.** They need a `patrol` field on the spawner schema AND an
+  AI state that walks it; the game has neither, and an editor for a field nothing reads would
+  look finished and do nothing. Tracked as game-side work in the game repo's USER_QUESTIONS Q24.
+
 ### 2.4 Zones & POI Mode
 
 - **Zone polygons:** draw/edit vertices on the terrain; properties (name, level band, ambience
@@ -83,6 +106,46 @@ checks — not a game client).
 - **Interactables:** place chests (loot table ref), shrines, campfires, signposts (text), quest
   props, portals (destination picker) — kind-specific inspectors from zod schemas.
 - **Shrine/fast-travel graph view:** all shrines + travel cost preview matrix.
+
+#### As-built (A3-c)
+
+- **Drawing** a zone traces a border on the ground: `Enter` closes it, `Backspace` takes back a
+  corner, `Esc` abandons it. The ring is normalised to the winding the live world uses — see the
+  winding note below, which is a trap worth reading before touching `normalisePolygon`.
+- **Editing** an existing zone: pick it from the tool bar (a border is a few pixels wide from map
+  height; a dropdown is how you reach for the one you mean) or click its outline. Each corner gets
+  a draggable diamond and each edge a smaller dot that inserts a corner where you click it;
+  `Shift`+click a corner removes it. Handles scale with camera distance for the same reason
+  markers do — you cannot grab what you cannot see.
+- **Every edit is checked for self-intersection before it is allowed**, including deletes: removing
+  one corner can cross a ring that was fine a moment earlier. A self-crossing zone passes the
+  schema, looks normal, and then contains half of itself — wrong fog, wrong level band, discovery
+  XP for the wrong ground. A refused drag stops at the last legal position rather than snapping
+  back, so the shape you are left with is one you can see.
+- **The zone tool picks against the world PLANE when no terrain is under the cursor.** Zone borders
+  legitimately run out over open water and past the streamed region — all three shipped zones reach
+  620 m out — so requiring ground made half of every outline untouchable. Zone geometry is 2D on
+  that plane, so this is not a fallback so much as the correct question.
+- **Winding.** `polygonArea2` here is the shoelace variant whose POSITIVE result is the
+  counter-clockwise order `zoneSchema` documents and all three shipped zones use. The first version
+  reversed on positive, which flipped every zone the editor touched. Nothing at runtime noticed —
+  the game's `pointInPolygon` is an even-odd ray cast, blind to winding — so it is pinned by a test
+  against a ring copied verbatim from the published bake, not by "both hands agree".
+- **Interactables**: the Place tool has a kind picker (chest · shrine · campfire · signpost ·
+  portal · quest prop). Each kind stamps a row that already passes shared `validateInteractable`,
+  and picks the closest baked model by name — the world pack is nature props until the interactable
+  phase bakes real ones, so the reference is a starting point the inspector lets you change, not a
+  reason to refuse the placement.
+- **The travel graph** lists every shrine-to-shrine hop with its price, cheapest first, and draws
+  it on the world tinted by cost across the design's own 5–40 g band. The price is the game's
+  `fastTravelCost` from `@dawned/shared` (ITEMS_LOOT.md §5: `2 × distance-in-chunks`), never a copy
+  — a panel quoting a number the game will not charge is worse than no preview. Judgement calls
+  (a shrine left off the graph, one lone node, a hop under 120 m) warn here and never block a
+  publish; the hard gate — a shrine nobody can walk to — is the bake's flood-fill.
+- **Deleting a zone asks first.** It is the one placed thing whose loss is expensive (hand-tuned
+  ambience, and publish blocks on land in no zone) and the easiest to hit by accident, because a
+  zone is selected by clicking a border that runs across the whole map. Solid markers also beat
+  outlines in the pick now, so a shrine standing on a border selects the shrine.
 
 ## 3. Cross-cutting Editor Systems
 
@@ -108,6 +171,69 @@ is an error), budget check per chunk; then bakes: walkability grid, chunk bins, 
 world-map + minimap renders (styled per game WORLD.md §5), publishes a map version + content
 bundle entry (game repo pipeline). Bake runs server-side (admin API worker, niced) with progress
 UI; typical incremental bake target <60 s (changed chunks only), full-map <10 min on the VPS.
+
+### 4.1 As-built (A2-b)
+
+- **Draft storage is chunk-granular and row-per-object.** `map_draft_chunks` holds heights +
+  splat + water + an `enabled` flag per chunk (a stroke autosaves as a handful of ~25 kB
+  upserts); `map_draft_objects` holds one row per placed thing, keyed by id and indexed by
+  chunk. Disabled chunks are open ocean: the bake skips them and the client never downloads
+  them, which is what keeps a 32×32 world cheap.
+- **Import before you edit.** `POST /api/map/import-live` reads the bake players are currently
+  standing on (chunks, zones, placements) plus the published spawner rows into the draft. The
+  editor otherwise opens on empty ocean, and the first publish would delete the world. It
+  checkpoints an existing draft before overwriting it.
+- **The pointer moves last.** A bake stages into `<version>.tmp`, renames into `<version>/`, and
+  only then rewrites `current.json`. Until that last write the previous version is still live,
+  so a bake that dies halfway cannot take the world down. Publish then pokes the game's
+  `/ops/reload-map` (which loads the new bake BEFORE swapping it in) and `/ops/reload-content`.
+- **Spawners are the one layer the GAME reads from the database, not from the bake**
+  (`content_spawners`). Publishing the map republishes that layer — delete-then-insert in one
+  transaction, so a camp deleted in the editor actually stops spawning.
+- **Reachability is a real flood-fill**, not a heuristic: the bake builds the walkgrid, floods
+  from the resolved spawn across walkable + water, and reports any POI, interactable or spawner
+  further than 3 m from a reached cell. World metre → cell is FLOOR, matching the game's
+  `Walkgrid.classAt` — rounding instead puts the bake half a cell away from what the server
+  enforces, which is enough to declare a reachable world unreachable.
+- **Blocking vs advisory.** Blocked: land in no zone, an inverted level band, a placement on a
+  disabled chunk, an unbaked `modelRef`, a chest with a missing or unpublished loot table, a
+  spawner pointing at an unpublished enemy or sitting in a safe zone, a scatter patch whose set
+  was deleted, unreachable content. Advisory: overlapping zones, floaters/buried props, chunks
+  over the instance budget, spawners in an unreachable pocket.
+
+### 4.2 As-built: the viewport and the tools (A2-c/A2-d)
+
+- **One geometry, two repos.** Chunk meshes are built by `buildChunkGeometryData` in
+  `@dawned/shared` — the same function the game client calls. The editor owns only materials,
+  lighting and the water plane. An editor with its own vertex code is an editor that eventually
+  lies about the result, and the divergence would be invisible until someone published.
+- **The resident region follows the camera's zoom**, capped at a 6-chunk radius (13×13 = 832 m,
+  wider than the whole dev island). The cap is measured, not guessed: 17×17 is 7.5 M triangles a
+  frame and buries a software renderer completely. The whole-world view is the baked world map,
+  not a thousand live chunks.
+- **Overlays recolour the existing vertices** rather than drawing a second mesh, so toggling one
+  costs a buffer update instead of a rebuild. Slope is a green→amber→red ramp over 0–60°;
+  walkability uses the game's own classes (green walkable, red >50° steep, blue water).
+- **Undo is byte snapshots, grouped per stroke, 220 deep.** Inverse operations were rejected: a
+  Smooth or Flatten dab destroys the information you would need to invert it. 17 kB per touched
+  chunk is a fine price for an undo that cannot be subtly wrong.
+- **Autosave is per chunk, 2 s after the last dab.** During a stroke nothing is sent; a save per
+  mousemove would put hundreds of 25 kB bodies on a 1-core VPS. Everything saved is durable, so
+  a closed tab loses at most two seconds. Three rules make that promise true rather than
+  approximate, and all three were bugs first:
+  - a flush that lands while another is in flight **re-arms** instead of returning — dropping it
+    loses every chunk dirtied during the previous save, and the editor sits on "Unsaved changes"
+    until the owner happens to edit again;
+  - a save larger than the endpoint's 64-chunk limit is **split into batches** — a generator
+    dirties hundreds at once, and one oversized body is a 400 the editor reports as a permanent
+    save failure;
+  - a **refused** save keeps its chunks and schedules a retry rather than waiting for the next
+    stroke.
+
+  All three are pinned by `draft-store.test.ts`, because none of them reproduce on a fast machine.
+
+- **The lock renews itself.** While the tab holds it, the 15 s poll POSTs (renew) instead of
+  GETting — a lease that lapsed mid-session would start refusing saves with no warning.
 
 ## 5. Play-test Bridge
 

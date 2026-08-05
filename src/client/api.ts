@@ -55,4 +55,9 @@ export const apiPost = <T>(path: string, payload?: unknown): Promise<T> =>
   });
 export const apiPut = <T>(path: string, payload: unknown): Promise<T> =>
   api<T>(path, { method: 'PUT', body: JSON.stringify(payload) });
-export const apiDelete = <T>(path: string): Promise<T> => api<T>(path, { method: 'DELETE' });
+/** DELETE, optionally with a body — the map editor deletes objects by id list. */
+export const apiDelete = <T>(path: string, payload?: unknown): Promise<T> =>
+  api<T>(path, {
+    method: 'DELETE',
+    ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+  });

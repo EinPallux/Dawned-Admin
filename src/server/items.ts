@@ -48,6 +48,7 @@ import {
   type VendorDef,
 } from '@dawned/shared';
 import type { Config } from './config.js';
+import { reloadGameContent } from './publish-support.js';
 import type { Db } from './db.js';
 
 type Table = typeof contentItems | typeof contentLootTables | typeof contentVendors;
@@ -472,20 +473,7 @@ export const publishItems = async (db: Db, config: Config): Promise<ItemsPublish
     await copy(contentVendors, vendorSets.drafts);
   });
 
-  let reload = { ok: false, note: 'game unreachable — content applies on its next restart' };
-  try {
-    const response = await fetch(`${config.GAME_OPS_URL}/ops/reload-content`, {
-      method: 'POST',
-      headers: { 'x-ops-secret': config.OPS_SECRET },
-      signal: AbortSignal.timeout(5000),
-    });
-    const body = (await response.json()) as { ok?: boolean; note?: string; error?: string };
-    reload = response.ok
-      ? { ok: true, note: body.note ?? 'reloaded' }
-      : { ok: false, note: body.error ?? `reload refused (${response.status})` };
-  } catch {
-    // Keep the publish — the game picks the rows up at next boot.
-  }
+  const reload = await reloadGameContent(config);
 
   return { ok: true, published: draftCount, problems: [], warnings: checked.warnings, reload };
 };

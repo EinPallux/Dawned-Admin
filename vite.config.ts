@@ -13,6 +13,17 @@ export default defineConfig({
   base: '/admin/',
   plugins: [react()],
   root: '.',
+  optimizeDeps: {
+    /**
+     * `@dawned/shared` is the sibling game checkout, linked with `file:`. Vite
+     * pre-bundles it like any other dependency and then caches the result
+     * against a version that never changes, so a rebuild in the game repo
+     * leaves the panel importing yesterday's copy — the failure looks like
+     * "does not provide an export named X" for a symbol that plainly exists.
+     * Excluding it costs one extra dev request and makes the link honest.
+     */
+    exclude: ['@dawned/shared'],
+  },
   build: {
     outDir: 'dist/client',
     emptyOutDir: true,

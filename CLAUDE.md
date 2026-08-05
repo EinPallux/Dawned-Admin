@@ -119,6 +119,93 @@ defaults it to 40. The measured number for a properly built level-12 warrior wit
 **78**, and an UNSPENT level 12 does 30 — so a preview run with a guessed dps can be off by
 3× and send someone re-balancing a boss that was fine. Worth surfacing on the sim controls
 (a measured reference row, or level-derived defaults) next time the Enemies page is touched.
+**A2-a/A2-b — the map editor's foundations are in** (2026-08-04): the game repo's
+`@dawned/shared` now owns brush math and deterministic scatter (so the editor preview, the
+bake and the server cannot disagree), plus the draft tables (migration 0014). Here: chunk-
+granular draft CRUD with a 45 s single-writer lease + takeover, gzip checkpoints with
+restore, per-layer clear; `validateDraft` (zone coverage, model/loot/enemy refs, safe-zone
+spawners, walkgrid flood-fill reachability, floater/buried + per-chunk instance budgets);
+`bakeDraft` staging into `.tmp` then renaming (chunk bins, walkgrid, zones, placements,
+meta, world-map + minimap) with SSE progress. Publish mints `map-<epoch>`, repoints
+`current.json` LAST, mirrors the spawner layer into published `content_spawners` (a camp
+moved in the editor has to move in the game), then pokes `/ops/reload-map` +
+`/ops/reload-content`. **`POST /api/map/import-live` seeds the draft from the live world** —
+without it the editor opens on empty ocean and the first publish would delete Dawnhaven.
+The GAME side landed with it: the live map version is a served artifact, not a constant
+(server reads `current.json`, reports it on `/api/health`, client asks the server which bake
+to stream), and `/ops/reload-map` swaps a new bake under the running world. 61 tests green.
+**A2-c/A2-d — the editor itself is live** (2026-08-04): a three.js viewport rendering
+chunks through the SAME `buildChunkGeometryData` the game client uses (extracted to
+`@dawned/shared` for exactly this — an editor with its own vertex code eventually lies
+about the result); orbit/fly/top cameras with 1–9 slots; slope, walkability and height
+overlays as vertex recolours; all six sculpt brushes, 8-layer splat painting with
+slope/height masks, per-chunk water, the island/board toggle and a ruler; seeded island
+synthesis, thermal erosion and auto-splat, each one undo step; a 220-step byte-snapshot
+undo journal grouped per stroke; and the streaming publish panel. The resident region
+follows the camera's zoom, capped at 13×13 chunks — 17×17 was measured at 7.5 M triangles
+a frame.
+**A3-a + the Place tool** (2026-08-04): placed objects render as colour-coded markers with
+rings at TRUE size (a spawner's radius, a POI's ring), zone polygons on their ground, and
+scatter as the 16×16 density grid the format really stores. Click the ground to stamp a
+prop/spawner/POI/chest (defaults from what is actually published), click a marker to select
+it whatever the tool, edit it in a quick-fields-over-schema-validated-JSON inspector, and
+manage the set from a layers panel with counts, hide and a checkpointed "Clear layer…".
+**Verified in a real browser** (`tools/smoke/map-editor.mjs`): imports the live world (271
+chunks, 3 zones, 20 spawners), proves terrain RENDERED by measuring pixels, sculpts (1001 m
+of displacement from 12 dabs), undoes and redoes exactly, paints, cycles every overlay,
+waits for autosave, places and deletes an object, and validates. Four bugs came out of
+LOOKING that no test would have caught: the camera opened inside a hillside, toolbar
+selects stretched across the bar, the camera-follow poll stacked ~9 MB region requests
+until the tab died, and the 17×17 region above.
+**Autosave hardening** (2026-08-05, found by the slow smoke run): a flush landing during
+another flush was DROPPED rather than queued — every chunk dirtied during the previous save
+sat unwritten while the editor said "Unsaved changes"; and a generator-sized save (hundreds
+of chunks) exceeded the endpoint's 64-row limit, so running Island/Erode/Auto-splat produced
+a permanent "Save failed". Both fixed with retry-on-refusal, pinned by `draft-store.test.ts`.
+Neither reproduces on a fast machine, which is exactly why the browser run matters.
+**A3-c zone drawing** (2026-08-05): trace a border on the ground, `Enter` closes,
+`Backspace` takes a corner back, `Esc` abandons; the polygon is normalised to the winding
+the shipped world uses (`pointInPolygon` itself is even-odd and does not care). The editor refuses a self-crossing ring — it looks like a normal
+shape and then contains half of itself (wrong fog, no discovery XP), which no amount of
+looking would catch, so it is tested (10 tests). A selected zone can push its fog/sky/light
+into the viewport, off by default. This is the piece that unblocks the §7 scenario: publish
+BLOCKS on land in no zone, so a new islet could not reach the game without it.
+**A3-b spawns mode** (2026-08-05): aggro/leash rings at TRUE size from the enemies a spawner
+actually rolls (widest among its entries + the spawn radius — what a passer-by will feel);
+camp links through the group centre with the spread in metres, so a `campTag` accidentally
+spanning a ridge reads as one shape rather than two camps; per-zone population against the
+CONTENT_0.1 budget over the same `pointInPolygon` the game assigns zones with, with unzoned
+spawners on their own line; overlapping-pull pairs reported and never blocked (P9-C shipped
+two deliberately mixed camps); and a deterministic simulate-populate using the server's own
+uniform-over-AREA scatter. 11 tests. **Patrol splines were deliberately NOT built** — the
+spawner schema has no patrol field and the AI no patrol state, so the editor would author
+data nothing reads; the game-side slice it needs is written out in the game repo's
+USER_QUESTIONS Q24.
+**A3-c zone editing + the shrine graph** (2026-08-05): pick a zone from the tool bar (or click
+its outline) and every corner gets a draggable handle with an insert dot on each edge;
+`Shift`+click removes one. Each edit is refused if the ring would cross itself — including the
+DELETE case, which can break a polygon that was legal a moment before (a brute-force search
+found the fixture; it is not obvious). Shrines/campfires/signposts/portals/quest props are
+placeable through a kind picker, each stamping a row that already passes shared
+`validateInteractable`, and the Travel card lists every hop at the price the game will charge —
+`fastTravelCost` went into `@dawned/shared` (game `formulas/travel.ts`, +7 tests) rather than
+being copied here. Four real bugs fell out of driving it in a browser, none of which a unit
+test could have reached: (1) **"Import live map" never reloaded the OBJECT list**, so an import
+that restored a zone left the panel insisting it was gone and every camp "in no zone";
+(2) **`normalisePolygon` reversed the winding the live world ships**, rewriting every zone the
+editor touched — invisible at runtime (`pointInPolygon` is even-odd) and now pinned against a
+ring copied from the bake; (3) **a zone border stole clicks from markers standing on it** and
+the next thing you press is Delete — it ate Dawnshore during a smoke run, so solid markers beat
+outlines in the pick and deleting a zone asks first; (4) **the zone tool required terrain under
+the cursor**, which made half of every outline untouchable (all three zones reach 620 m out over
+water) — it picks against the world plane now. Also: `@dawned/shared` is excluded from Vite's
+dep pre-bundling, because the cached bundle survived a rebuild in the game repo and reported a
+brand-new export as missing.
+**Still open in A3:** selection sets/isolation/prefab collections/scatter brush and the
+rebindable keymap UI (rest of d), then the §7 run. **121 tests green**, and
+`node tools/smoke/map-editor.mjs` passes end to end (import → sculpt/undo/redo → paint →
+overlays → autosave → place/inspect/delete → spawn budget + rings → two shrines and the
+travel graph → drag/insert/remove a zone corner → validate → clean up after itself).
 
 ### Running it locally
 

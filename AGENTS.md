@@ -56,3 +56,56 @@ truth).
   is the whole answer** and the page defaults it to 40, where a properly built level-12
   warrior measures 78 (an unspent one, 30). A guessed dps can be 3× off and send someone
   re-balancing a boss that was fine — worth a measured reference on the sim controls.
+  **A2-a/A2-b — the map editor's foundations are in (2026-08-04).** Shared (game repo)
+  owns brush math + deterministic scatter so preview, bake and server agree; draft
+  tables are migration 0014. Here: chunk-granular draft CRUD behind a 45 s single-writer
+  lease with takeover, gzip checkpoints + restore, per-layer clear; `validateDraft`
+  (zone coverage, model/loot/enemy refs, safe-zone spawners, walkgrid flood-fill
+  reachability, floater/buried + per-chunk instance budgets); `bakeDraft` staging into
+  `.tmp` then renaming, with SSE progress. Publish mints `map-<epoch>`, repoints
+  `current.json` LAST, mirrors the spawner layer into published `content_spawners`, then
+  pokes `/ops/reload-map` + `/ops/reload-content`. `POST /api/map/import-live` seeds the
+  draft from the live world — without it the first publish would delete Dawnhaven.
+  61 tests green.
+  **A2-c/A2-d + A3-a are in (2026-08-04).** The viewport renders chunks through the
+  SAME shared geometry the game client uses; orbit/fly/top cameras with slots; slope,
+  walkability and height overlays; all six sculpt brushes, masked splat painting, water,
+  board toggle, ruler; island/erosion/auto-splat generators; a 220-step byte-snapshot
+  undo grouped per stroke; the streaming publish panel. Placed objects draw as markers
+  with true-size rings, zone polygons and scatter density; Place stamps a
+  prop/spawner/POI/chest with published-ref defaults; a layers panel counts, hides and
+  clears (checkpointed). Resident region follows camera zoom, capped at 13×13 chunks
+  (17×17 measured at 7.5 M triangles/frame). `tools/smoke/map-editor.mjs` drives it all
+  in a real browser and measures PIXELS — four bugs came out of looking, none from a
+  failing assertion.
+  **Autosave hardening (2026-08-05):** a flush landing during another flush was DROPPED
+  rather than queued (losing everything dirtied meanwhile), and a generator-sized save
+  blew the endpoint's 64-chunk limit and failed permanently. Both fixed + retry-on-refusal,
+  pinned by `draft-store.test.ts`. Neither reproduces on a fast machine — the slow browser
+  run is what found them.
+  **A3-b spawns mode (2026-08-05):** aggro/leash rings at true size from the enemies a
+  spawner actually rolls, camp links with the spread in metres, per-zone population vs the
+  CONTENT_0.1 budget (unzoned spawners on their own line), overlapping-pull pairs reported
+  but never blocked, and a deterministic simulate-populate using the server's own
+  uniform-over-area scatter. 11 tests. Patrol splines deliberately NOT built — no patrol
+  field on the schema, no patrol state in the AI, so the editor would author data nothing
+  reads (game repo USER_QUESTIONS Q24).
+  **A3-c zone drawing (2026-08-05):** trace a border, Enter closes, Backspace takes a
+  corner back, Esc abandons; the polygon is normalised to the winding the shipped world
+  uses, and a self-crossing ring is REFUSED — it looks normal and then contains half of
+  itself (wrong fog, no discovery XP), so it is tested rather than left to the eye. A
+  selected zone previews its fog/sky/light in the viewport. This unblocks §7: publish
+  blocks on land in no zone.
+  **A3-c zone editing + shrine graph (2026-08-05):** draggable corner handles with
+  insert dots on the edges and Shift+click to remove, every edit refused if the ring
+  would cross itself (including the delete case). Shrines/campfires/signposts/portals/
+  quest props placeable via a kind picker, each stamping a row that passes shared
+  `validateInteractable`. The Travel card prices every hop with `fastTravelCost`, new in
+  `@dawned/shared` so the panel cannot quote a number the game will not charge. Four bugs
+  came out of the browser run: the live-map import never reloaded the object list;
+  `normalisePolygon` reversed the winding the shipped world uses; a zone border stole
+  clicks from markers standing on it and one Delete ate Dawnshore (markers now beat
+  outlines, zone deletes confirm); and the zone tool required terrain under the cursor,
+  making the half of every outline that runs over water untouchable.
+  Open in A3: selection sets + prefabs + scatter brush + keymap UI, then the §7 run.
+  121 tests green; `node tools/smoke/map-editor.mjs` passes end to end.

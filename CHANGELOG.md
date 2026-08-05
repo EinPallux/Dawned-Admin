@@ -5,6 +5,163 @@ versions track the game's release trains (0.1.0 = tooling that shipped Dawned 0.
 
 ## [Unreleased]
 
+### Added — editing a zone you already drew, and the shrine graph (2026-08-05, A3-c)
+
+- **Zone corner handles.** Pick a zone from the tool bar (or click its border) and every corner
+  gets a diamond you can drag, with a smaller dot on each edge that adds a corner where you click
+  it. `Shift`+click a corner removes it. The handles stay the same size on screen as you pull the
+  camera back, so editing a coastline does not mean zooming in on each corner in turn.
+- **Edits that would break the shape are refused, with a reason.** Dragging a corner across the
+  far edge, or removing the one corner holding two lobes apart, produces a ring that crosses
+  itself — it looks like a normal polygon and then contains half of itself. A refused drag stops
+  at the last good position instead of snapping back.
+- **Shrines, campfires, signposts, portals and quest props** are placeable: the Place tool grew a
+  kind picker, and each kind starts as a row that is already valid (a chest points at a real loot
+  table, a signpost has words, a portal has a destination — itself, visibly, rather than one
+  invented for you). A new shrine joins the travel graph by default.
+- **Travel card**: every shrine-to-shrine hop with the gold it will cost, cheapest first, plus the
+  graph drawn on the world coloured by price. Warnings for shrines left off the graph, a lone node
+  with nowhere to travel to, and hops so short nobody would pay for them. The price comes from the
+  game's own `fastTravelCost` (new in `@dawned/shared`) — the panel cannot quote a number the game
+  will not charge.
+
+### Fixed — three ways the editor could lie about the map (2026-08-05)
+
+- **"Import live map" left the object list stale.** It reloaded the terrain and nothing else, so
+  zones, spawners and props stayed as the draft had them — an import that restored a zone left the
+  panel insisting the zone was gone and every camp "in no zone".
+- **A zone border stole clicks from things standing on it**, and the next thing you press after
+  selecting is often Delete. Solid markers now win the pick over outlines, and deleting a zone
+  asks first — losing one takes its ambience with it and blocks publishing on "land in no zone".
+- **Zone polygons were normalised to the opposite winding from the live world's.** Invisible at
+  runtime (the game's point-in-polygon is even-odd and does not care) but it rewrote every zone the
+  editor touched, and it renumbered corners mid-edit. Pinned now against a ring copied from the
+  published bake.
+- **The zone tool required ground under the cursor.** Zone borders run out over open water and past
+  the streamed region, so half of every outline was untouchable; the tool now falls back to the
+  world plane, which is where zone geometry lives anyway.
+- **`@dawned/shared` is excluded from Vite's dependency pre-bundling.** It is the sibling game
+  checkout on a `file:` link, and the cached pre-bundle survived rebuilds — a fresh export from the
+  game repo showed up as "does not provide an export named …" for a symbol plainly there.
+
+### Added — seeing what a camp layout actually does (2026-08-05, A3-b)
+
+- **Aggro and leash rings** on every spawner, drawn at true size from the
+  enemies it actually rolls — the widest reach among them, because that is what
+  a player walking past will feel.
+- **Camp links**: spawners sharing a tag are joined by lines through their
+  centre, so a tag accidentally spanning a ridge reads as one shape instead of
+  two camps. The spread in metres is listed, longest first.
+- **Population per zone** against the CONTENT_0.1 budget: spawners, enemies
+  standing at once, camps, and the rank mix. A spawner sitting in no zone is
+  reported on its own rather than folded into a total.
+- **Overlapping pulls**: pairs of camps whose aggro envelopes touch, with how
+  many metres they overlap. Reported, never blocked — two camps bleeding into
+  each other is sometimes the point.
+- **Simulate populate** ghosts one resolution of a camp using the same
+  uniform-over-area scatter the server spawns with, deterministic from a seed so
+  you can change a count and see what changed rather than a fresh shuffle.
+- **Patrol splines are deliberately absent** — see USER_QUESTIONS Q24. The AI
+  has no patrol state, and an editor for a field the game ignores would look
+  finished and do nothing.
+
+### Fixed — autosave could quietly leave work unsaved (2026-08-05)
+
+- **Editing while a save was in flight lost that work.** The second save was
+  dropped instead of queued, so anything changed during the previous save sat
+  unwritten — the editor kept saying "Unsaved changes" and only caught up if
+  you happened to edit again. Saves now queue and settle.
+- **Running a generator failed to save at all.** Island synthesis, erosion and
+  auto-splat touch hundreds of chunks; the save was sent as one oversized
+  request the server refused, and the editor showed a permanent "Save failed".
+  Large saves are now split into batches the server accepts.
+- **A refused save now retries by itself** instead of waiting for you to make
+  another edit.
+
+### Added — drawing zones (2026-08-05, A3-c)
+
+- **Zone mode**: click along the ground to trace a border, `Enter` to close it,
+  `Backspace` to take back a corner, `Esc` to abandon it. The outline rides the
+  terrain as you draw, so you are tracing a coastline rather than guessing at
+  numbers.
+- **The editor refuses outlines that would misbehave in the game**: fewer than
+  three corners, an outline that crosses itself, or one enclosing no ground. A
+  crossed border is the nasty one — it looks like a normal shape and then
+  contains only half of itself, so a player standing in the middle of the zone
+  would get the wrong fog and no discovery XP.
+- **Preview a zone's ambience in the viewport**: its fog, sky and light applied
+  live, so "is 420 m of fog right?" is answered by standing in it instead of
+  reading a number. Off by default — a zone's dusk hides the terrain you are
+  shaping.
+- Zones are what publishing blocks on (land in no zone reads as open ocean), so
+  sculpting a new islet and putting it in the game is now possible end to end.
+
+### Added — placing things in the world (2026-08-04, A3-a)
+
+- **Place mode**: click the ground to drop a prop, an enemy spawner, a
+  discovery point or a chest. New rows come out valid — the model, enemy and
+  loot table default to things that are actually published — and the inspector
+  opens on what you just placed so choosing the right one is the next thing in
+  front of you.
+- **Everything on the terrain is visible and clickable**: props, spawners,
+  camps, POIs and chests as colour-coded markers, with rings drawn at TRUE size
+  for the numbers you are actually deciding — a spawner's radius, a POI's
+  discovery ring. Zone borders draw on the ground they cover. Foliage shows as
+  the density map it really is, not a fake forest.
+- **The layers panel** counts each kind, hides any of them, and carries
+  "Clear layer…" — double-confirmed, and the server takes a checkpoint first,
+  so wiping every prop in a zone is recoverable even after a reload.
+- A marker whose ground has not streamed in yet is not drawn at all, rather
+  than parked on the sea floor.
+
+### Added — the Map Editor (2026-08-04, A2-c/A2-d)
+
+- **The world is editable in the browser.** Content → World → Map Editor opens
+  the island in 3D, rendered exactly the way the game renders it — same
+  geometry, same splat colours, same water — because both sides now build
+  chunks from one shared implementation. What you sculpt is what players get.
+- **Sculpt and paint**: raise, smooth, flatten, set-height, terrace and noise
+  brushes with four falloffs; 8-layer texture painting that can be masked to a
+  slope band ("only on cliffs") or a height band ("only above the tree line");
+  per-chunk water; and a board tool for deciding which chunks are world at all.
+- **Generators to start from**: a seeded island (same seed, same island),
+  thermal erosion that turns noise spikes into shapes you can walk on, and
+  auto-splat that dresses terrain from its own slope and height. Each is a
+  single Ctrl+Z.
+- **Overlays that answer questions**: slope heat, a walkability preview in the
+  game's own green/red/blue, height bands, and the chunk grid.
+- **Cameras**: orbit for shaping, fly (WASD, speed scaled to how far out you
+  are) for crossing the island, top-down for coastlines, and 1–9 slots.
+- **Undo 220 steps deep**, grouped per stroke — a coastline undoes as a
+  coastline, not one dab at a time.
+
+### Added — Map editor foundations: draft store, validate, bake, publish (2026-08-04, A2-b)
+
+- **The map is now editable data with a real publish rail.** Terrain drafts are
+  stored chunk by chunk, so a brush stroke autosaves as a handful of 25 kB
+  writes rather than the whole world. Everything standing on the ground is its
+  own row, which is what makes "move this rock" one write and "wipe every prop
+  in Emberwood" a scoped delete.
+- **Import the live world into the draft** (`Import live map`). Without this the
+  editor would open on empty ocean and the first publish would delete Dawnhaven,
+  every camp and every zone. It reads the bake players are currently standing on
+  plus the published spawner rows, and takes a checkpoint before overwriting an
+  existing draft.
+- **Validation catches what the viewport cannot show**: land in no zone (it
+  would read as open ocean), a chest with no loot table, a prop whose model was
+  never baked, a spawner inside a safe zone or pointing at an unpublished enemy,
+  and — the one nobody finds by looking — content you cannot walk to, via a
+  flood-fill from the spawn across the same walkgrid the server enforces.
+  Floaters, buried props and per-chunk instance budgets report without blocking.
+- **Bake + publish with live progress.** Chunk bins, walkgrid, zones,
+  placements, meta and the world-map/minimap renders are staged into a temporary
+  directory and renamed into place; the `current.json` pointer moves LAST, so a
+  bake that fails halfway cannot take the world down. The game is then asked to
+  hot-load the new map — no deploy, no restart.
+- **One writer at a time**: a 45-second lease with takeover requests, and named
+  checkpoints (gzip snapshots) you can restore, taken automatically before
+  anything destructive.
+
 ### Added — Enemies editor: bestiary, spawners, time-to-kill (2026-08-04, with game P9)
 
 - **Content → Enemies**, two tabs on one publish rail. Enemies and spawners ship
