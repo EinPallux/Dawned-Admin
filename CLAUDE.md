@@ -144,6 +144,16 @@ everything under `node_modules/` and the package is a `file:` link into it — w
 symptom `optimizeDeps.exclude` already fixed ("does not provide an export named X" for a
 symbol plainly in the file), which is what makes it easy to chase twice. `server.watch` now
 un-ignores the linked package.
+**Game P10-E ran the whole gathering catalogue through this panel (2026-08-05)** —
+`tools/content/author-nodes.mjs`: 42 material/gem/proc/fish items, all 21 resource-node
+definitions and 65 T1–T2 placements, each published on its own rail, ending with a map
+publish the game hot-swapped onto. That is the Professions editor's first real load, and it
+held. Two things the run taught the tooling: a content script must be **safe to re-run** (an
+unchanged draft prunes itself, so "nothing to publish" is success, not failure — otherwise
+fixing one placement means re-authoring everything), and a placement pass must **clear its
+layer first**, because overwriting by id leaves the previous run's rows standing wherever they
+were. Moving a cluster fifty metres left two trees at the old spot: published, invisible in
+the diff, findable only by walking there.
 **A2-a/A2-b — the map editor's foundations are in** (2026-08-04): the game repo's
 `@dawned/shared` now owns brush math and deterministic scatter (so the editor preview, the
 bake and the server cannot disagree), plus the draft tables (migration 0014). Here: chunk-

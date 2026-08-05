@@ -5,6 +5,21 @@ versions track the game's release trains (0.1.0 = tooling that shipped Dawned 0.
 
 ## [Unreleased]
 
+### Added — the gathering catalogue was authored here (2026-08-05, game P10-E)
+
+- **`tools/content/author-nodes.mjs`** puts the whole P10 catalogue through the panel: 42
+  material/gem/proc/fish items, all 21 resource-node definitions, and 65 T1–T2 placements into
+  the map editor's node layer, then publishes each on its own rail. Safe to re-run — an
+  unchanged draft prunes itself and "nothing to publish" is treated as success rather than
+  failure, so fixing one placement does not mean re-authoring the catalogue.
+- The placement pass **checks the ground before planting**. Cluster entries are hints, not
+  coordinates: it searches outward for terrain that suits the cluster (dry for a tree, wet for a
+  shoal), drops members the terrain still refuses, and refuses loudly if nothing within 90 m
+  works. The first pass without it put every fishing cluster on dry land and planted zero shoals.
+- It **clears the node layer before writing**, because a re-run that only overwrites leaves the
+  previous run's placements standing wherever they were — two trees were left behind at old
+  coordinates, published, invisible in the diff.
+
 ### Added — the Professions editor (2026-08-05, A1-e, alongside game P10)
 
 - **Content → Professions** edits what a birch, a copper vein, a herb patch or a shoal IS.

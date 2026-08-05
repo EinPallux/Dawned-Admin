@@ -130,6 +130,9 @@ editor's `node` layer to place them.**
       placement whose definition is not published. `node tools/smoke/professions-editor.mjs` drives
       the page in a browser and checks the preview's arithmetic against the shared formulas rather
       than only that a table appeared. **196 tests green.**
+      The game's P10-E content pass then ran through this surface end to end
+      (`tools/content/author-nodes.mjs`): 42 items, 21 node definitions and 65 placements
+      authored, published and standing in the live world — the editor's first real load.
       One trap closed while building it: rebuilding `@dawned/shared` in the game repo left a
       running dev server serving the module text it read at boot, because Vite ignores everything
       under `node_modules/` and the package is a `file:` link INTO it. The symptom is identical to
