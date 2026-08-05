@@ -5,6 +5,27 @@ versions track the game's release trains (0.1.0 = tooling that shipped Dawned 0.
 
 ## [Unreleased]
 
+### Added — seeing what a camp layout actually does (2026-08-05, A3-b)
+
+- **Aggro and leash rings** on every spawner, drawn at true size from the
+  enemies it actually rolls — the widest reach among them, because that is what
+  a player walking past will feel.
+- **Camp links**: spawners sharing a tag are joined by lines through their
+  centre, so a tag accidentally spanning a ridge reads as one shape instead of
+  two camps. The spread in metres is listed, longest first.
+- **Population per zone** against the CONTENT_0.1 budget: spawners, enemies
+  standing at once, camps, and the rank mix. A spawner sitting in no zone is
+  reported on its own rather than folded into a total.
+- **Overlapping pulls**: pairs of camps whose aggro envelopes touch, with how
+  many metres they overlap. Reported, never blocked — two camps bleeding into
+  each other is sometimes the point.
+- **Simulate populate** ghosts one resolution of a camp using the same
+  uniform-over-area scatter the server spawns with, deterministic from a seed so
+  you can change a count and see what changed rather than a fresh shuffle.
+- **Patrol splines are deliberately absent** — see USER_QUESTIONS Q24. The AI
+  has no patrol state, and an editor for a field the game ignores would look
+  finished and do nothing.
+
 ### Fixed — autosave could quietly leave work unsaved (2026-08-05)
 
 - **Editing while a save was in flight lost that work.** The second save was

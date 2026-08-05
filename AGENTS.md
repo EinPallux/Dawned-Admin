@@ -83,6 +83,13 @@ truth).
   blew the endpoint's 64-chunk limit and failed permanently. Both fixed + retry-on-refusal,
   pinned by `draft-store.test.ts`. Neither reproduces on a fast machine — the slow browser
   run is what found them.
+  **A3-b spawns mode (2026-08-05):** aggro/leash rings at true size from the enemies a
+  spawner actually rolls, camp links with the spread in metres, per-zone population vs the
+  CONTENT_0.1 budget (unzoned spawners on their own line), overlapping-pull pairs reported
+  but never blocked, and a deterministic simulate-populate using the server's own
+  uniform-over-area scatter. 11 tests. Patrol splines deliberately NOT built — no patrol
+  field on the schema, no patrol state in the AI, so the editor would author data nothing
+  reads (game repo USER_QUESTIONS Q24).
   **A3-c zone drawing (2026-08-05):** trace a border, Enter closes, Backspace takes a
   corner back, Esc abandons; the polygon is normalised to the winding `pointInPolygon`
   expects, and a self-crossing ring is REFUSED — it looks normal and then contains half of

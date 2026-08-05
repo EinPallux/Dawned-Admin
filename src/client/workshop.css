@@ -1320,3 +1320,38 @@ code,
 .me-json.is-invalid {
   border-color: var(--red);
 }
+
+/* --- A3-b: the spawn budget table ----------------------------------------- */
+
+.me-budget {
+  width: 100%;
+  margin-top: 8px;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.me-budget td {
+  padding: 2px 0;
+  color: var(--text-dim);
+  border-top: 1px solid var(--hairline);
+}
+
+.me-budget td:first-child {
+  color: var(--text);
+}
+
+.me-budget td:nth-child(2) {
+  text-align: right;
+  font-family: var(--font-mono);
+}
+
+.me-budget td:last-child {
+  text-align: right;
+  font-family: var(--font-mono);
+  padding-left: 8px;
+}
+
+.me-budget tr.me-warn td {
+  color: var(--gold);
+  text-align: left;
+}

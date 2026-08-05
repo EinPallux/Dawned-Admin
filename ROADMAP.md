@@ -186,7 +186,15 @@ with it).
       The inspector is quick fields over the schema-validated full row — the same two-tier shape
       the Abilities and Items editors use. The layers panel counts each layer, hides it, and
       carries the double-confirmed, checkpointed "Clear layer…".
-- [ ] A3-b — patrol splines, camp links, spawn-density heat, simulate-populate.
+- [x] **A3-b — spawns mode.** Aggro/leash rings at true size from the enemies a spawner
+      actually rolls; camp links drawn through the group centre with the spread in metres (a tag
+      spanning a ridge reads as one shape, not two camps); per-zone population against the
+      CONTENT_0.1 budget with unzoned spawners called out separately; overlapping-pull pairs
+      reported but never blocked; and a deterministic simulate-populate using the same
+      uniform-over-area scatter the server spawns with. 11 tests.
+      **Patrol splines are NOT shipped** — the AI has no patrol state and the spawner schema no
+      patrol field, so the editor would author data nothing reads (USER_QUESTIONS Q24 carries
+      the game-side slice it would need).
 - [x] **A3-c (part) — zone drawing + live ambience preview.** Trace a border on the ground,
       `Enter` closes it, `Backspace` takes back a corner, `Esc` abandons it; the polygon is
       normalised to the winding the game's `pointInPolygon` expects, so the owner never has to

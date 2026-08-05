@@ -72,6 +72,29 @@ checks — not a game client).
   CONTENT_0.1 targets — a live "content budget" meter per zone in the panel!).
 - "Simulate populate" preview: ghost-render one spawn resolution to eyeball camp compositions.
 
+#### As-built (A3-b)
+
+- **Rings are drawn at TRUE size** from the enemies a spawner actually rolls — the widest aggro
+  and leash among its entries, plus the spawn radius, because that is what a player walking past
+  will feel. A ring that lies about its metres is worse than no ring.
+- **Camp links** join tagged spawners through their group centre and report the spread in metres,
+  longest first. `campTag` is what the server groups social aggro by, so this is the real
+  relationship rather than an editor-side grouping — and a tag that accidentally spans a ridge
+  reads instantly as one shape rather than two camps.
+- **Population per zone** counts spawners, enemies standing at once, camps and the rank mix, over
+  the same `pointInPolygon` the game assigns zones with. A spawner in NO zone is reported on its
+  own line; folding it into a total would hide an authoring mistake in a number that looks fine.
+- **Overlapping pulls** lists pairs of camps whose aggro envelopes touch, with the overlap in
+  metres. Same-tag pairs are skipped — they are MEANT to pull together. Reported, never blocked:
+  P9-C shipped two deliberately mixed camps, so this is a decision to make rather than an error.
+- **Simulate populate** rolls one resolution with the same uniform-over-area scatter the server
+  spawns with (`sqrt()` on the radius, or the shape bunches at the middle and a 20 m camp
+  previews as a 6 m huddle). Deterministic from a seed, so changing a count shows the change
+  rather than a fresh shuffle.
+- **Patrol splines are not implemented.** They need a `patrol` field on the spawner schema AND an
+  AI state that walks it; the game has neither, and an editor for a field nothing reads would
+  look finished and do nothing. Tracked as game-side work in the game repo's USER_QUESTIONS Q24.
+
 ### 2.4 Zones & POI Mode
 
 - **Zone polygons:** draw/edit vertices on the terrain; properties (name, level band, ambience

@@ -11,7 +11,7 @@
  * owner knows BEFORE they sculpt for ten minutes that they are read-only.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as THREE from 'three';
 import {
@@ -53,7 +53,7 @@ import {
 import { PublishPanel } from './PublishPanel.js';
 import { ObjectStore, mintId } from './object-store.js';
 import { LAYER_COLOR, buildObjectView, type PlacedObject } from './placement.js';
-import { zoneAmbienceSchema } from '@dawned/shared';
+
 import {
   DEFAULT_AMBIENCE,
   ZoneSketch,
@@ -62,6 +62,16 @@ import {
   zoneDrawProblems,
 } from './zones.js';
 import { EDITOR_LIGHT } from './viewport.js';
+import {
+  aggroOverlaps,
+  campLinks,
+  populationByZone,
+  simulatePopulate,
+  type EnemyFacts,
+  type ZoneFacts,
+} from './spawn-analysis.js';
+import { buildSpawnOverlay, disposeSpawnOverlay } from './spawn-overlay.js';
+import { spawnerDefSchema, zoneAmbienceSchema } from '@dawned/shared';
 import { ObjectInspector } from './ObjectInspector.js';
 import { LAYER_LABEL, PLACEABLE_LAYERS, newObjectDef, type PlaceableLayer } from './new-object.js';
 
@@ -136,6 +146,8 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
   const [hiddenLayers, setHiddenLayers] = useState<Set<string>>(() => new Set());
   const [sketchLength, setSketchLength] = useState(0);
   const [previewZone, setPreviewZone] = useState(false);
+  const [spawnOverlay, setSpawnOverlay] = useState({ aggro: false, leash: false, camps: false });
+  const [simulateSeed, setSimulateSeed] = useState<number | null>(null);
 
   // Tool settings are read inside imperative pointer handlers that are
   // registered once; refs keep them current without re-registering listeners.
@@ -596,6 +608,97 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
       session.viewport.setObjectView(object.id, view);
     }
   }, [objects, selectedId, hiddenLayers, saveState]);
+
+  // --- spawns mode (A3-b) ---------------------------------------------------
+  //
+  // Everything here reads data the GAME already acts on: `campTag` is what the
+  // server groups social aggro by, `aggroRadius`/`leashRadius` are what the AI
+  // pulls and leashes with. Nothing invents a field the game would ignore.
+
+  const enemyFacts = useQuery({
+    queryKey: ['map-enemy-facts'],
+    staleTime: 60_000,
+    queryFn: async (): Promise<Map<string, EnemyFacts>> => {
+      const data = await apiGet<{ enemies: Record<string, unknown>[] }>('/enemies');
+      const out = new Map<string, EnemyFacts>();
+      for (const row of data.enemies) {
+        const id = typeof row.id === 'string' ? row.id : '';
+        if (!id) continue;
+        out.set(id, {
+          id,
+          name: typeof row.name === 'string' ? row.name : id,
+          rank: typeof row.rank === 'string' ? row.rank : 'normal',
+          aggroRadius: typeof row.aggroRadius === 'number' ? row.aggroRadius : 10,
+          leashRadius: typeof row.leashRadius === 'number' ? row.leashRadius : 40,
+        });
+      }
+      return out;
+    },
+  });
+
+  /** Spawner rows that actually parse — a half-edited one is skipped rather
+   * than crashing the panel that is supposed to help you fix it. */
+  const spawners = useMemo(() => {
+    const out = [];
+    for (const object of objects) {
+      if (object.layer !== 'spawner') continue;
+      const parsed = spawnerDefSchema.safeParse(object.def);
+      if (parsed.success) out.push(parsed.data);
+    }
+    return out;
+  }, [objects]);
+
+  const zoneFacts = useMemo<ZoneFacts[]>(
+    () =>
+      objects
+        .filter((object) => object.layer === 'zone' && Array.isArray(object.def.polygon))
+        .map((object) => ({
+          id: object.id,
+          name: typeof object.def.name === 'string' ? object.def.name : object.id,
+          polygon: object.def.polygon as [number, number][],
+        })),
+    [objects],
+  );
+
+  const links = useMemo(() => campLinks(spawners), [spawners]);
+  const population = useMemo(
+    () => populationByZone(spawners, zoneFacts, enemyFacts.data ?? new Map()),
+    [spawners, zoneFacts, enemyFacts.data],
+  );
+  const overlaps = useMemo(
+    () => aggroOverlaps(spawners, enemyFacts.data ?? new Map()),
+    [spawners, enemyFacts.data],
+  );
+
+  useEffect(() => {
+    const session = sessionRef.current;
+    if (!session) return;
+    const facts = enemyFacts.data ?? new Map<string, EnemyFacts>();
+    const ghosts =
+      simulateSeed !== null && selected?.layer === 'spawner'
+        ? (() => {
+            const parsed = spawnerDefSchema.safeParse(selected.def);
+            return parsed.success ? simulatePopulate(parsed.data, simulateSeed, facts) : [];
+          })()
+        : [];
+    const overlay =
+      spawnOverlay.aggro || spawnOverlay.leash || spawnOverlay.camps || ghosts.length > 0
+        ? buildSpawnOverlay({
+            spawners,
+            enemiesById: facts,
+            links,
+            ghosts,
+            groundAt: (x, z) => session.store.heightAt(x, z),
+            show: spawnOverlay,
+          })
+        : null;
+    if (overlay) session.viewport.addGizmo(overlay);
+    return () => {
+      if (!overlay) return;
+      session.viewport.removeGizmo(overlay);
+      disposeSpawnOverlay(overlay);
+    };
+  }, [spawners, links, spawnOverlay, simulateSeed, selected, enemyFacts.data, saveState]);
 
   // --- zone ambience preview ------------------------------------------------
   //
@@ -1322,6 +1425,84 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
               </div>
             </section>
           )}
+
+          <section className="ws-panel me-card">
+            <h3>Spawns</h3>
+            <div className="me-row">
+              {(['aggro', 'leash', 'camps'] as const).map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={`ws-btn me-tiny${spawnOverlay[key] ? ' me-on' : ''}`}
+                  onClick={() => {
+                    setSpawnOverlay((current) => ({ ...current, [key]: !current[key] }));
+                  }}
+                >
+                  {key}
+                </button>
+              ))}
+              {selected?.layer === 'spawner' && (
+                <button
+                  type="button"
+                  className={`ws-btn me-tiny${simulateSeed !== null ? ' me-on' : ''}`}
+                  title="Ghost one spawn resolution of the selected camp"
+                  onClick={() => {
+                    // A NEW seed each press, so "roll again" is a real action;
+                    // the same seed always previews the same camp.
+                    setSimulateSeed((current) => (current === null ? 1 : current + 1));
+                  }}
+                >
+                  {simulateSeed === null ? 'simulate' : 'roll again'}
+                </button>
+              )}
+              {simulateSeed !== null && (
+                <button
+                  type="button"
+                  className="ws-btn me-tiny"
+                  onClick={() => {
+                    setSimulateSeed(null);
+                  }}
+                >
+                  clear
+                </button>
+              )}
+            </div>
+
+            <table className="me-budget">
+              <tbody>
+                {population.zones.map((zone) => (
+                  <tr key={zone.zoneId}>
+                    <td>{zone.zoneName}</td>
+                    <td>
+                      <b>{zone.enemies}</b> enemies
+                    </td>
+                    <td>
+                      {zone.spawners} sp · {zone.camps} camps
+                    </td>
+                  </tr>
+                ))}
+                {population.unzoned > 0 && (
+                  <tr className="me-warn">
+                    <td colSpan={3}>
+                      {population.unzoned} spawner{population.unzoned === 1 ? '' : 's'} in no zone
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+            {overlaps.length > 0 && (
+              <p className="me-hint">
+                {overlaps.length} camp pair{overlaps.length === 1 ? '' : 's'} pull together — widest{' '}
+                {overlaps[0]?.overlapM} m ({overlaps[0]?.a} ↔ {overlaps[0]?.b}).
+              </p>
+            )}
+            {links.length > 0 && (
+              <p className="me-hint">
+                Widest camp: <b>{links[0]?.tag}</b> spans {links[0]?.spreadM} m across{' '}
+                {links[0]?.spawnerIds.length} spawners.
+              </p>
+            )}
+          </section>
 
           <section className="ws-panel me-card">
             <h3>Layers</h3>

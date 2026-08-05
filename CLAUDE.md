@@ -170,9 +170,20 @@ shape and then contains half of itself (wrong fog, no discovery XP), which no am
 looking would catch, so it is tested (10 tests). A selected zone can push its fog/sky/light
 into the viewport, off by default. This is the piece that unblocks the §7 scenario: publish
 BLOCKS on land in no zone, so a new islet could not reach the game without it.
-**Still open in A3:** patrol splines + camp links + density heat (b), vertex editing on an
-existing polygon and the shrine graph (rest of c), selection sets/isolation/prefab
-collections/scatter brush and the rebindable keymap UI (rest of d), then the §7 run.
+**A3-b spawns mode** (2026-08-05): aggro/leash rings at TRUE size from the enemies a spawner
+actually rolls (widest among its entries + the spawn radius — what a passer-by will feel);
+camp links through the group centre with the spread in metres, so a `campTag` accidentally
+spanning a ridge reads as one shape rather than two camps; per-zone population against the
+CONTENT_0.1 budget over the same `pointInPolygon` the game assigns zones with, with unzoned
+spawners on their own line; overlapping-pull pairs reported and never blocked (P9-C shipped
+two deliberately mixed camps); and a deterministic simulate-populate using the server's own
+uniform-over-AREA scatter. 11 tests. **Patrol splines were deliberately NOT built** — the
+spawner schema has no patrol field and the AI no patrol state, so the editor would author
+data nothing reads; the game-side slice it needs is written out in the game repo's
+USER_QUESTIONS Q24.
+**Still open in A3:** vertex editing on an existing polygon and the shrine graph (rest of c),
+selection sets/isolation/prefab collections/scatter brush and the rebindable keymap UI
+(rest of d), then the §7 run.
 
 ### Running it locally
 

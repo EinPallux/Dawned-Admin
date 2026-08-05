@@ -149,6 +149,11 @@ const run = async (browser) => {
   await page.fill('input[autocomplete="current-password"]', PASSWORD);
   await page.click('button[type="submit"]');
   await page.waitForSelector('.shell', { timeout: 30000 });
+  // Everything before this point includes the app's own /auth/me probe, which
+  // 401s on purpose to decide whether to show the login screen. Start the
+  // console-error tally here rather than blanket-ignoring 401s, which would
+  // hide a real auth failure later in the run.
+  errors.length = 0;
   ok('signed in');
 
   // --- open the editor ------------------------------------------------------
@@ -303,8 +308,16 @@ const run = async (browser) => {
 
   // The inspector must open on what was just placed, or the owner has no way
   // to pick the model they actually wanted.
+  //
+  // WAIT for it rather than sampling: the marker appears optimistically the
+  // moment you click, but the selection only lands once the save comes back,
+  // so there is a real window where the layer count says 1 and the inspector
+  // is not up yet. Sampling once inside that window fails against a correct
+  // app — which is exactly what it did, twice.
   const inspector = page.locator('.me-inspector');
-  if ((await inspector.count()) === 0) {
+  try {
+    await inspector.waitFor({ state: 'attached', timeout: 20_000 });
+  } catch {
     await shoot(page, 'a3-no-inspector.png');
     fail('no inspector appeared for the newly placed prop');
   }
