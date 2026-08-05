@@ -658,6 +658,14 @@ export const registerMapRoutes = (app: FastifyInstance, deps: MapRouteDeps): voi
       // the previous version is still the live one, so a failed bake cannot
       // take the world down.
       await writeCurrentPointer(config.MAP_DIR, version);
+      // Publishing mints a directory; nothing used to remove one. A bake of the
+      // shipped world is ~8.6 MB and the owner will publish dozens of times
+      // building a zone, which on a 4 GB VPS is a disk-fill with no warning.
+      // Keep a rollback window and sweep the rest — reported, never silent.
+      const pruned = await pruneOldBakes(config.MAP_DIR, version);
+      if (pruned.length > 0) {
+        send('step', { step: 'prune', done: pruned.length, total: pruned.length });
+      }
       // Two pokes, in this order: the map first (it re-seeds enemies from the
       // spawners against the new ground), then content, so the rows the
       // re-seeded world reads are the published ones.
@@ -668,7 +676,7 @@ export const registerMapRoutes = (app: FastifyInstance, deps: MapRouteDeps): voi
       await audit({
         actorAccountId: admin.accountId,
         action: 'map.publish',
-        args: { version, chunks: result.chunksEmitted, ms: result.ms },
+        args: { version, chunks: result.chunksEmitted, ms: result.ms, pruned },
         result: 'ok',
       });
       send('done', {
@@ -679,6 +687,10 @@ export const registerMapRoutes = (app: FastifyInstance, deps: MapRouteDeps): voi
         reload,
       });
     } catch (error) {
+      // Log it as well as streaming it. A publish that throws used to leave no
+      // trace on the server at all — the only way to find out why was to be
+      // looking at the browser when it happened.
+      request.log.error({ err: error }, 'map publish failed');
       send('done', { ok: false, problems: [(error as Error).message] });
     } finally {
       reply.raw.end();
@@ -710,6 +722,56 @@ const CURRENT_POINTER = 'current.json';
 const writeCurrentPointer = async (mapDir: string, version: string): Promise<void> => {
   const { writeFile } = await import('node:fs/promises');
   await writeFile(path.join(mapDir, CURRENT_POINTER), JSON.stringify({ version }, null, 2));
+};
+
+/**
+ * How many published bakes survive a publish, newest first. Five is a rollback
+ * window measured in afternoons, not a limit anyone will feel: the DRAFT is the
+ * source of truth and lives in Postgres, so an older bake is only ever wanted
+ * to undo the last publish or two.
+ */
+export const KEEP_BAKES = 5;
+
+/**
+ * Delete published bakes beyond the rollback window, plus any `.tmp` staging
+ * directory a killed process left behind. Never touches the live version, the
+ * one just minted, or `dev-2` (the committed `pnpm world:generate` fallback —
+ * it is not a `map-*` directory, so the filter alone protects it).
+ */
+export const pruneOldBakes = async (
+  mapDir: string,
+  live: string,
+  keep = KEEP_BAKES,
+): Promise<string[]> => {
+  const { readdir, rm } = await import('node:fs/promises');
+  let entries;
+  try {
+    entries = await readdir(mapDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const names = entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+  // `map-<epoch>` sorts chronologically as a string, which is why the version
+  // is minted that way; newest first.
+  const bakes = names.filter((name) => /^map-\d+$/.test(name)).sort((a, b) => b.localeCompare(a));
+  const doomed = [
+    // `keep` counts the live bake, so the others get one fewer slot. Clamped at
+    // zero: a negative `slice` argument counts from the END and would delete
+    // everything BUT the oldest, which is the exact opposite of the intent.
+    ...bakes.filter((name) => name !== live).slice(Math.max(0, keep - 1)),
+    ...names.filter((name) => name.endsWith('.tmp')),
+  ];
+  const removed: string[] = [];
+  for (const name of doomed) {
+    try {
+      await rm(path.join(mapDir, name), { recursive: true, force: true });
+      removed.push(name);
+    } catch {
+      // A bake we cannot remove is not a reason to fail a publish that already
+      // succeeded — the world is live either way.
+    }
+  }
+  return removed;
 };
 
 export const readCurrentPointer = async (mapDir: string): Promise<string> => {

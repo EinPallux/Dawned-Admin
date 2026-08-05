@@ -5,16 +5,19 @@ developers and admins edit _everything_ about the game through a friendly UI: th
 (a full 3D map editor), every database-driven piece of content (items, enemies, abilities, loot,
 quests, vendors, zones, curves), and the live server (players, bans, broadcasts, metrics).
 
-> **Status (2026-08-04): A0 closed, A1 in progress, A2 complete, A3 under way** — the panel shell, auth against
-> game accounts (gm/admin), the live dashboard and schema-driven World Settings shipped in A0; A1
-> has the publish pipeline plus the **Abilities**, **Progression** (XP curve + skill trees),
+> **Status (2026-08-05): A0 closed, A1 in progress, A2 and A3 built** — the panel shell, auth
+> against game accounts (gm/admin), the live dashboard and schema-driven World Settings shipped in
+> A0; A1 has the publish pipeline plus the **Abilities**, **Progression** (XP curve + skill trees),
 > **Items / Loot / Vendors** and **Enemies** (bestiary + spawners + a time-to-kill simulator)
 > editors live, and every ability, node and item the game runs was authored through them.
 > Remaining A1 editors (zones, NPCs…) land with the game phases that consume them. **The Map
-> Editor is live** (A2 complete, A3 under way): open the island in 3D, sculpt and paint it,
-> generate a new one, scatter a forest, place props, camps, discovery points, chests and shrines,
-> keep a group as a reusable prefab, draw a zone and re-shape one you already drew corner by
-> corner, then validate and publish — the game hot-loads the new map without a deploy. Phase
+> Editor is done**: open the island in 3D, sculpt and paint it, generate a new one, scatter a
+> forest, place props, camps, discovery points, chests and shrines, keep a group as a reusable
+> prefab, draw a zone and re-shape one you already drew corner by corner, then validate and
+> publish — the game hot-loads the new map without a deploy. The whole
+> [MAP_EDITOR.md §7](docs/MAP_EDITOR.md) acceptance scenario now runs end to end in a browser
+> (`node tools/smoke/map-scenario.mjs`): a new islet sculpted out of open water reaches the live
+> game, and the run says out loud which three parts of §7 the game cannot receive yet. Phase
 > status: [ROADMAP.md](ROADMAP.md) ·
 > what shipped:
 > [CHANGELOG.md](CHANGELOG.md). The game repo's planning docs are the design source of truth for
@@ -29,6 +32,10 @@ pnpm install
 pnpm dev            # API on :8082 + Vite on :5174 → http://localhost:5174/admin/
 pnpm check          # typecheck + lint + format + tests (needs local Postgres)
 node tools/smoke/admin-login.mjs   # Playwright: login → dashboard → draft round-trip
+node tools/smoke/map-editor.mjs    # the map editor's tools, in a real browser
+node tools/smoke/map-scenario.mjs  # the MAP_EDITOR.md §7 run: sculpt an islet, publish
+                                   # it, and check the GAME swapped onto it (needs the
+                                   # game server on :8081 — it PUBLISHES a new map)
 pnpm build && node tools/smoke/admin-prod-serve.mjs   # serve dist/ exactly like the VPS
                                    # (prefix strip + real CSP) — run after touching
                                    # serving, Caddy, CSP or the Vite build config

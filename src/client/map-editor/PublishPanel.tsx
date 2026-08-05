@@ -36,6 +36,7 @@ const STEP_LABELS: Record<string, string> = {
   placements: 'Resolving placements',
   renders: 'Rendering world map',
   spawners: 'Publishing spawners',
+  prune: 'Sweeping old bakes',
   reload: 'Asking the game to load it',
 };
 

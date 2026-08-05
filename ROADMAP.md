@@ -8,8 +8,8 @@
 | ----- | --------------------------------------------- | ---- | --------------------- | --------------------------------------- |
 | A0    | Foundation: shell, auth, data link            | M    | game P1 (schema live) | ✅ done (2026-08-04)                    |
 | A1    | Content editors (items→curves) + publish v1   | L    | A0; serves P5–P8      | 🟨 abilities · progression · items live |
-| A2    | Map Editor I: viewport, terrain, publish/bake | XL   | game P2 formats       | 🚧 in progress (a/b done, 2026-08-04)   |
-| A3    | Map Editor II: placement, spawns, zones, POIs | XL   | A2 + game P9 systems  | 🚧 in progress (2026-08-04)             |
+| A2    | Map Editor I: viewport, terrain, publish/bake | XL   | game P2 formats       | ✅ done (2026-08-05)                    |
+| A3    | Map Editor II: placement, spawns, zones, POIs | XL   | A2 + game P9 systems  | ✅ built (2026-08-05) — owner run open  |
 | A4    | Quest & dialogue editor                       | M    | A1; serves P11        | 🔲                                      |
 | A5    | Live Ops: players, moderation, server, audit  | M    | game P13 ops API      | 🔲                                      |
 | A6    | Publish polish, validation depth, backups UI  | M    | with game P14         | 🔲                                      |
@@ -112,7 +112,7 @@ selection rules.**
       game phases (P9 enemies…); the shared editor framework generalizes from
       the abilities/items surfaces as they arrive.
 
-## A2 — Map Editor I: Terrain (XL) — in progress
+## A2 — Map Editor I: Terrain (XL) — ✅ done (2026-08-05)
 
 Viewport foundation (game-parity rendering: terrain/splat/water/sky, fly/orbit cameras, overlay
 system, chunk streaming in-editor); terrain sculpt suite (all brushes incl. path spline +
@@ -159,7 +159,7 @@ in the live game; full-map bake under 10 min on the VPS; undo survives a 200-ste
       save exceeded the endpoint's 64-chunk limit and failed permanently. Both fixed, both
       pinned by `draft-store.test.ts`, along with retry-on-refusal.
 
-## A3 — Map Editor II: World Population (XL) — in progress, before game P12
+## A3 — Map Editor II: World Population (XL) — ✅ built (2026-08-05), before game P12
 
 Props mode (palette, gizmos, snapping, jitter stamping, multi-select, prefab collections,
 floaters/buried reports), foliage scatter sets (paint + bake-to-instances), Spawns mode (enemy
@@ -232,6 +232,29 @@ with it).
       silently swapping, and an old stored map gains new actions' defaults. 160 tests.
       **Transform gizmos, grid snap and jitter stamping are not built** — polish on a placement
       path that already works, not worth delaying the §7 run for.
+- [x] **A2/A3-e — the §7 acceptance run, and what it found.** `tools/smoke/map-scenario.mjs`
+      drives the whole MAP_EDITOR.md §7 sentence in a real browser against the real game server:
+      it pans out to open water, sculpts an islet where there was −6.8 m of sea, paints it,
+      scatters a forest, drops a 21-spawner camp, places a chest / shrine / vista, traces a zone
+      and gives it its own fog, validates, PUBLISHES — then asks the GAME whether it swapped
+      maps (`dev-2 → map-<epoch>` with no restart), reads the islet's own chunk bin and the zone
+      out of the published bake, and finally clears just that zone's props. It says out loud the
+      three parts of §7 the game cannot receive yet rather than faking them: patrol routes (Q24),
+      T2 resource nodes (Q25) and per-zone music/sfx (Q26).
+      **It found the bug that mattered: no publish carrying scatter had ever worked.** The bake
+      handed draft scatter rows — which carry a row `id` — straight to the game's `.strict()`
+      placements schema, so `placements.json` threw and the publish stopped between "zones" and
+      "placements" with the staging directory left behind and nothing in the log. The row is
+      projected now, the throw is logged, a failed bake removes its own stage, and a bake test
+      covers the whole path (validation passing is not proof a draft BAKES — they run different
+      schemas). Two operational holes closed with it: publishing never removed an old bake
+      (~8.6 MB each, forever, on a 4 GB VPS — now a 5-deep rollback window, swept and reported),
+      and the live bake was in neither git nor the backups (BACKUP.sh archives it; the bakes and
+      `current.json` are now git-ignored so a `git pull` on the VPS cannot repoint the world).
+      One more thing fell out of running both browser suites against the same world: the older
+      `map-editor.mjs` measured its scatter erase against EVERY patch in the draft, so the islet's
+      deliberately-left forest read as "erasing left 13 077 density behind". A run has to measure
+      what it did, not what the world contains; it counts its own set now. 172 tests green.
 
 ## A4 — Quest & Dialogue Editor (M) — with game P11
 

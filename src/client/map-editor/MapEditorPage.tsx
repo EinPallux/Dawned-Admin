@@ -417,6 +417,25 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
          */
         objects: (): { id: string; layer: string; def: Record<string, unknown> }[] =>
           objectStore.all().map(({ id, layer, def }) => ({ id, layer, def })),
+        /** Where the camera is looking — the pivot the generators centre on. */
+        pivot: (): { x: number; z: number } => ({ x: rig.target.x, z: rig.target.z }),
+        /**
+         * Where a world point lands on screen, in page pixels.
+         *
+         * The §7 scenario builds an islet at coordinates it discovered rather
+         * than at a spot someone guessed, so it needs to know where that is to
+         * click on it. Same projection the viewport renders with, so the answer
+         * is the pixel the owner would aim at.
+         */
+        project: (x: number, z: number): { x: number; y: number } => {
+          const rect = canvas.getBoundingClientRect();
+          const ground = store.heightAt(x, z) ?? 0;
+          const projected = new THREE.Vector3(x, ground, z).project(viewport.camera);
+          return {
+            x: rect.left + ((projected.x + 1) / 2) * rect.width,
+            y: rect.top + ((1 - projected.y) / 2) * rect.height,
+          };
+        },
         /**
          * Where a placed object's marker is ON SCREEN.
          *
@@ -1541,22 +1560,31 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
    * is recoverable after a reload.
    */
   const clearLayer = async (layer: string, count: number): Promise<void> => {
-    if (
-      !window.confirm(`Delete all ${count} ${LAYER_LABEL[layer] ?? layer} rows from the draft?`)
-    ) {
-      return;
-    }
+    // Scoped to the selected zone when there is one — MAP_EDITOR.md §3's
+    // "wipe all props in Emberwood but keep terrain+spawns", which is also the
+    // last beat of the §7 scenario ("wipe just its props and redecorate").
+    // The server has taken a polygon since A2-b; nothing was passing it.
+    const zone = selected?.layer === 'zone' ? selected : null;
+    const polygon = zone ? polygonOf(zone.def) : null;
+    const zoneName =
+      zone && typeof zone.def.name === 'string' && zone.def.name ? zone.def.name : zone?.id;
+    const where = polygon ? ` inside ${zoneName ?? 'the selected zone'}` : ' from the draft';
+    if (!window.confirm(`Delete ${LAYER_LABEL[layer] ?? layer} rows${where}?`)) return;
     if (!window.confirm('This cannot be undone with Ctrl+Z. A checkpoint is taken first. Sure?')) {
       return;
     }
     try {
       const result = await apiPost<{ removed: number; checkpointId: number }>(
         '/map/objects/clear-layer',
-        { layer },
+        polygon ? { layer, polygon, zoneName } : { layer },
       );
       await sessionRef.current?.objects.load();
-      setSelectedId(null);
-      say(`Cleared ${result.removed} ${layer} rows (checkpoint #${result.checkpointId}).`);
+      setSelectedIds(new Set());
+      say(
+        `Cleared ${result.removed} of ${count} ${layer} rows${
+          polygon ? ` in ${zoneName ?? 'the zone'}` : ''
+        } (checkpoint #${result.checkpointId}).`,
+      );
     } catch (error) {
       say(error instanceof ApiRequestError ? error.message : 'Clear failed.');
     }
@@ -2003,6 +2031,28 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
                   setIsland({ ...island, peak });
                 }}
               />
+              {/* The centre was only settable by "Centre here" (the camera
+                  pivot). Showing the numbers costs two fields and answers
+                  "where is this about to land?" before you press the button —
+                  and lets an islet go exactly where the coastline wants it. */}
+              <NumberField
+                label="centre x"
+                value={island.centerX}
+                min={-1024}
+                max={1024}
+                onChange={(centerX) => {
+                  setIsland({ ...island, centerX });
+                }}
+              />
+              <NumberField
+                label="centre z"
+                value={island.centerZ}
+                min={-1024}
+                max={1024}
+                onChange={(centerZ) => {
+                  setIsland({ ...island, centerZ });
+                }}
+              />
               <div className="me-row">
                 <button
                   type="button"
@@ -2277,12 +2327,16 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
                     type="button"
                     className="ws-btn ws-btn--danger me-tiny"
                     disabled={readOnly || count === 0}
-                    title={`Delete every ${layer} in the draft`}
+                    title={
+                      selected?.layer === 'zone'
+                        ? `Delete every ${layer} inside the selected zone`
+                        : `Delete every ${layer} in the draft`
+                    }
                     onClick={() => {
                       void clearLayer(layer, count);
                     }}
                   >
-                    Clear
+                    {selected?.layer === 'zone' ? 'Clear ⌖' : 'Clear'}
                   </button>
                 </div>
               );

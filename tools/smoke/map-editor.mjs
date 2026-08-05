@@ -27,6 +27,8 @@ const SHOT_DIR = shotIndex !== -1 ? process.argv[shotIndex + 1] : null;
 const DATABASE_URL = process.env.DATABASE_URL ?? 'postgres://dawned:dawned@127.0.0.1:5432/dawned';
 const ACCOUNT = 'zz_map_smoke';
 const PASSWORD = 'map-smoke-pass-1';
+/** The scatter set this run creates and paints with — its own, nobody else's. */
+const SCATTER_SET_ID = 'scatter_smoke_cover';
 
 const ok = (message) => console.log(`✅ ${message}`);
 class SmokeFailure extends Error {}
@@ -199,6 +201,7 @@ const run = async (browser) => {
   try {
     await page.waitForFunction(
       () => document.querySelector('.me-status')?.textContent?.includes('editing') === true,
+      undefined,
       { timeout: 15000 },
     );
   } catch {
@@ -214,6 +217,7 @@ const run = async (browser) => {
   // a script that races it is measuring its own timing, not the app.
   await page.waitForFunction(
     () => /Imported \d+ chunks/.test(document.querySelector('.me-last')?.textContent ?? ''),
+    undefined,
     { timeout: 180_000 },
   );
   const importToast = await page.locator('.me-last').innerText();
@@ -312,6 +316,7 @@ const run = async (browser) => {
   // --- autosave -------------------------------------------------------------
   await page.waitForFunction(
     () => document.querySelector('.me-save')?.textContent?.trim() === 'Saved',
+    undefined,
     { timeout: 30_000 },
   );
   ok('autosave settled — the status bar reads "Saved"');
@@ -481,7 +486,7 @@ const run = async (browser) => {
   // it is the one that has to arm the tool.
   // .first(): the card also holds the model pickers inside the expanded set
   // editor, and the set picker is the one at the top.
-  await scatterCard.locator('select').first().selectOption('scatter_smoke_cover');
+  await scatterCard.locator('select').first().selectOption(SCATTER_SET_ID);
   await page.waitForTimeout(600);
   const activeTool = await page.locator('.me-modes button.me-on').first().innerText();
   if (!/scatter/i.test(activeTool)) {
@@ -497,12 +502,8 @@ const run = async (browser) => {
   }
   await page.mouse.up();
   await page.waitForTimeout(1500);
-  const patches = (await readObjects(page)).filter((object) => object.layer === 'scatter');
-  const painted = patches.reduce(
-    (sum, patch) =>
-      sum + (Array.isArray(patch.def.density) ? patch.def.density.reduce((a, b) => a + b, 0) : 0),
-    0,
-  );
+  const patches = await ownPatches(page);
+  const painted = densityOf(patches);
   if (patches.length === 0 || painted === 0) {
     await shoot(page, 'a3d-no-scatter.png');
     fail(`the scatter stroke painted ${patches.length} patches totalling ${painted} density`);
@@ -521,14 +522,11 @@ const run = async (browser) => {
   await page.mouse.up();
   await page.keyboard.up('Control');
   await page.waitForTimeout(1500);
-  const leftPatches = (await readObjects(page)).filter((object) => object.layer === 'scatter');
-  if (leftPatches.length > 0) {
-    const left = leftPatches.reduce(
-      (sum, patch) =>
-        sum + (Array.isArray(patch.def.density) ? patch.def.density.reduce((a, b) => a + b, 0) : 0),
-      0,
-    );
-    if (left > 0) fail(`erasing left ${left} density behind in ${leftPatches.length} patches`);
+  const leftPatches = await ownPatches(page);
+  const left = densityOf(leftPatches);
+  if (left > 0) {
+    await shoot(page, 'a3d-scatter-left.png');
+    fail(`erasing left ${left} density behind in ${leftPatches.length} patches`);
   }
   ok('erasing cleared the patches back out of the draft');
   // The set editor opens by itself when a set is created, so clicking the
@@ -774,6 +772,27 @@ const readObjects = (page) =>
     if (!probe) throw new Error('editor probe missing (window.__dawnedMapEditor)');
     return probe.objects();
   });
+
+/**
+ * The scatter patches THIS run painted, by its own set id.
+ *
+ * Not "every scatter patch in the draft": the §7 scenario leaves a forest on
+ * its islet on purpose, and this run counting that as its own made the erase
+ * step fail with someone else's 13 077 density. A run has to measure what it
+ * did, not what the world contains.
+ */
+const ownPatches = async (page) =>
+  (await readObjects(page)).filter(
+    (object) => object.layer === 'scatter' && object.def.setId === SCATTER_SET_ID,
+  );
+
+/** Total density across a set of scatter patches. */
+const densityOf = (patches) =>
+  patches.reduce(
+    (sum, patch) =>
+      sum + (Array.isArray(patch.def.density) ? patch.def.density.reduce((a, b) => a + b, 0) : 0),
+    0,
+  );
 
 /** Where the zone corner handles are on screen right now. */
 const readHandles = (page) =>

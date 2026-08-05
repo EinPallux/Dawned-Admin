@@ -230,6 +230,23 @@ UI; typical incremental bake target <60 s (changed chunks only), full-map <10 mi
   spawner pointing at an unpublished enemy or sitting in a safe zone, a scatter patch whose set
   was deleted, unreachable content. Advisory: overlapping zones, floaters/buried props, chunks
   over the instance budget, spawners in an unreachable pocket.
+- **Validation passing is not proof a draft BAKES.** They run different schemas: `validateDraft`
+  reads the draft's own shapes, the bake hands every layer to the GAME's `.strict()` artifact
+  schemas. A scatter row carries an `id` (it is a row key) that the baked format has no field
+  for, so for a while every publish with a painted forest in it validated clean and then threw
+  inside `placements.json` — between the "zones" and "placements" steps, with nothing in the log
+  and a staging directory left behind. Draft rows are PROJECTED into the baked format now, never
+  cast; a failed bake logs and removes its own stage; and `map-bake.test.ts` bakes for real
+  rather than only validating.
+- **A publish sweeps old bakes.** Each one is ~8.6 MB of chunk bins and nothing used to remove
+  them, so the VPS filled in proportion to how much the owner edited. `pruneOldBakes` keeps the
+  five newest plus whatever `current.json` points at, takes any `.tmp` a killed process left,
+  and reports the count on the stream and in the audit row. `dev-2` — the committed
+  `pnpm world:generate` fallback — is not a `map-*` directory and is never touched.
+- **The live bake is machine state, and it is backed up.** Published bakes land in the game
+  checkout next to `dev-2`, so they are git-ignored (a `git pull` on the VPS must never repoint
+  the live world at a bake from someone's laptop) and `deploy/BACKUP.sh` archives the live one
+  nightly. The DRAFT it came from is in Postgres, which pg_dump already covers.
 
 ### 4.2 As-built: the viewport and the tools (A2-c/A2-d)
 
@@ -299,3 +316,31 @@ it, scatter a forest, drop a bandit camp with a patrol, ring it with T2 nodes, z
 fog + music, place a chest + vista + shrine, validate, publish — and stand on it in the live game
 within minutes, then wipe just its props and redecorate. That exact scenario is the A3 demo
 script.
+
+### 7.1 As-built: the run (A2/A3-e, 2026-08-05)
+
+`node tools/smoke/map-scenario.mjs` performs that sentence in a real browser against the real
+game server, and is the phase's evidence rather than a checklist someone ticked:
+
+| §7 asks for                | the run does                                                             |
+| -------------------------- | ------------------------------------------------------------------------ |
+| sculpt a new islet         | pans out to open water (−6.8 m), Island-generates 28.4 m of land there   |
+| paint it                   | a splat stroke across the new ground                                     |
+| scatter a forest           | the scatter brush, 13 077 density over the islet's chunks                |
+| a bandit camp              | 21 spawners placed, camp links and rings drawn at true size              |
+| …with a patrol             | **not authored** — no patrol field, no patrol AI state (game Q24)        |
+| ring it with T2 nodes      | **not possible yet** — no resource-node schema in shared (game Q25)      |
+| zone it with custom fog    | a traced polygon, renamed, level-banded and given its own fog            |
+| …+ music                   | **not possible yet** — `zoneAmbienceSchema` has no audio fields (Q26)    |
+| chest + vista + shrine     | one of each, every row already passing `validateInteractable`            |
+| validate, publish          | the streaming publish panel, `map-<epoch>` minted                        |
+| stand on it within minutes | the GAME's `/api/health` flips `dev-2 → map-<epoch>` with no restart     |
+| wipe just its props        | the zone-scoped "Clear layer…" removes 3 of 3, leaving the rest standing |
+
+The three "not possible yet" rows are recorded rather than faked; each carries a recommended
+default in the game repo's USER_QUESTIONS.md. Everything else is checked against artifacts, not
+appearances: the islet's own chunk bin and the new zone are read back out of the published bake,
+and the map version is taken from the game server rather than from the panel that just wrote it.
+
+The run leaves the islet live on purpose — this is a dev checkout, and the point of the scenario
+is that the world changed. Re-running it is safe: it deletes its own previous leavings first.

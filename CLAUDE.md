@@ -221,14 +221,42 @@ dab survived. Painting looked roughly right; erasing removed 9 % of what it shou
 `strokeBase` now owns that precedence and is tested.
 **Not built, deliberately:** transform gizmos, grid snap and jitter stamping — polish on a
 placement path that already works, not worth delaying the §7 run for.
-**Still open in A3:** the §7 acceptance run. **160 tests green**, and
-`node tools/smoke/map-editor.mjs` passes end to end (import → sculpt/undo/redo → paint →
-overlays → autosave → place/inspect/delete → spawn budget + rings → two shrines and the
-travel graph → drag/insert/remove a zone corner → validate → clean up after itself).
+**A2/A3-e — the §7 acceptance run closes both phases** (2026-08-05; A2 ✅ done, A3 ✅ built,
+the owner's own unassisted run is the last word). `tools/smoke/map-scenario.mjs` performs the
+whole §7 sentence in a real browser against the real game server: pan out to open water
+(−6.8 m), Island-generate an islet (28.4 m of land where there was sea), paint it, scatter a
+forest (13 077 density), drop a 21-spawner camp, place a chest/shrine/vista, trace a zone and
+give it its own fog through the inspector, validate, PUBLISH — then ask the GAME whether it
+swapped worlds (`dev-2 → map-<epoch>`, no restart), read the islet's own chunk bin and the new
+zone back out of the published bake, and clear just that zone's props (3 → 0, the rest of the
+world untouched). Three parts of §7 the game cannot receive are REPORTED, not faked: patrol
+routes (Q24), T2 resource nodes (Q25), per-zone music/sfx (Q26). Full table in MAP_EDITOR §7.1.
+**The run found the bug that mattered: no publish carrying scatter had ever worked.** The bake
+handed draft scatter rows — which carry a row `id` — straight to the game's `.strict()`
+placements schema, so `placements.json` threw and publish stopped between "zones" and
+"placements", with no error on screen, none in the log, and a staging directory left behind
+each time. Draft rows are PROJECTED into the baked format now (never cast — the cast is what
+type-checked the mistake into existence), the failure is logged, a failed bake removes its own
+stage, and `map-bake.test.ts` BAKES rather than only validating: passing `validateDraft` is not
+proof a draft bakes, because the two run different schemas. Two operational holes closed with
+it — publishing never removed an old bake (~8.6 MB each, forever; now a 5-deep rollback window
+swept and reported via `pruneOldBakes`), and the live bake was in neither git nor the backups
+(game `deploy/BACKUP.sh` archives it; bakes + `current.json` are git-ignored so a `git pull` on
+the VPS cannot repoint the live world). Running both browser suites against ONE world found a
+third: `map-editor.mjs` measured its scatter erase against EVERY patch in the draft, so the
+islet's deliberately-left forest read as "erasing left 13 077 density behind" — a run has to
+measure what it DID, not what the world contains, so it counts its own set id now.
+**172 tests green**, and both browser runs pass end to
+end: `map-editor.mjs` (import → sculpt/undo/redo → paint → overlays → autosave →
+place/inspect/delete → spawn budget + rings → shrines and the travel graph →
+drag/insert/remove a zone corner → validate → clean up after itself) and `map-scenario.mjs`.
 
 ### Running it locally
 
 ```bash
-pnpm install && pnpm dev   # API :8082 + Vite :5174 → http://localhost:5174/admin/
-pnpm check                 # needs the game repo's migrated local Postgres
+pnpm install && pnpm dev            # API :8082 + Vite :5174 → localhost:5174/admin/
+pnpm check                          # needs the game repo's migrated local Postgres
+node tools/smoke/map-editor.mjs     # the editor's tools, in a real browser
+node tools/smoke/map-scenario.mjs   # MAP_EDITOR §7 — needs the GAME server on :8081,
+                                    # and PUBLISHES a map (it leaves the islet live)
 ```

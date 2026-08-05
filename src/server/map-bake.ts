@@ -38,7 +38,12 @@ import {
   type ScatterSet,
   type Zone,
 } from '@dawned/shared';
-import { DraftSampler, type DraftChunk, type DraftObject } from './map-draft.js';
+import {
+  DraftSampler,
+  scatterPatchSchema,
+  type DraftChunk,
+  type DraftObject,
+} from './map-draft.js';
 
 /** Slope beyond which the walkgrid refuses to let anyone stand (WORLD.md §2). */
 const STEEP_DEG = 50;
@@ -523,12 +528,53 @@ export const bakeDraft = async (
   const sampler = new DraftSampler(bundle.chunks);
   const enabled = bundle.chunks.filter((chunk) => chunk.enabled);
   const warnings: string[] = [];
-  let bytes = 0;
+  const bytes = 0;
 
   const finalDir = path.join(mapDir, version);
   const stageDir = `${finalDir}.tmp`;
   await rm(stageDir, { recursive: true, force: true });
   await mkdir(path.join(stageDir, 'minimap_tiles'), { recursive: true });
+
+  try {
+    return await bakeInto(stageDir, finalDir, {
+      bundle,
+      version,
+      onProgress,
+      sampler,
+      enabled,
+      warnings,
+      bytes,
+      startedAt,
+    });
+  } catch (error) {
+    // A failed bake used to leave its staging directory behind for ever —
+    // three of them accumulated in one afternoon, each a full copy of the map's
+    // chunk bins. The half-written stage is worthless the moment the bake
+    // throws; the LIVE bake is untouched either way, because `current.json`
+    // only moves after the rename.
+    await rm(stageDir, { recursive: true, force: true }).catch(() => undefined);
+    throw error;
+  }
+};
+
+interface BakeState {
+  bundle: DraftBundle;
+  version: string;
+  onProgress: (progress: BakeProgress) => void;
+  sampler: DraftSampler;
+  enabled: DraftChunk[];
+  warnings: string[];
+  bytes: number;
+  startedAt: number;
+}
+
+const bakeInto = async (
+  stageDir: string,
+  finalDir: string,
+  state: BakeState,
+): Promise<BakeResult> => {
+  const { bundle, version, onProgress, sampler, enabled, warnings, startedAt } = state;
+  let { bytes } = state;
 
   // --- chunks --------------------------------------------------------------
   onProgress({ step: 'chunks', done: 0, total: enabled.length });
@@ -580,7 +626,13 @@ export const bakeDraft = async (
   let scatterInstances = 0;
   const scatter: { cx: number; cy: number; setId: string; density: number[] }[] = [];
   for (const [index, patch] of scatterPatches.entries()) {
-    const def = patch.def as { cx: number; cy: number; setId: string; density: number[] };
+    // The DRAFT row carries an `id` (it is a row key); the baked format is keyed
+    // by (cx, cy, setId) and is strict, so the row has to be projected, not
+    // handed over. This used to be a cast, which type-checked and then threw
+    // inside `placementsFileSchema.parse` at bake time — every publish with a
+    // painted forest in it died between `zones` and `placements`.
+    const row = scatterPatchSchema.parse(patch.def);
+    const def = { cx: row.cx, cy: row.cy, setId: row.setId, density: row.density };
     scatter.push(def);
     const set = bundle.scatterSets.find((candidate) => candidate.id === def.setId);
     if (set) {

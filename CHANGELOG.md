@@ -5,6 +5,32 @@ versions track the game's release trains (0.1.0 = tooling that shipped Dawned 0.
 
 ## [Unreleased]
 
+### Fixed — publishing a map you had painted (2026-08-05, A2/A3-e)
+
+- **A publish that contained a scattered forest failed, and said nothing.** It stopped between
+  "Writing zones" and "Resolving placements", left no error on screen and none in the log, and
+  left a half-written staging directory behind each time. Painting foliage and publishing it —
+  the ordinary path — had never once worked. Fixed; a publish now also **says why** when a bake
+  fails instead of appearing to hang, and clears up after itself.
+- **Old map bakes are swept.** Every publish minted a directory of about 8.6 MB and nothing ever
+  removed one, so a day of world-building could quietly eat a gigabyte of the VPS. The five most
+  recent survive as a rollback window (plus whatever is live); the sweep is reported in the
+  publish panel and the audit log rather than done behind your back.
+- **The live map is backed up now.** Published bakes were in neither git nor the nightly backup —
+  the one part of the world a restore would not have brought back. `BACKUP.sh` archives the live
+  one, and the bakes are kept out of git so an update on the server can never point the world at
+  a map from somebody's laptop.
+
+### Added — the §7 acceptance run (2026-08-05, A2/A3-e)
+
+- **`node tools/smoke/map-scenario.mjs`** drives the whole acceptance scenario in a real browser
+  against the real game: pan out to open water, sculpt an islet, paint it, scatter a forest, drop
+  a camp, place a chest / shrine / vista, draw a zone with its own fog, validate, publish — then
+  ask the GAME whether it is standing on the new world, read the islet's chunk and zone back out
+  of what was published, and clear just that zone's props. Three parts of §7 the game cannot
+  receive yet (patrol routes, T2 resource nodes, per-zone music) are reported as missing rather
+  than skipped quietly.
+
 ### Added — scatter a forest, keep a prefab, rebind a key (2026-08-05, A3-d)
 
 - **Foliage scatter brush.** Pick a scatter set, paint ground cover, hold `Ctrl` to clear it. What
