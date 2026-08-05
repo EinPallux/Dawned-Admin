@@ -5,6 +5,13 @@ versions track the game's release trains (0.1.0 = tooling that shipped Dawned 0.
 
 ## [Unreleased]
 
+### Changed — pull in the game's shared rebuild (2026-08-05, game P10-F)
+
+- `@dawned/shared` moved `MARKER_MAX_SPEED` (the fishing marker's top speed) from 1.5 to 0.9,
+  because the reel bar turned out to be unwinnable through one tick of command delay. No panel
+  code changes, but rebuild shared in the game checkout and re-run `pnpm install` here, as after
+  any game-side shared change.
+
 ### Added — the gathering catalogue was authored here (2026-08-05, game P10-E)
 
 - **`tools/content/author-nodes.mjs`** puts the whole P10 catalogue through the panel: 42

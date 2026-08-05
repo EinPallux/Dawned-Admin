@@ -86,6 +86,13 @@ truth).
   layer first**, because overwriting by id leaves the previous run's rows standing wherever they
   were. Moving a cluster fifty metres left two trees at the old spot: published, invisible in
   the diff, findable only by walking there.
+
+  **Game P10-F is built (2026-08-05).** No editor work needed, but a shared number moved:
+  `MARKER_MAX_SPEED` 1.5 → 0.9 (the reel bar was unwinnable through one tick of command
+  delay — 20/20 offline, 0/12 on the wire). Rebuild shared in the game repo, `pnpm install`
+  here. If this panel ever grows a fishing preview it must run the shared reel, not a copy —
+  same rule as the TTK sim running `selectableEnemyAbilities`. Open feel question: game repo
+  Q27 (T5 legendary difficulty), which is two numbers in `fishingDifficulty`.
   **A2-a/A2-b — the map editor's foundations are in (2026-08-04).** Shared (game repo)
   owns brush math + deterministic scatter so preview, bake and server agree; draft
   tables are migration 0014. Here: chunk-granular draft CRUD behind a 45 s single-writer

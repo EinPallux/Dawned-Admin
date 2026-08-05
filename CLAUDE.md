@@ -154,6 +154,18 @@ fixing one placement means re-authoring everything), and a placement pass must *
 layer first**, because overwriting by id leaves the previous run's rows standing wherever they
 were. Moving a cluster fifty metres left two trees at the old spot: published, invisible in
 the diff, findable only by walking there.
+
+**Game P10-F is built (2026-08-05) — nothing here needed changing, but one shared number
+moved.** `MARKER_MAX_SPEED` in `@dawned/shared` went 1.5 → 0.9: measured against a live
+server, the reel bar could not be won at all through one tick of command delay (the crude
+strategy the game's own tests use lands 20/20 offline and landed 0/12 on the wire), because a
+delayed tick at 1.5/s carried the marker half a catch zone. Rebuild `@dawned/shared` in the
+game repo and re-run `pnpm install` here, as after any game-side shared change. Nothing in the
+Professions editor reads it today — but the moment this panel grows a fishing PREVIEW the way
+the Enemies page has a TTK simulator, it has to run the shared reel rather than a copy, for
+exactly the reason the TTK sim runs `selectableEnemyAbilities`. The open feel question is the
+game repo's Q27 (how hard a T5 legendary should be); the whole ladder is two numbers in
+`fishingDifficulty`, so it is a natural candidate for a tuning surface here later.
 **A2-a/A2-b — the map editor's foundations are in** (2026-08-04): the game repo's
 `@dawned/shared` now owns brush math and deterministic scatter (so the editor preview, the
 bake and the server cannot disagree), plus the draft tables (migration 0014). Here: chunk-
