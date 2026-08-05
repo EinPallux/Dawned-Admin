@@ -113,6 +113,10 @@ export const buildObjectView = (
   // that reads at map scale, because a spawner has no model to be true to.
   const marker = new THREE.Mesh(boxGeometry, solidMaterial(object.layer, selected));
   const scale = object.layer === 'prop' ? num(object.def.scale, 1) : 1;
+  // The authored proportions, kept separately: the viewport multiplies these by
+  // a camera-distance factor so a marker stays clickable from map height, and
+  // overwriting the base would turn every marker into a cube.
+  marker.userData = { baseScale: [1.2 * scale, 2.4 * scale, 1.2 * scale] };
   marker.scale.set(1.2 * scale, 2.4 * scale, 1.2 * scale);
   marker.position.y = num(object.def.yOffset, 0);
   marker.rotation.y = num(object.def.rotation, 0);

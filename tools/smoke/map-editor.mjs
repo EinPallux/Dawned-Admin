@@ -303,16 +303,18 @@ const run = async (browser) => {
 
   // The inspector must open on what was just placed, or the owner has no way
   // to pick the model they actually wanted.
-  const inspector = page.locator('.me-card', { hasText: 'prop ·' });
+  const inspector = page.locator('.me-inspector');
   if ((await inspector.count()) === 0) {
     await shoot(page, 'a3-no-inspector.png');
     fail('no inspector appeared for the newly placed prop');
   }
-  ok('the inspector opened on the new prop');
+  const inspectorHead = await inspector.locator('h3').innerText();
+  if (!/prop/i.test(inspectorHead)) fail(`the inspector opened on "${inspectorHead}", not a prop`);
+  ok(`the inspector opened on the new prop (${inspectorHead})`);
   await shoot(page, 'a3-placed.png');
 
   // Delete it again, so the run leaves the draft as it found it.
-  await page.locator('.me-card button:has-text("Delete")').click();
+  await page.locator('.me-inspector button:has-text("Delete")').click();
   await page.waitForTimeout(800);
   const propsFinal = await layerCount(page, 'Prop');
   if (propsFinal !== propsBefore) fail(`delete left ${propsFinal} props, expected ${propsBefore}`);

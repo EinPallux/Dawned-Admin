@@ -104,7 +104,7 @@ export const ObjectInspector = ({
   };
 
   return (
-    <section className="ws-panel me-card">
+    <section className="ws-panel me-card me-inspector">
       <h3>
         {object.layer} · {object.id}
       </h3>

@@ -77,5 +77,12 @@ truth).
   clears (checkpointed). Resident region follows camera zoom, capped at 13×13 chunks
   (17×17 measured at 7.5 M triangles/frame). `tools/smoke/map-editor.mjs` drives it all
   in a real browser and measures PIXELS — four bugs came out of looking, none from a
-  failing assertion. Open in A3: patrol splines/camp links/density heat, zone polygon
-  drawing with ambience preview, selection sets + prefabs + scatter brush + keymap UI.
+  failing assertion.
+  **A3-c zone drawing (2026-08-05):** trace a border, Enter closes, Backspace takes a
+  corner back, Esc abandons; the polygon is normalised to the winding `pointInPolygon`
+  expects, and a self-crossing ring is REFUSED — it looks normal and then contains half of
+  itself (wrong fog, no discovery XP), so it is tested rather than left to the eye. A
+  selected zone previews its fog/sky/light in the viewport. This unblocks §7: publish
+  blocks on land in no zone. 71 tests green.
+  Open in A3: patrol splines/camp links/density heat, vertex editing + shrine graph,
+  selection sets + prefabs + scatter brush + keymap UI, then the §7 run.

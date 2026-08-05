@@ -57,6 +57,9 @@ export const slopeAtVertex = (heights: Float32Array, ix: number, iz: number): nu
 /** >50° is Steep to the walkgrid — the same threshold the bake uses. */
 const STEEP_DEG = 50;
 
+/** The editor's own working light, restored when an ambience preview ends. */
+export const EDITOR_LIGHT = { sun: 2.0, hemi: 1.1 };
+
 /**
  * Recolor a chunk's vertex colors for an overlay. Returns null for 'none' (the
  * caller then keeps the splat colors the shared builder produced).
@@ -169,6 +172,8 @@ export class MapViewport {
   private readonly objectGroup = new THREE.Group();
   private readonly objectViews = new Map<string, THREE.Object3D>();
   private readonly gridHelper: THREE.LineSegments;
+  readonly sun: THREE.DirectionalLight;
+  readonly hemi: THREE.HemisphereLight;
   private overlay: OverlayKind = 'none';
   private seaLevel: number;
   private raf = 0;
@@ -191,11 +196,13 @@ export class MapViewport {
     this.camera.lookAt(0, 0, 0);
 
     // Editor lighting is deliberately flatter than the game's: a low sun makes
-    // long shadows that hide the shape you are sculpting.
-    const sun = new THREE.DirectionalLight('#fff3e0', 2.0);
-    sun.position.set(0.5, 1, 0.35).multiplyScalar(300);
-    this.scene.add(sun);
-    this.scene.add(new THREE.HemisphereLight('#dce8ff', '#3a4a3a', 1.1));
+    // long shadows that hide the shape you are sculpting. Held as fields so the
+    // zone ambience preview can borrow them and hand them back.
+    this.sun = new THREE.DirectionalLight('#fff3e0', EDITOR_LIGHT.sun);
+    this.sun.position.set(0.5, 1, 0.35).multiplyScalar(300);
+    this.scene.add(this.sun);
+    this.hemi = new THREE.HemisphereLight('#dce8ff', '#3a4a3a', EDITOR_LIGHT.hemi);
+    this.scene.add(this.hemi);
 
     this.scene.add(this.terrainGroup);
     this.scene.add(this.objectGroup);
@@ -378,9 +385,35 @@ export class MapViewport {
   private renderLoop = (): void => {
     if (this.disposed) return;
     this.raf = requestAnimationFrame(this.renderLoop);
+    this.scaleMarkers();
     this.renderer.render(this.scene, this.camera);
     this.onCameraMoved?.(this.camera.position);
   };
+
+  /**
+   * Keep placed-object markers big enough to see and click from map height.
+   *
+   * A prop is a 1.2 m box; from 500 m up that is under a pixel, so the thing
+   * you just placed is invisible and unclickable — you cannot select what you
+   * cannot see. Markers therefore grow with camera distance up to a floor,
+   * while their RINGS stay true-size, because a ring is a number the owner is
+   * deciding and lying about it would be worse than a small marker.
+   */
+  private scaleMarkers(): void {
+    const distance = this.camera.position.y;
+    const scale = Math.max(1, distance / 90);
+    for (const view of this.objectViews.values()) {
+      const marker = view.userData as { markerScale?: number };
+      if (marker.markerScale === scale) continue;
+      marker.markerScale = scale;
+      for (const child of view.children) {
+        if (!(child instanceof THREE.Mesh)) continue;
+        const base = (child.userData as { baseScale?: number[] }).baseScale;
+        if (!base) continue;
+        child.scale.set(base[0]! * scale, base[1]! * scale, base[2]! * scale);
+      }
+    }
+  }
 
   dispose(): void {
     this.disposed = true;

@@ -183,7 +183,15 @@ with it).
       the Abilities and Items editors use. The layers panel counts each layer, hides it, and
       carries the double-confirmed, checkpointed "Clear layer…".
 - [ ] A3-b — patrol splines, camp links, spawn-density heat, simulate-populate.
-- [ ] A3-c — zone polygon drawing/editing with live ambience preview, shrine graph.
+- [x] **A3-c (part) — zone drawing + live ambience preview.** Trace a border on the ground,
+      `Enter` closes it, `Backspace` takes back a corner, `Esc` abandons it; the polygon is
+      normalised to the winding the game's `pointInPolygon` expects, so the owner never has to
+      think about winding order. The editor refuses outlines that would misbehave: fewer than
+      three corners, a self-crossing ring (it looks normal and then contains half of itself —
+      wrong fog, no discovery XP, and unfindable by eye), or one enclosing no ground. 10 tests.
+      A selected zone can push its fog/sky/light into the viewport, off by default because a
+      zone's dusk hides the terrain being shaped.
+- [ ] A3-c (rest) — vertex editing on an existing polygon, the shrine/fast-travel graph view.
 - [ ] A3-d (rest) — selection sets + isolation, prefab collections, scatter brush, keymap UI.
 
 ## A4 — Quest & Dialogue Editor (M) — with game P11

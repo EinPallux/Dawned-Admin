@@ -5,6 +5,24 @@ versions track the game's release trains (0.1.0 = tooling that shipped Dawned 0.
 
 ## [Unreleased]
 
+### Added — drawing zones (2026-08-05, A3-c)
+
+- **Zone mode**: click along the ground to trace a border, `Enter` to close it,
+  `Backspace` to take back a corner, `Esc` to abandon it. The outline rides the
+  terrain as you draw, so you are tracing a coastline rather than guessing at
+  numbers.
+- **The editor refuses outlines that would misbehave in the game**: fewer than
+  three corners, an outline that crosses itself, or one enclosing no ground. A
+  crossed border is the nasty one — it looks like a normal shape and then
+  contains only half of itself, so a player standing in the middle of the zone
+  would get the wrong fog and no discovery XP.
+- **Preview a zone's ambience in the viewport**: its fog, sky and light applied
+  live, so "is 420 m of fog right?" is answered by standing in it instead of
+  reading a number. Off by default — a zone's dusk hides the terrain you are
+  shaping.
+- Zones are what publishing blocks on (land in no zone reads as open ocean), so
+  sculpting a new islet and putting it in the game is now possible end to end.
+
 ### Added — placing things in the world (2026-08-04, A3-a)
 
 - **Place mode**: click the ground to drop a prop, an enemy spawner, a

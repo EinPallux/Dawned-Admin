@@ -53,10 +53,19 @@ import {
 import { PublishPanel } from './PublishPanel.js';
 import { ObjectStore, mintId } from './object-store.js';
 import { LAYER_COLOR, buildObjectView, type PlacedObject } from './placement.js';
+import { zoneAmbienceSchema } from '@dawned/shared';
+import {
+  DEFAULT_AMBIENCE,
+  ZoneSketch,
+  applyAmbiencePreview,
+  normalisePolygon,
+  zoneDrawProblems,
+} from './zones.js';
+import { EDITOR_LIGHT } from './viewport.js';
 import { ObjectInspector } from './ObjectInspector.js';
 import { LAYER_LABEL, PLACEABLE_LAYERS, newObjectDef, type PlaceableLayer } from './new-object.js';
 
-type ToolId = 'sculpt' | 'paint' | 'water' | 'board' | 'place' | 'measure';
+type ToolId = 'sculpt' | 'paint' | 'water' | 'board' | 'place' | 'zone' | 'measure';
 
 interface LockState {
   heldBy: string | null;
@@ -73,6 +82,7 @@ interface EditorSession {
   journal: UndoJournal;
   brushRing: THREE.Line;
   measureLine: THREE.Line;
+  sketch: ZoneSketch;
   slots: Map<number, CameraState>;
 }
 
@@ -124,6 +134,8 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [objects, setObjects] = useState<PlacedObject[]>([]);
   const [hiddenLayers, setHiddenLayers] = useState<Set<string>>(() => new Set());
+  const [sketchLength, setSketchLength] = useState(0);
+  const [previewZone, setPreviewZone] = useState(false);
 
   // Tool settings are read inside imperative pointer handlers that are
   // registered once; refs keep them current without re-registering listeners.
@@ -146,6 +158,9 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
    * chunks" is a result the owner may want to read after looking away, and a
    * message that only exists for three seconds is a message that gets missed.
    */
+  /** The object the inspector and the ambience preview are looking at. */
+  const selected = objects.find((object) => object.id === selectedId) ?? null;
+
   const say = useCallback((message: string) => {
     setToast(message);
     setLastAction(message);
@@ -214,6 +229,9 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
       },
     });
 
+    const sketch = new ZoneSketch();
+    viewport.addGizmo(sketch.line);
+
     const session: EditorSession = {
       viewport,
       rig,
@@ -222,6 +240,7 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
       journal,
       brushRing,
       measureLine,
+      sketch,
       slots: new Map(),
     };
     sessionRef.current = session;
@@ -442,6 +461,12 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
       return;
     }
 
+    if (toolRef.current === 'zone') {
+      session.sketch.add(point.x, point.z);
+      setSketchLength(session.sketch.length);
+      return;
+    }
+
     if (toolRef.current === 'board') {
       const cx = chunkIndexOf(point.x);
       const cy = chunkIndexOf(point.z);
@@ -509,6 +534,10 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
       session.brushRing.visible = false;
     }
 
+    if (toolRef.current === 'zone') {
+      session.sketch.refresh((x, z) => session.store.heightAt(x, z), point);
+    }
+
     if (painting.current && point && (event.buttons & 1) !== 0) {
       dab(point, event.ctrlKey || event.metaKey);
     }
@@ -568,6 +597,25 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
     }
   }, [objects, selectedId, hiddenLayers, saveState]);
 
+  // --- zone ambience preview ------------------------------------------------
+  //
+  // MAP_EDITOR.md §2.4's "instant viewport preview". Fog values read as numbers
+  // and land as atmosphere; the only way to know whether 420 m feels right is
+  // to stand in it. Off by default because a zone's dusk hides the shape you
+  // are sculpting.
+
+  useEffect(() => {
+    const session = sessionRef.current;
+    if (!session) return;
+    const zone = previewZone && selected?.layer === 'zone' ? selected.def.ambience : null;
+    const parsed = zone ? zoneAmbienceSchema.safeParse(zone) : null;
+    applyAmbiencePreview(
+      { scene: session.viewport.scene, sun: session.viewport.sun, hemi: session.viewport.hemi },
+      parsed?.success ? parsed.data : null,
+      EDITOR_LIGHT,
+    );
+  }, [previewZone, selected]);
+
   // --- overlays -------------------------------------------------------------
 
   useEffect(() => {
@@ -602,6 +650,60 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
     }
   }, []);
 
+  /**
+   * Close the outline into a real zone row.
+   *
+   * The polygon is normalised (winding, duplicate corners) before it is saved
+   * — the game's `pointInPolygon` expects counter-clockwise, and making the
+   * owner care about winding order while they trace a coastline would be
+   * absurd.
+   */
+  const finishZone = useCallback(async (): Promise<void> => {
+    const session = sessionRef.current;
+    if (!session) return;
+    const problems = zoneDrawProblems(session.sketch.points);
+    if (problems.length > 0) {
+      say(problems[0]!);
+      return;
+    }
+    const polygon = normalisePolygon(session.sketch.points);
+    let centreX = 0;
+    let centreZ = 0;
+    for (const [px, pz] of polygon) {
+      centreX += px / polygon.length;
+      centreZ += pz / polygon.length;
+    }
+    const taken = new Set(session.objects.all().map((object) => object.id));
+    const id = mintId('zone', centreX, centreZ, taken);
+    const saved = await session.objects.save(
+      'zone',
+      {
+        id,
+        name: 'New zone',
+        levelMin: 1,
+        levelMax: 10,
+        polygon,
+        ambience: DEFAULT_AMBIENCE,
+        safe: false,
+        settlement: null,
+      },
+      `Draw ${id}`,
+    );
+    if (saved) {
+      session.sketch.clear();
+      setSketchLength(0);
+      setSelectedId(id);
+      say(`Zone drawn with ${polygon.length} corners. Name it in the inspector.`);
+    }
+  }, [say]);
+
+  const cancelZone = useCallback((): void => {
+    const session = sessionRef.current;
+    if (!session) return;
+    session.sketch.clear();
+    setSketchLength(0);
+  }, []);
+
   // --- keymap (MAP_EDITOR.md §6) --------------------------------------------
 
   useEffect(() => {
@@ -630,6 +732,26 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
         return;
       }
       if (event.ctrlKey || event.metaKey || event.altKey) return;
+
+      // Zone drawing owns Enter/Escape/Backspace while an outline is open.
+      if (toolRef.current === 'zone' && session.sketch.length > 0) {
+        if (event.code === 'Enter' || event.code === 'NumpadEnter') {
+          event.preventDefault();
+          void finishZone();
+          return;
+        }
+        if (event.code === 'Escape') {
+          cancelZone();
+          return;
+        }
+        if (event.code === 'Backspace') {
+          event.preventDefault();
+          session.sketch.undoPoint();
+          session.sketch.refresh((x, z) => session.store.heightAt(x, z), null);
+          setSketchLength(session.sketch.length);
+          return;
+        }
+      }
 
       switch (event.code) {
         case 'KeyB':
@@ -694,7 +816,7 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
     };
     // `cursor` and `cameraMode` are read inside; re-binding on their change is
     // cheap and keeps the handler honest rather than reading stale values.
-  }, [cursor, cameraMode, say, adjustRadius]);
+  }, [cursor, cameraMode, say, adjustRadius, finishZone, cancelZone]);
 
   // --- generators + import --------------------------------------------------
 
@@ -785,25 +907,26 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
   // --- render ---------------------------------------------------------------
 
   const readOnly = !lock?.mine;
-  const selected = objects.find((object) => object.id === selectedId) ?? null;
   const canWrite = user.role === 'admin';
 
   return (
     <div className="map-editor">
       <header className="me-toolbar">
         <div className="me-modes">
-          {(['sculpt', 'paint', 'water', 'board', 'place', 'measure'] as ToolId[]).map((id) => (
-            <button
-              key={id}
-              type="button"
-              className={`ws-btn${tool === id ? ' me-on' : ''}`}
-              onClick={() => {
-                setTool(id);
-              }}
-            >
-              {TOOL_LABELS[id]}
-            </button>
-          ))}
+          {(['sculpt', 'paint', 'water', 'board', 'place', 'zone', 'measure'] as ToolId[]).map(
+            (id) => (
+              <button
+                key={id}
+                type="button"
+                className={`ws-btn${tool === id ? ' me-on' : ''}`}
+                onClick={() => {
+                  setTool(id);
+                }}
+              >
+                {TOOL_LABELS[id]}
+              </button>
+            ),
+          )}
         </div>
 
         <div className="me-options">
@@ -928,6 +1051,31 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
               <span className="me-hint">
                 Click the ground to place. Click a marker to select it instead.
               </span>
+            </>
+          )}
+
+          {tool === 'zone' && (
+            <>
+              <span className="me-hint">
+                {sketchLength === 0
+                  ? 'Click the ground to trace a zone border.'
+                  : `${sketchLength} corners — Enter closes it, Backspace undoes one, Esc cancels.`}
+              </span>
+              <button
+                type="button"
+                className="ws-btn ws-btn--primary"
+                disabled={readOnly || sketchLength < 3}
+                onClick={() => {
+                  void finishZone();
+                }}
+              >
+                Close zone
+              </button>
+              {sketchLength > 0 && (
+                <button type="button" className="ws-btn" onClick={cancelZone}>
+                  Cancel
+                </button>
+              )}
             </>
           )}
 
@@ -1077,6 +1225,18 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
               />
               Chunk grid <span className="ws-kbd">G</span>
             </label>
+            {selected?.layer === 'zone' && (
+              <label className="me-check">
+                <input
+                  type="checkbox"
+                  checked={previewZone}
+                  onChange={(event) => {
+                    setPreviewZone(event.target.checked);
+                  }}
+                />
+                Preview this zone&apos;s ambience
+              </label>
+            )}
             <label className="me-field">
               <span>Overlay</span>
               <select
@@ -1321,6 +1481,7 @@ const TOOL_LABELS: Record<ToolId, string> = {
   water: 'Water',
   board: 'Board',
   place: 'Place',
+  zone: 'Zone',
   measure: 'Measure',
 };
 

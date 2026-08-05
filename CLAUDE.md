@@ -157,9 +157,16 @@ waits for autosave, places and deletes an object, and validates. Four bugs came 
 LOOKING that no test would have caught: the camera opened inside a hillside, toolbar
 selects stretched across the bar, the camera-follow poll stacked ~9 MB region requests
 until the tab died, and the 17×17 region above.
-**Still open in A3:** patrol splines + camp links + density heat (b), zone polygon drawing
-with live ambience preview (c), selection sets/isolation/prefab collections/scatter brush
-and the rebindable keymap UI (rest of d), then the §7 acceptance run.
+**A3-c zone drawing** (2026-08-05): trace a border on the ground, `Enter` closes,
+`Backspace` takes a corner back, `Esc` abandons; the polygon is normalised to the winding
+`pointInPolygon` expects. The editor refuses a self-crossing ring — it looks like a normal
+shape and then contains half of itself (wrong fog, no discovery XP), which no amount of
+looking would catch, so it is tested (10 tests). A selected zone can push its fog/sky/light
+into the viewport, off by default. This is the piece that unblocks the §7 scenario: publish
+BLOCKS on land in no zone, so a new islet could not reach the game without it.
+**Still open in A3:** patrol splines + camp links + density heat (b), vertex editing on an
+existing polygon and the shrine graph (rest of c), selection sets/isolation/prefab
+collections/scatter brush and the rebindable keymap UI (rest of d), then the §7 run.
 
 ### Running it locally
 
