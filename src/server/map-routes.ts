@@ -29,6 +29,7 @@ import {
 import {
   CHUNK_VERTS,
   MAP_VERSION,
+  SPLAT_LAYER_COUNT,
   SPLAT_MAP_SIZE,
   WORLD_CHUNKS,
   scatterSetSchema,
@@ -63,10 +64,71 @@ import {
 } from './map-draft.js';
 import { bakeDraft, validateDraft, type BakeProgress, type DraftBundle } from './map-bake.js';
 import { importLiveMap } from './map-import.js';
+import { generateWorld, type WorldGenRequest } from './map-generate.js';
 import { reloadGameContent, reloadGameMap } from './publish-support.js';
 
 const HEIGHT_SAMPLES = CHUNK_VERTS * CHUNK_VERTS;
 const SPLAT_BYTES = 2 * SPLAT_MAP_SIZE * SPLAT_MAP_SIZE * 4;
+
+/**
+ * The world-generation plan. An SSE endpoint cannot take a body, so the plan
+ * rides as one JSON query parameter — it is a few hundred bytes for a whole
+ * archipelago, which is well inside any URL limit.
+ */
+const worldGenQuerySchema = z.object({ plan: z.string() });
+
+const islandMaskSchema = z
+  .object({
+    id: z.string().min(1).max(64),
+    kind: z.enum(['land', 'carve']).optional(),
+    seed: z.number().int(),
+    centerX: z.number(),
+    centerZ: z.number(),
+    radius: z.number().positive().max(4096),
+    peak: z.number().min(0).max(512),
+    roughness: z.number().min(0).max(1),
+    stretchX: z.number().positive().max(8).optional(),
+    stretchZ: z.number().positive().max(8).optional(),
+    rotation: z.number().optional(),
+  })
+  .strict();
+
+const splatRuleSchema = z
+  .object({
+    layer: z
+      .number()
+      .int()
+      .min(0)
+      .max(SPLAT_LAYER_COUNT - 1),
+    minSlopeDeg: z.number(),
+    maxSlopeDeg: z.number(),
+    minHeight: z.number(),
+    maxHeight: z.number(),
+    // Same `[x, z]` tuples a zone polygon uses in `@dawned/shared`, so a rule
+    // can be scoped to a zone with no conversion on either side of the wire.
+    polygon: z
+      .array(z.tuple([z.number(), z.number()]))
+      .min(3)
+      .optional(),
+  })
+  .strict();
+
+const worldGenRequestSchema = z
+  .object({
+    masks: z.array(islandMaskSchema).min(1).max(64),
+    splatRules: z.array(splatRuleSchema).min(1).max(256),
+    seaLevel: z.number(),
+    erosion: z
+      .object({
+        passes: z.number().int().min(0).max(12),
+        minSlopeDeg: z.number().min(0).max(90),
+        strength: z.number().min(0).max(1),
+      })
+      .strict()
+      .optional(),
+    waterLevel: z.number().nullable().optional(),
+  })
+  .strict();
 
 /** Chunk bytes ride the wire as base64 — one JSON body per autosave batch. */
 const chunkPayloadSchema = z.object({
@@ -622,6 +684,72 @@ export const registerMapRoutes = (app: FastifyInstance, deps: MapRouteDeps): voi
    * full bake walks 4 M walkgrid cells and renders a 1024² map, and a spinner
    * with no numbers on a 1-core VPS feels broken.
    */
+  /**
+   * Rewrite the whole world's terrain from island masks (MAP_EDITOR.md §2.1,
+   * game P12). Streamed, because it is 1024 chunk upserts and a progress bar is
+   * the difference between "working" and "hung".
+   *
+   * Admin-only and lock-held like publish. It takes a checkpoint FIRST — this
+   * replaces every metre of terrain in the draft, and rule 5 says a destructive
+   * action carries its own way back. Placed objects are not touched: they
+   * re-sit on the new heights, and `validateDraft`'s floater/buried report is
+   * what tells the owner which ones now hang in the air.
+   */
+  app.get('/api/map/generate-stream', async (request, reply) => {
+    const admin = requireRole(request, reply, 'admin');
+    if (!admin) return;
+    const lock = await getLock(db, admin.accountId);
+    if (!lock.mine) {
+      return reply.code(409).send({ error: 'map is locked', heldBy: lock.heldBy });
+    }
+    const parsed = worldGenQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'bad request', message: parsed.error.message });
+    }
+    let plan: WorldGenRequest;
+    try {
+      plan = worldGenRequestSchema.parse(JSON.parse(parsed.data.plan)) as WorldGenRequest;
+    } catch (error) {
+      return reply.code(400).send({ error: 'bad plan', message: (error as Error).message });
+    }
+    reply.raw.writeHead(200, {
+      'content-type': 'text/event-stream',
+      'cache-control': 'no-cache, no-transform',
+      connection: 'keep-alive',
+    });
+    const send = (event: string, data: unknown): void => {
+      reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+    try {
+      send('progress', { message: 'Taking a checkpoint…', fraction: 0.01 });
+      const checkpoint = await createCheckpoint(
+        db,
+        `Before world generation (${plan.masks.length} island(s))`,
+        admin.accountId,
+      );
+      const report = await generateWorld(db, plan, admin.accountId, (message, fraction) => {
+        send('progress', { message, fraction });
+      });
+      await audit({
+        actorAccountId: admin.accountId,
+        action: 'map.generate-world',
+        args: {
+          islands: plan.masks.map((mask) => mask.id),
+          seaLevel: plan.seaLevel,
+          checkpoint: checkpoint.id,
+        },
+        result: 'ok',
+      });
+      send('done', { ok: true, report, checkpoint: checkpoint.id });
+    } catch (error) {
+      request.log.error({ err: error }, 'world generation failed');
+      send('done', { ok: false, problems: [(error as Error).message] });
+    } finally {
+      reply.raw.end();
+    }
+    return reply;
+  });
+
   app.get('/api/map/publish-stream', async (request, reply) => {
     const admin = requireRole(request, reply, 'admin');
     if (!admin) return;
