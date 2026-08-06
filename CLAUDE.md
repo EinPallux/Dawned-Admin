@@ -471,6 +471,31 @@ stood on the dev island, which the Dawnlands put under open water.
   names COMBAT.md §12's 60–120 s window for WORLD bosses too, where §12 says "zone boss".
   **259 tests green here.**
 
+**Game P12-D ran the whole item catalogue through this panel (2026-08-06)** —
+`node tools/content/author-items.mjs` now owns T1–T2 _and_ the T3–T5 deep set together: **182 item
+rows, 21 loot tables and 16 vendors** on the Items page's one publish rail, ending at 223 published
+items (the other 41 are P10's gathering materials, which `author-nodes.mjs` owns). It is one script
+because the vendors are the same rows in both files' eyes — the P8 shops were anchored on the dev
+island, so every one of them had to move onto a building the map publish actually placed, and four
+settlements gained their own.
+`item-data-deep.mjs` authors IDENTITY only — name, slot, ilvl, rarity, attribute weights, one line
+of flavour — and every number comes out of the shared §2 formulas, which is the same contract the
+Items page's budget meter previews with. Armour ships as authored SETS rather than per-slot rows.
+Loot nests through per-tier pools so a zone names its gear once, and each boss has its own table
+with **no `nothing` entry at all**, which is what makes "guaranteed Rare+" a property of the data.
+**The bug that mattered is content ownership, and it is this repo's:** `item_material_dawnpetal`
+was authored in BOTH `item-data.mjs` and `node-data.mjs` at different ilvls, so whichever content
+script ran last won. Republishing the item catalogue silently reverted P10-E's re-tiering of
+Dawnpetal from a Dawnshore common to the Elder Grove's T5 rare — and put a "legendary" bloom back
+in a level-3 mob's loot table. Caught by the GAME's gathering-ladder test, not by anything here.
+A content script that republishes rows it does not own is the same class of mistake as a placement
+pass that clears a layer it shares.
+**One shared-schema thing to know:** `equipmentBonus` now returns `pct` and `killGold` as well as
+`stats`/`weapon` — P8's item effects were folded by a server helper nobody called, so every Epic
+and Legendary effect in the game was decoration. They are wired now, and because the fold is in
+shared, any character-sheet surface this panel grows gets the same answer the server fights with.
+**259 tests green here.**
+
 ### Running it locally
 
 ```bash

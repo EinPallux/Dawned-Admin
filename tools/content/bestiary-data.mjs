@@ -313,7 +313,7 @@ export const ENEMY_DEFS = [
         cooldownMs: 0,
       },
     ],
-    loot: { tableId: 'loot_dawnshore_gear', rolls: 2, goldMin: 25, goldMax: 45 },
+    loot: { tableId: 'loot_boss_mossback', rolls: 2, goldMin: 25, goldMax: 45 },
   }),
 
   // -------------------------------------------------------------------------
@@ -499,7 +499,7 @@ export const ENEMY_DEFS = [
         announce: 'The grove answers me!',
       },
     ],
-    loot: { tableId: 'loot_weald_gear', rolls: 3, goldMin: 120, goldMax: 200 },
+    loot: { tableId: 'loot_boss_mushroom_king', rolls: 3, goldMin: 120, goldMax: 200 },
   }),
 
   // ===========================================================================
@@ -753,7 +753,7 @@ export const ENEMY_DEFS = [
         announce: 'The barrow wakes with me!',
       },
     ],
-    loot: { tableId: 'loot_emberwood_gear', rolls: 3, goldMin: 200, goldMax: 320 },
+    loot: { tableId: 'loot_boss_varkas', rolls: 3, goldMin: 200, goldMax: 320 },
   }),
 
   // -------------------------------------------------------------------------
@@ -960,7 +960,7 @@ export const ENEMY_DEFS = [
         announce: 'The herd runs with me!',
       },
     ],
-    loot: { tableId: 'loot_sungraze_gear', rolls: 3, goldMin: 300, goldMax: 460 },
+    loot: { tableId: 'loot_boss_alpaking_prime', rolls: 3, goldMin: 300, goldMax: 460 },
   }),
 
   // -------------------------------------------------------------------------
@@ -1268,7 +1268,7 @@ export const ENEMY_DEFS = [
         announce: 'ASH AND EMBER — THE SKY IS MINE!',
       },
     ],
-    loot: { tableId: 'loot_ashcrag_gear', rolls: 4, goldMin: 600, goldMax: 900 },
+    loot: { tableId: 'loot_boss_ashwing', rolls: 4, goldMin: 600, goldMax: 900 },
   }),
 
   // -------------------------------------------------------------------------
@@ -1373,7 +1373,7 @@ export const ENEMY_DEFS = [
         announce: 'The grove has stood longer than your kind.',
       },
     ],
-    loot: { tableId: 'loot_elder_grove', rolls: 4, goldMin: 420, goldMax: 660 },
+    loot: { tableId: 'loot_boss_elder_treant', rolls: 4, goldMin: 420, goldMax: 660 },
   }),
 
   // -------------------------------------------------------------------------

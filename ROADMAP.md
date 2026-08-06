@@ -374,6 +374,17 @@ tooling that later passes (nodes, POIs, NPCs) reuse:
       ring, which is the order `zoneAt` resolves in — WON inside the savanna and the canyons.
       Found by the GAME's new `/ops/camps`, not by anything here.
 
+### A1-c addendum — the deep catalogue (2026-08-06, for game P12-D)
+
+- [x] `author-items.mjs` publishes the WHOLE catalogue (T1–T2 + T3–T5): **182 item rows, 21 loot
+      tables, 16 vendors**, all through the Items page's rail. The Items editor's first real load
+      since P8's 62 rows, and it held.
+- [x] Every vendor re-anchored: the P8 shops sat on the dev island, which the Dawnlands put under
+      open water. Four settlements gained their own.
+- [x] **A content-ownership bug**: one item id authored in two scripts at different ilvls, so the
+      last script to run silently reverted the other's content fix. Gathering materials belong to
+      the node catalogue.
+
 ## A5 — Live Ops (M) — with game P13
 
 Players online/search + inspector (sheet, inventory grant/remove audited, tp/bring/kick),

@@ -5,6 +5,27 @@ versions track the game's release trains (0.1.0 = tooling that shipped Dawned 0.
 
 ## [Unreleased]
 
+### Added — the whole item catalogue runs through this panel (2026-08-06, game P12-D)
+
+- **`node tools/content/author-items.mjs` now owns the entire catalogue** — T1–T2 from P8 and the
+  T3–T5 deep set together, 182 item rows, 21 loot tables and 16 vendors on one publish rail. One
+  script, because the vendors are the same rows in both files' eyes: the P8 shops were anchored on
+  the dev island and every one of them had to move onto a building the map publish placed.
+- **`item-data-deep.mjs`** authors identity only — name, slot, ilvl, rarity, attribute weights, one
+  line of flavour — and every number comes out of the shared ITEMS_LOOT §2 formulas, which is the
+  same contract the budget meter on the Items page previews with.
+- Loot tables **nest through per-tier pools**, so a zone names its gear once; each boss has its own
+  table with no `nothing` entry, which is what makes "guaranteed Rare+" a property of the data.
+
+### Fixed — one item id, two owners (2026-08-06, game P12-D)
+
+- `item_material_dawnpetal` was authored in BOTH `item-data.mjs` and `node-data.mjs` at different
+  ilvls, so whichever content script ran last won. Republishing the item catalogue silently
+  reverted P10-E's re-tiering of Dawnpetal from a Dawnshore common to the Elder Grove's T5 rare —
+  and put a "legendary" bloom back in a level-3 mob's loot table. The gathering materials belong to
+  the node catalogue; the duplicate row is gone. Caught by the game's gathering-ladder test, not by
+  anything here — a content script that republishes rows it does not own is this repo's problem.
+
 ### Added — the world's camps are placed, not typed (2026-08-06, game P12-C)
 
 - **`pnpm world:bestiary`** authors 50 enemies, the zone loot tables and **124 camps** through the
