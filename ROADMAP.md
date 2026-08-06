@@ -405,6 +405,20 @@ tooling that later passes (nodes, POIs, NPCs) reuse:
       of the map was an invisible hole and a fishing spot could not be authored at all, because
       "submerged" is ground below its own chunk's water. Two phases passed without it because
       nothing had needed water to exist.
+- [x] **The content scripts take a real login** (2026-08-06, game P12-H). The game repo's new
+      `deploy/WORLD.sh` deploys the WORLD by running these scripts on the live VPS — code travels
+      in git and a published map bake does not — and that path was blocked by something this repo
+      had carried since A1: every `author-*` script minted an admin account whose password is a
+      literal in a public repository. Harmless in a throwaway dev container, a permanent back door
+      on a real box. `tools/content/admin-session.mjs` replaces eleven inline copies: it reads
+      `DAWNED_ADMIN_USER` / `DAWNED_ADMIN_PASS` and touches the `accounts` table only when neither
+      is set, so a deploy creates nothing and every published row is attributed to a person in
+      `audit_log`. The dev fallback mints a **per-run random password** on its own account
+      (`zz_admin_content`, not the smokes' `zz_admin_smoke`) and bans it at the end — the random
+      password is what actually holds, because a crash skips the ban and what survives is then an
+      account nobody can log into. The ban must come at the END of a run: `auth.ts` re-checks
+      `accounts.status` on every request. Verified both ways against the running panel, including
+      the TypeScript entry point (`world:author` regenerated all 1024 chunks through it).
 
 ## A5 — Live Ops (M) — with game P13
 

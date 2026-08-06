@@ -582,6 +582,27 @@ measured; nearest-centroid alone is wrong (it drags 572 of 3 100 land samples in
 Recorded rather than patched, because it re-points ambience, discovery and journal headings for the
 whole world at once.
 
+**Content scripts take a real login now (2026-08-06, game P12-H).** The game repo gained
+`deploy/WORLD.sh`, which deploys the WORLD by running THESE scripts on the live VPS — code travels
+in git and a published map bake does not, so an updated box had all of P12's features and the old
+dev island to use them on. That path was blocked by something this repo had been carrying since
+A1: every `author-*` script minted an admin account whose password (`admin-smoke-pass-1`) is a
+literal in a public repository. Harmless in a throwaway dev container; a permanent admin back door
+on a real box, and "run these on a real box" is precisely what deploying a world means.
+`tools/content/admin-session.mjs` replaces eleven inline copies of that block. It reads
+**`DAWNED_ADMIN_USER` / `DAWNED_ADMIN_PASS`** and touches the `accounts` table only when neither is
+set — so a deploy creates nothing, and every row the run publishes is attributed to a person in
+`audit_log` rather than to a shared robot. The dev fallback mints a **per-run random password** on
+its own account (`zz_admin_content` — deliberately NOT the smokes' `zz_admin_smoke`, which a
+content run banning it would break) and bans it when the run ends. The random password is the part
+that actually holds: `close()` can be missed on a crash or a `fail()`'s `process.exit`, and what
+survives is then an account nobody can log into rather than one everybody can. The ban has to come
+at the END of a run, never right after login, because `auth.ts` re-checks `accounts.status` on
+every request. Verified against the running panel both ways: supplied credentials published with no
+account created, the fallback ended `banned`, and `world:author` — the TypeScript entry point,
+which needed `admin-session.mjs` listed in `tools/tsconfig.json` — regenerated all 1024 chunks
+through it. **264 tests green.**
+
 ### Running it locally
 
 ```bash
