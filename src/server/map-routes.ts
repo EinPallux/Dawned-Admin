@@ -80,7 +80,7 @@ const worldGenQuerySchema = z.object({ plan: z.string() });
 const islandMaskSchema = z
   .object({
     id: z.string().min(1).max(64),
-    kind: z.enum(['land', 'carve']).optional(),
+    kind: z.enum(['land', 'carve', 'causeway', 'plateau']).optional(),
     seed: z.number().int(),
     centerX: z.number(),
     centerZ: z.number(),

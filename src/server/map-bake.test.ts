@@ -22,6 +22,7 @@ import {
   bakeDraft,
   validateDraft,
   isReachable,
+  orderZones,
   reachableFrom,
   type DraftBundle,
 } from './map-bake.js';
@@ -376,8 +377,11 @@ describe('reachability', () => {
       bundle({
         chunks: [chunk(4, 4), chunk(8, 8)],
         objects: [
-          zoneOver(4, 4),
-          zoneOver(8, 8, 'zone_far'),
+          // The spawn goes to the STARTER settlement — the lowest level band —
+          // so this names which island that is instead of leaving it to the
+          // order the two zones happen to arrive in.
+          zoneOver(4, 4, 'zone_near', { levelMin: 1, levelMax: 5 }),
+          zoneOver(8, 8, 'zone_far', { levelMin: 20, levelMax: 25 }),
           object('poi', {
             id: 'poi_far',
             name: 'Far Vista',
@@ -483,11 +487,33 @@ describe('bakeDraft', () => {
       const placements = placementsFileSchema.parse(
         JSON.parse(await readFile(path.join(dir, 'test-bake', 'placements.json'), 'utf8')),
       );
-      return { result, placements };
+      const meta = JSON.parse(await readFile(path.join(dir, 'test-bake', 'meta.json'), 'utf8')) as {
+        spawn: { x: number; z: number };
+      };
+      return { result, placements, meta };
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
   };
+
+  it('spawns new players in the STARTER settlement, not whichever came first', async () => {
+    // Five zones carry a settlement now. The spawn used to be
+    // `zones.find(z => z.settlement !== null)` over a list in Postgres's
+    // physical row order, so a new character could have woken up in the
+    // level 24–30 mining camp. The rule is the lowest level band.
+    const starter = centreOf(4, 4);
+    const endgame = centreOf(8, 8);
+    const { meta } = await bakeInto({
+      chunks: [chunk(4, 4), chunk(8, 8)],
+      objects: [
+        zoneOver(8, 8, 'zone_ashcrag', { levelMin: 24, levelMax: 30, settlement: 'Rustpick' }),
+        zoneOver(4, 4, 'zone_dawnshore', { levelMin: 1, levelMax: 6, settlement: 'Dawnhaven' }),
+      ],
+    });
+    expect(Math.hypot(meta.spawn.x - starter.x, meta.spawn.z - starter.z)).toBeLessThan(
+      Math.hypot(meta.spawn.x - endgame.x, meta.spawn.z - endgame.z),
+    );
+  });
 
   it('writes a placements file the game can read', async () => {
     const { result, placements } = await bakeInto();
@@ -572,5 +598,53 @@ describe('bakeDraft', () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('zone priority', () => {
+  const ring = (half: number, id: string) => ({
+    id,
+    polygon: [
+      [-half, -half],
+      [half, -half],
+      [half, half],
+      [-half, half],
+    ] as [number, number][],
+  });
+
+  it('puts the smallest zone first, so a containing zone cannot shadow it', () => {
+    // The Dawnsea covers the whole map and every land zone sits inside it.
+    // `zoneAt` takes the FIRST match, so if the sea came first the whole world
+    // would report as ocean.
+    const sea = ring(1100, 'dawnsea');
+    const isle = ring(400, 'dawnshore');
+    const islet = ring(120, 'elder_grove');
+    expect(orderZones([sea, isle, islet]).map((z) => z.id)).toEqual([
+      'elder_grove',
+      'dawnshore',
+      'dawnsea',
+    ]);
+    // And it does not depend on the order they arrive in — which is exactly
+    // the bug: `listObjects` returns Postgres's physical row order.
+    expect(orderZones([islet, sea, isle]).map((z) => z.id)).toEqual([
+      'elder_grove',
+      'dawnshore',
+      'dawnsea',
+    ]);
+  });
+
+  it('is total — equal areas still get a stable order', () => {
+    const a = { ...ring(400, 'b_zone') };
+    const b = { ...ring(400, 'a_zone') };
+    expect(orderZones([a, b]).map((z) => z.id)).toEqual(['a_zone', 'b_zone']);
+    expect(orderZones([b, a]).map((z) => z.id)).toEqual(['a_zone', 'b_zone']);
+  });
+
+  it('measures area regardless of winding', () => {
+    const cw = ring(100, 'cw');
+    const ccw = { id: 'ccw', polygon: [...cw.polygon].reverse() };
+    // A reversed ring is the same region; a signed area would call one of them
+    // negative and sort it first.
+    expect(orderZones([cw, ccw]).map((z) => z.id)).toEqual(['ccw', 'cw']);
   });
 });

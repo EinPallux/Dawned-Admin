@@ -309,10 +309,22 @@ export const deleteObjects = async (db: Db, ids: string[]): Promise<number> => {
   return deleted.length;
 };
 
+/**
+ * Every object, or just some layers. **Ordered by id** — without it Postgres
+ * returns rows in physical order, which changes whenever a row is updated, and
+ * anything downstream that depends on order becomes a coin flip between
+ * publishes. The zone list is the one that bites (see `bakeDraft`), but a
+ * stable order also makes two publishes of the same draft produce the same
+ * bytes, which is what makes a diff readable.
+ */
 export const listObjects = async (db: Db, layers?: MapLayer[]): Promise<DraftObject[]> => {
   const rows = layers?.length
-    ? await db.select().from(mapDraftObjects).where(inArray(mapDraftObjects.layer, layers))
-    : await db.select().from(mapDraftObjects);
+    ? await db
+        .select()
+        .from(mapDraftObjects)
+        .where(inArray(mapDraftObjects.layer, layers))
+        .orderBy(mapDraftObjects.id)
+    : await db.select().from(mapDraftObjects).orderBy(mapDraftObjects.id);
   return rows.map((row) => ({
     id: row.id,
     layer: row.layer,

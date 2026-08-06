@@ -216,13 +216,30 @@ const isReachable = (seen: Uint8Array, x: number, z: number): boolean => {
   return false;
 };
 
-/** Pick the spawn: the authored settlement zone's centre, else first walkable. */
+/**
+ * Pick the spawn: the STARTER settlement's centre, else the first walkable
+ * metre.
+ *
+ * "Starter" is the settlement zone with the lowest `levelMin`, ties broken on
+ * id. It used to be `zones.find(zone => zone.settlement !== null)` — the first
+ * one in the list — which was fine while exactly one zone had a settlement and
+ * became a coin flip the moment P12 gave all five of them one: `listObjects`
+ * returned Postgres's physical row order, so a new character could have opened
+ * their eyes in Rustpick Camp, in the level 24–30 zone, and the only symptom
+ * would have been a very short first session.
+ *
+ * The level band is the right answer rather than a name or a flag because it is
+ * already the thing that makes Dawnshore the starter zone.
+ */
 const findSpawn = (
   sampler: DraftSampler,
   zones: Zone[],
   grid: Walkgrid,
 ): { x: number; y: number; z: number; yaw: number } | null => {
-  const settlement = zones.find((zone) => zone.settlement !== null) ?? zones[0];
+  const settlement =
+    [...zones]
+      .filter((zone) => zone.settlement !== null)
+      .sort((a, b) => a.levelMin - b.levelMin || a.id.localeCompare(b.id))[0] ?? zones[0];
   const candidates: { x: number; z: number }[] = [];
   if (settlement) {
     let sumX = 0;
@@ -271,6 +288,42 @@ const findSpawn = (
  * intentional scenery, so it warns rather than blocks — but a POI you cannot
  * discover is dead content and blocks).
  */
+/**
+ * Zone priority: the SMALLEST zone containing a point wins.
+ *
+ * `zoneAt` returns the first polygon that contains the point, so the order this
+ * list is emitted in decides which zone a player is standing in — and until
+ * P12 that never mattered, because no two zones overlapped. The Dawnsea does:
+ * WORLD.md §2 lists it as the ocean, the beaches and the sandbars, so its ring
+ * covers the whole map and every land point is inside two zones.
+ *
+ * Sorting by polygon area ascending makes "the more specific zone wins" a
+ * property of the data rather than of the row order Postgres happened to
+ * return. A containing zone is always the larger one, so the sea can never
+ * shadow an isle; two land zones that clip at their edges get an arbitrary but
+ * STABLE answer, which is the part that matters — the alternative was a world
+ * that could rename Dawnshore to "The Dawnsea" between two publishes of an
+ * unchanged draft.
+ *
+ * Ties break on id so the order is total.
+ */
+export const orderZones = <
+  T extends { id: string; polygon: readonly (readonly [number, number])[] },
+>(
+  zones: T[],
+): T[] => {
+  const area = (polygon: readonly (readonly [number, number])[]): number => {
+    let sum = 0;
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+      const [xi, zi] = polygon[i]!;
+      const [xj, zj] = polygon[j]!;
+      sum += xj * zi - xi * zj;
+    }
+    return Math.abs(sum) / 2;
+  };
+  return [...zones].sort((a, b) => area(a.polygon) - area(b.polygon) || a.id.localeCompare(b.id));
+};
+
 export const validateDraft = (bundle: DraftBundle): ValidationReport => {
   const problems: string[] = [];
   const warnings: string[] = [];
@@ -278,7 +331,7 @@ export const validateDraft = (bundle: DraftBundle): ValidationReport => {
   const enabled = bundle.chunks.filter((chunk) => chunk.enabled);
 
   const props = byLayer(bundle.objects, 'prop').map((def) => propPlacementSchema.parse(def));
-  const zones = byLayer(bundle.objects, 'zone').map((def) => zoneSchema.parse(def));
+  const zones = orderZones(byLayer(bundle.objects, 'zone').map((def) => zoneSchema.parse(def)));
   const pois = byLayer(bundle.objects, 'poi').map((def) => poiSchema.parse(def));
   const interactables = byLayer(bundle.objects, 'interactable').map((def) =>
     interactableSchema.parse(def),
@@ -654,7 +707,7 @@ const bakeInto = async (
 
   // --- zones ---------------------------------------------------------------
   onProgress({ step: 'zones', done: 0, total: 1 });
-  const zones = byLayer(bundle.objects, 'zone').map((def) => zoneSchema.parse(def));
+  const zones = orderZones(byLayer(bundle.objects, 'zone').map((def) => zoneSchema.parse(def)));
   const zonesFile = zonesFileSchema.parse({
     defaultAmbience: DEFAULT_OCEAN_AMBIENCE,
     zones,

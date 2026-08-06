@@ -24,6 +24,7 @@
     "test:watch": "vitest",
     "world:preview": "tsx tools/content/world-preview.ts",
     "world:author": "tsx tools/content/author-world.ts",
+    "world:settle": "tsx tools/content/author-settlements.ts",
     "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test"
   },
   "dependencies": {
