@@ -21,7 +21,7 @@ truth).
 - **Freshness checklist (every task):** ROADMAP row + phase block · CHANGELOG · README status
   block · CLAUDE/AGENTS current state in BOTH repos · docs you touched · no hardcoded
   phase/version strings in the UI · counts you quote re-read from the run you just did.
-- **State (updated 2026-08-04):** A0 ✅ closed — the owner logged in at
+- **State (updated 2026-08-06):** A0 ✅ closed — the owner logged in at
   play.pathlands.cc/admin and the panel works (scaffold, panel auth gm/admin + audit,
   Workshop shell + palette, live dashboard, schema-form World Settings drafts). A1's
   Abilities editor + publish v1 is live (drafts → validate + slot-collision cross-check →
@@ -41,9 +41,9 @@ truth).
   5 Dawnhaven vendors, plus the shore/weald enemy loot bindings
   (`tools/content/author-items.mjs`) — and the game froze the result into its seed
   migration 0012. Current:
-  game P0–P10 are all closed and owner-accepted (P9 + P10 on 2026-08-05, on their measured
-  DoDs); game P11 is 🟨 in progress (A/B/C built, protocol v14) and **A4 — the quest &
-  dialogue editor — is BUILT and carried its whole pilot set**. Phases close on the measured
+  game P0–P11 are all closed on their measured DoDs (P9 + P10 on 2026-08-05 and
+  owner-accepted; P11 on 2026-08-06) and **A4 — the quest & dialogue editor — is BUILT and
+  carried its whole pilot set**. Phases close on the measured
   DoD, not on a playtest; all feel/number tuning is one pass at the end of the project.
   **A1-d — Enemies is live** (2026-08-04): bestiary + spawners on one publish rail, level-
   banded list with rank badges, and a time-to-kill simulator that runs the game's own
@@ -194,7 +194,8 @@ truth).
   never block. The **chain graph reads `prerequisites`, not `chainId`** — the label groups
   the journal, the prerequisites are what the game gates on. Journal preview, ƒ-suggested
   rewards from the shared formulas, grant-to-GM via the game's `/ops/quest` (rule 3),
-  `tools/smoke/quest-editor.mjs` in a real browser. **219 tests green.**
+  `tools/smoke/quest-editor.mjs` in a real browser. **219 tests green** (225 after the hint
+  cross-check below).
   Game P11-C authored its whole pilot set through it (`tools/content/author-quests.mjs`: 4
   NPCs, 8 quests, 4 NPC / 7 interactable / 6 POI placements, then a map publish the game
   hot-swapped onto), and that run found **the map editor and the game disagreeing about what
@@ -215,3 +216,20 @@ truth).
   Clearest case yet for a **clip-name check on the NPC form**: publish already refuses a model
   that is not in the baked manifest, and an authored clip that names nothing is the same silent
   mistake.
+
+  **Game P11-E closed the phase (2026-08-06) and found this page's real gap.** Its DoD run
+  plays the pilot chain with only in-game affordances, so it walks to the circle the MAP draws
+  — and four of five kill hints sat **85–170 m outside their only spawner**, while both gather
+  steps had no circle at all. Neither row was wrong on its own: the circle is typed on Content →
+  Quests, the spawner is placed in the map editor, and the two pages had never met. Publish now
+  resolves each step's real targets (spawners for a kill, node placements for a gather,
+  NPC/interactable placements for the rest) and **warns with the distance quoted** —
+  `questHintCoverage` went into `@dawned/shared`, not a copy here, because the game's map draws
+  the same circle. It warns rather than blocks: §1 rule 4 says the map hints _roughly_ where,
+  and a deliberately loose circle is a choice, 170 m off is not. Content re-authored through
+  this surface (hints re-pointed, two gather hints added, Hesta's prose fixed). One more rule
+  from the same run: **nothing a quest step needs may be one-shot** — the crate and stumps were
+  `respawnMs: 0`, so opening the crate out of curiosity ended "The Lost Crate" before it could
+  be taken. Spent state is per-character; both are 300 000 ms now, and an interactable a quest
+  step NAMES with `respawnMs: 0` is worth a form-level nudge next time this page is touched.
+  **225 tests green** (the cross-check added 6 of them); the game finished at 642.

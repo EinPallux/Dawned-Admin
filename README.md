@@ -5,7 +5,7 @@ developers and admins edit _everything_ about the game through a friendly UI: th
 (a full 3D map editor), every database-driven piece of content (items, enemies, abilities, loot,
 quests, vendors, zones, curves), and the live server (players, bans, broadcasts, metrics).
 
-> **Status (2026-08-05): A0 closed, A1 in progress, A2, A3 and A4 built** — the panel shell, auth
+> **Status (2026-08-06): A0 closed, A1 in progress, A2, A3 and A4 built** — the panel shell, auth
 > against game accounts (gm/admin), the live dashboard and schema-driven World Settings shipped in
 > A0; A1 has the publish pipeline plus the **Abilities**, **Progression** (XP curve + skill trees),
 > **Items / Loot / Vendors**, **Enemies** (bestiary + spawners + a time-to-kill simulator) and
@@ -15,7 +15,11 @@ quests, vendors, zones, curves), and the live server (players, bans, broadcasts,
 > dialogue editor — is live**: quests and NPCs on one publish rail, validated by the game's own
 > `validateQuestFlow`, with a journal preview, a chain graph built from prerequisites, ƒ-suggested
 > rewards and a grant-to-GM test hook. The game's whole P11 pilot set was authored through it —
-> 4 NPCs, 8 quests, and the placements that put them in the world. **The Map
+> 4 NPCs, 8 quests, and the placements that put them in the world — and publish now also checks
+> that a step's **hint circle actually contains the thing it points at**, quoting the distance
+> when it does not (four of the pilot's kill hints were 85–170 m off their only spawner: the
+> circle is typed here, the spawner is placed in the map editor, and nothing had compared them).
+> **The Map
 > Editor is done**: open the island in 3D, sculpt and paint it, generate a new one, scatter a
 > forest, place props, camps, discovery points, chests and shrines, keep a group as a reusable
 > prefab, draw a zone and re-shape one you already drew corner by corner, then validate and

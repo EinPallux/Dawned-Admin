@@ -315,6 +315,15 @@ flow (owner drives, we watch); validation catches seeded errors in a fixture que
       `tools/content/author-quests.mjs`: 4 NPCs, 8 quests, then 4 NPC / 7 interactable / 6 POI
       placements into the map draft and a map publish the game hot-swapped onto. That run is
       what found the NPC schema split below.
+- [x] **Publish checks that a hint circle contains what it points at** (2026-08-05, from the
+      game's P11-E DoD run, which walks to the circle the map draws): each step's real targets
+      are resolved — spawners for a kill, node placements for a gather, NPC/interactable
+      placements for the rest — and a circle that misses them all warns with the distance
+      quoted. Four of the pilot's five kill hints were 85–170 m outside their only spawner and
+      both gather steps had no circle at all; neither row was wrong alone, and the two pages
+      had never met. `questHintCoverage` lives in `@dawned/shared` (the game's map draws the
+      same circle), and it WARNS rather than blocks — QUESTS_POI §1 rule 4 says the map hints
+      _roughly_ where, so a loose circle is a choice and a 170 m one is not.
 
 ## A5 — Live Ops (M) — with game P13
 

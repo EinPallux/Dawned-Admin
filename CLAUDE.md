@@ -92,11 +92,10 @@ so an identical draft could never prune. 25 tests green. The whole P8 catalogue 
 live through this surface — 62 items, 5 loot tables, 5 Dawnhaven vendors and the shore/
 weald enemy loot bindings (`tools/content/author-items.mjs`, numbers derived from the
 shared budget formulas) — and the game froze the published result into its seed
-migration 0012. **Current: game P0–P10 are all closed and owner-accepted (P9 + P10 on
-2026-08-05, on their measured DoDs). Game P11 — Quests, POIs & Interactables is 🟨 in
-progress (A/B/C built, protocol v14; its client half D and DoD run E remain), and this
-panel's A4 sync point — the quest & dialogue editor — is BUILT and carried the whole P11
-pilot set.** Phases close on the measured DoD, not on a playtest; all
+migration 0012. **Current: game P0–P11 are all closed on their measured DoDs (P9 + P10 on
+2026-08-05 and owner-accepted; P11 — Quests, POIs & Interactables measured its DoD on
+2026-08-06), and this panel's A4 sync point — the quest & dialogue editor — is BUILT and
+carried the whole P11 pilot set.** Phases close on the measured DoD, not on a playtest; all
 feel/number tuning is one deliberate pass at the end of the project.
 **A1-d — the Enemies editor is live** (2026-08-04, alongside game P9): Content → Enemies
 with bestiary + spawners on one publish rail (they reference each other), the level-banded
@@ -330,7 +329,7 @@ drawing the label would draw a graph that disagrees with the game, which is the 
 the TTK simulator avoids by running `selectableEnemyAbilities`. Rewards ƒ-suggest off the
 shared formulas; the grant-to-GM hook proxies to the game's `/ops/quest` (rule 3).
 `node tools/smoke/quest-editor.mjs` drives it in a browser and cleans up its probe rows in a
-`finally`. **219 tests green.**
+`finally`. **219 tests green** (225 after the hint cross-check below).
 **Game P11-C ran the whole pilot set through this surface** (`tools/content/author-quests.mjs`:
 4 NPCs, 8 quests, then 4 NPC / 7 interactable / 6 POI placements and a map publish the game
 hot-swapped onto), and that run found the bug that mattered: **the map editor and the game
@@ -358,6 +357,29 @@ publish" is success). And **layer ownership decides whether you may clear**: the
 the script's alone, so it clears first; `interactable` and `poi` are SHARED with hand placement
 in the editor, so clearing them would delete the owner's shrines — those upsert by id and the
 script prints exactly which ids it owns.
+
+**Game P11-E closed the phase (2026-08-06) and it is the run that found this page's real gap:
+a hint circle nothing had ever compared to the world.** The game's DoD run plays the pilot chain
+with only in-game affordances, so it walks to the circle the map draws — and four of the pilot's
+five kill hints sat **85–170 m outside their only spawner**, while both gather steps had no
+circle at all. Nothing was wrong with either row: the circle is typed on Content → Quests and the
+spawner is placed in the map editor, two pages that had never met. That is exactly the class of
+mistake a cross-check exists for, so publish now resolves each step's REAL targets — spawners for
+a kill, resource-node placements for a gather, NPC/interactable placements for the rest — and
+warns with the distance quoted (`questHintCoverage` went into `@dawned/shared` rather than being
+copied here, for the same reason `fastTravelCost` did: the game's map draws the same circle).
+It **warns rather than blocks**, because §1 rule 4 says the map hints _roughly_ where and a
+deliberately loose circle is a design choice; a circle 170 m off is not. Re-authored and
+re-published through this surface, with two gather hints added and Hesta's prose re-pointed at
+the region the mossbloom actually grows in.
+**One more content rule came out of it, and it belongs on this page too: nothing a quest step
+needs may be one-shot.** The crate and the marked stumps were authored `respawnMs: 0`, so a
+player who opened the crate out of ordinary curiosity before Torv mentioned it could never take
+"The Lost Crate" at all. Spent state is per-character, so a respawn costs nothing; both are
+300 000 ms now. Worth a form-level nudge next time Content → Quests is touched — an interactable
+a quest STEP names with `respawnMs: 0` is a soft-lock the JSON does not look like.
+**225 tests green here** (the hint cross-check added 6 of them); the game side
+finished at 642.
 
 ### Running it locally
 
