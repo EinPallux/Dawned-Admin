@@ -44,7 +44,11 @@ import { AdminAuth, SESSION_COOKIE, roleAtLeast } from './auth.js';
 import { createAuditWriter, type AuditWriter } from './audit.js';
 import { registerMapRoutes } from './map-routes.js';
 import { probeGame, probeMetrics } from './game-status.js';
-import { readWorldSettings, saveWorldSettingsDraft } from './world-settings.js';
+import {
+  publishWorldSettings,
+  readWorldSettings,
+  saveWorldSettingsDraft,
+} from './world-settings.js';
 import {
   diffAbilities,
   discardAbilityDraft,
@@ -202,7 +206,7 @@ export const buildApp = async (config: Config): Promise<App> => {
     const result = await auth.login(body.data.name, body.data.password, request.ip);
     if (!result.ok) {
       const messages = {
-        rate_limited: 'Too many attempts — wait a minute.',
+        rate_limited: `Too many failed sign-ins. Try again in ${result.retryAfterSec ?? 60}s.`,
         invalid_credentials: 'Wrong account name or password.',
         banned: 'This account is banned.',
         no_panel_access: 'This account has no panel access (gm/admin role required).',
@@ -264,6 +268,26 @@ export const buildApp = async (config: Config): Promise<App> => {
   app.get('/api/world-settings', async (request, reply) => {
     if (!requireRole(request, reply, 'gm')) return;
     return readWorldSettings(dbHandle.db);
+  });
+
+  /**
+   * The rail A0 documented and A1 never built. Without it the game — which reads
+   * `content_world_settings` WHERE status = 'published' — could not see a single
+   * World Settings edit, so `xpRate` and every other world lever sat at their
+   * compiled-in defaults no matter what the panel showed.
+   */
+  app.post('/api/publish/world-settings', async (request, reply) => {
+    const admin = requireRole(request, reply, 'admin');
+    if (!admin) return;
+    const result = await publishWorldSettings(dbHandle.db, config, admin.accountId);
+    await audit({
+      actorAccountId: admin.accountId,
+      action: 'world_settings.publish',
+      args: { published: result.published, problems: result.problems },
+      result: result.ok ? 'ok' : 'denied',
+    });
+    if (!result.ok) return reply.code(422).send(result);
+    return result;
   });
 
   app.put('/api/world-settings', async (request, reply) => {

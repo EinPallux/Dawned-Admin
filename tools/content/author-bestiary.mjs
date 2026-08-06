@@ -24,6 +24,7 @@
  */
 
 import { openAdminSession } from './admin-session.mjs';
+import { ownerEditGuards } from './owner-edits.mjs';
 import { ENEMY_DEFS } from './bestiary-data.mjs';
 import { buildSpawners } from './camp-data.mjs';
 
@@ -144,8 +145,14 @@ const main = async () => {
   // --- 2 · the bestiary and its camps -------------------------------------
   console.log('');
   const spawners = buildSpawners();
+  // Never revert an enemy the owner retuned in the panel (owner-edits.mjs).
+  const guard = await ownerEditGuards([
+    ['enemies', 'content_enemies'],
+    ['spawners', 'content_spawners'],
+  ]);
   let pruned = 0;
   for (const def of ENEMY_DEFS) {
+    if (!guard.mayWrite('enemies', def.id, def)) continue;
     const result = await put('enemies', def);
     if (result.pruned) pruned++;
   }
@@ -158,8 +165,9 @@ const main = async () => {
     void $ground;
     void $slope;
     void $movedM;
-    await put('spawners', def);
+    if (guard.mayWrite('spawners', def.id, def)) await put('spawners', def);
   }
+  guard.report();
   ok(`${spawners.length} camps saved as drafts`);
 
   const diff = await (await fetch(`${BASE_URL}/api/publish/enemies/diff`, { headers })).json();
@@ -185,6 +193,8 @@ const main = async () => {
   } else {
     note('nothing to publish — the live bestiary already matches this file');
   }
+  // AFTER the publish, so a refused one never claims rows it did not write.
+  await guard.commit();
 
   // --- 3 · the same camps onto the MAP ------------------------------------
   // Q23: the map owns where a camp stands, and its publish delete-then-inserts

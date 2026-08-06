@@ -19,6 +19,7 @@
 
 import pg from 'pg';
 import { openAdminSession } from './admin-session.mjs';
+import { ownerEditGuards } from './owner-edits.mjs';
 import { publishRail } from './publish.mjs';
 import { ENEMY_LOOT, ITEM_DEFS, LOOT_TABLE_DEFS, VENDOR_DEFS } from './item-data.mjs';
 import { DEEP_ITEM_DEFS, DEEP_LOOT_TABLES, DEEP_VENDOR_DEFS } from './item-data-deep.mjs';
@@ -79,13 +80,23 @@ const main = async () => {
     if (!response.ok) fail(`${path} draft ${def.id} rejected: ${await response.text()}`);
   };
 
-  for (const def of ALL_ITEMS) await put('items', def);
+  // Never revert something the owner retuned in the panel (owner-edits.mjs).
+  const guard = await ownerEditGuards([
+    ['items', 'content_items'],
+    ['loot', 'content_loot_tables'],
+    ['vendors', 'content_vendors'],
+  ]);
+
+  for (const def of ALL_ITEMS) if (guard.mayWrite('items', def.id, def)) await put('items', def);
   ok(`${ALL_ITEMS.length} items saved as drafts (validated by the shared schema)`);
 
-  for (const def of ALL_TABLES) await put('loot-tables', def);
+  for (const def of ALL_TABLES)
+    if (guard.mayWrite('loot', def.id, def)) await put('loot-tables', def);
   ok(`${ALL_TABLES.length} loot tables saved as drafts`);
 
-  for (const def of ALL_VENDORS) await put('vendors', def);
+  for (const def of ALL_VENDORS)
+    if (guard.mayWrite('vendors', def.id, def)) await put('vendors', def);
+  guard.report();
   ok(`${ALL_VENDORS.length} vendors saved as drafts`);
 
   const diff = await fetch(`${BASE_URL}/api/publish/items/diff`, { headers });
@@ -95,6 +106,7 @@ const main = async () => {
   );
 
   await publishRail(BASE_URL, headers, 'items', 'item/loot/vendor rows');
+  await guard.commit();
 
   const bound = await bindEnemyLoot();
   ok(`${bound} enemy loot binding(s) applied (already-bound rows left alone)`);

@@ -27,6 +27,8 @@
  */
 
 import { openAdminSession } from './admin-session.mjs';
+import { ownerEditGuards } from './owner-edits.mjs';
+import { publishRail } from './publish.mjs';
 import { CHUNK_SIZE_M, WORLD_CHUNKS, WORLD_ORIGIN_M, pointInPolygon } from '@dawned/shared';
 import { ITEM_DEFS, NODE_DEFS } from './node-data.mjs';
 import { buildNodeClusters } from './node-clusters.mjs';
@@ -89,33 +91,19 @@ const main = async () => {
 
   // --- 1. items -----------------------------------------------------------
 
-  for (const def of ITEM_DEFS) await put('items', def);
+  // Never revert something the owner retuned in the panel (owner-edits.mjs).
+  const guard = await ownerEditGuards([
+    ['items', 'content_items'],
+    ['nodes', 'content_resource_nodes'],
+  ]);
+
+  for (const def of ITEM_DEFS) if (guard.mayWrite('items', def.id, def)) await put('items', def);
   ok(`${ITEM_DEFS.length} materials, gems, procs and fish saved as drafts`);
 
-  /**
-   * Publishing an unchanged set refuses with "nothing to publish", because a
-   * draft identical to what is live prunes itself on save. That is SUCCESS for
-   * a re-run, not failure — this script has to be safe to run twice, or fixing
-   * one placement would mean re-authoring the catalogue.
-   */
-  const publishOrAlreadyLive = async (path, label) => {
-    const result = await post(path, {});
-    const problems = result.payload?.problems ?? [];
-    const nothingPending =
-      problems.length > 0 && problems.every((problem) => /nothing to publish/i.test(problem));
-    if (nothingPending) {
-      ok(`${label}: already live, nothing to publish`);
-      return null;
-    }
-    if (!result.response.ok || !result.payload?.ok) {
-      fail(
-        `${label} publish refused:\n${(problems.length ? problems : [JSON.stringify(result.payload)]).join('\n')}`,
-      );
-    }
-    ok(`published ${result.payload.published} ${label}`);
-    for (const warning of result.payload.warnings ?? []) note(`⚠️  ${warning}`);
-    return result.payload;
-  };
+  // The shared rule (publish.mjs), not a third copy of it: three copies of one
+  // rule is how the typed loot-stub list went stale.
+  const publishOrAlreadyLive = (path, label) =>
+    publishRail(BASE_URL, headers, path.replace(/^publish\//, ''), label);
 
   /**
    * Dawnpetal's old home.
@@ -158,7 +146,9 @@ const main = async () => {
 
   // --- 2. resource-node definitions ---------------------------------------
 
-  for (const def of NODE_DEFS) await put('resource-nodes', def);
+  for (const def of NODE_DEFS)
+    if (guard.mayWrite('nodes', def.id, def)) await put('resource-nodes', def);
+  guard.report();
   ok(`${NODE_DEFS.length} resource-node definitions saved as drafts`);
 
   const nodePublish = await publishOrAlreadyLive(
@@ -172,6 +162,11 @@ const main = async () => {
         : `game NOT reloaded: ${nodePublish.reload.note}`,
     );
   }
+
+  // AFTER the publishes: recording before them would claim ownership of rows a
+  // refused publish never wrote, and the next run would then overwrite the
+  // owner's version believing it had written that value itself.
+  await guard.commit();
 
   if (SKIP_MAP) {
     console.log('\n🌿 Definitions are live. Placements skipped (--no-map).\n');

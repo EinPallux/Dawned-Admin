@@ -639,6 +639,45 @@ already contained the previous phase's output.** The game repo's `deploy/WORLD.s
 against one that contains only the seed migrations, which is a different program. A run of the
 whole chain against a virgin database is now part of verifying a change to any of them.
 
+**World Settings publishes now, and scripts stop reverting the owner (2026-08-06, game P12-H).**
+The QA sweep the owner asked for before P13 found the panel's oldest hole: **the World Settings page
+could never change the game.** It wrote DRAFT rows and no `/api/publish/world-settings` route
+existed — A0's DoD was the draft round-trip, and `world-settings.ts`'s own header claimed published
+rows changed "exclusively via the A1 publish pipeline" while A1 never wired this surface into it.
+The game reads `status = 'published'`; there were **zero such rows in existence**, so eleven phases
+of `xpRate` and every other lever sat at their compiled-in defaults. Fixed with a transactional rail
+
+- `/ops/reload-content` + a Publish button on the page.
+  Alongside it, **`tools/content/owner-edits.mjs`**: the content scripts now compare each live
+  published row against the hash they recorded when they last wrote it, and keep the owner's version
+  when it differs — naming the skipped rows on screen. Wired into `author-items`, `author-nodes` and
+  `author-quests`, backed by the game's migration 0021, overridable with `--force-authored`. This is
+  what makes the game repo's new automatic world step in `UPDATE.sh` safe: without it, every deploy
+  that touched content would quietly undo the owner's tuning.
+  **The bug worth keeping:** the first version hashed what the script SENT, and this panel `.parse()`s
+  every def on save (defaults filled in), so the stored row is never byte-equal to the posted one —
+  the first clean re-run called **200 rows owner-edited** on an untouched database. `commit()` re-reads
+  the live rows now: the question is "does this still look the way it did when the script last wrote
+  it", so both sides have to be the stored row. Proven over four runs against a real database —
+  adopt 218 → silent re-run → a hand-edited row named and preserved → `--force-authored` restores the
+  authored value. **266 tests green.**
+
+**The QA sweep's panel findings are closed (2026-08-06).** (1) **Login limiting counted SUCCESSFUL
+sign-ins**, and on a private server the owner and a GM sit behind one address — ten ordinary logins
+a minute locked both out of their own panel, with a missing cookie instead of a message (the panel's
+own suite tripped it, which is how three unrelated suites once failed on "expected undefined to be
+defined"). Only failures count now, a correct password clears the address, a banned/role-less
+account with the right password is not counted (it is not a guess), and the 429 says how long to
+wait. (2) `progression.ts` hand-rolled the reload poke with its own timeout — it uses
+`reloadGameContent`. (3) Three private copies of "nothing to publish is success" became one
+(`publish.mjs`), which is the same drift that let the typed loot-stub list go stale. (4) The
+owner-edit guard now covers EVERY content rail: abilities, skill nodes, enemies, spawners and NPCs
+join items, loot, vendors, nodes and quests. Proven on two more rails against a real database — an
+ability retuned to cooldown 77777 is named and kept; an enemy's `aggroRadius` set to 99 is kept and
+`--force-authored` puts the authored 10 back. **A test artifact worth keeping:** the first bestiary
+attempt edited `level`, which that def does not carry at all, so "restore" had no target and the run
+looked broken — the guard was fine, the question had no answer. **266 tests green.**
+
 ### Running it locally
 
 ```bash

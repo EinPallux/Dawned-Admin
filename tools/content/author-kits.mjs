@@ -12,6 +12,7 @@
  */
 
 import { openAdminSession } from './admin-session.mjs';
+import { ownerEditGuards } from './owner-edits.mjs';
 import { publishRail } from './publish.mjs';
 import { KIT_DEFS } from './kits-data.mjs';
 
@@ -32,7 +33,10 @@ const main = async () => {
   ok('panel session open');
 
   let saved = 0;
+  // Never revert an ability the owner retuned in the panel (owner-edits.mjs).
+  const guard = await ownerEditGuards([['abilities', 'content_abilities']]);
   for (const def of KIT_DEFS) {
+    if (!guard.mayWrite('abilities', def.id, def)) continue;
     const response = await fetch(`${BASE_URL}/api/abilities/${def.id}`, {
       method: 'PUT',
       headers,
@@ -44,6 +48,7 @@ const main = async () => {
     }
     saved++;
   }
+  guard.report();
   ok(`${saved} kit defs saved as drafts (validated by the shared schema)`);
 
   const diff = await fetch(`${BASE_URL}/api/publish/abilities/diff`, { headers });
@@ -51,6 +56,7 @@ const main = async () => {
   ok(`publish diff: ${entries.length} pending`);
 
   await publishRail(BASE_URL, headers, 'abilities', 'abilities');
+  await guard.commit();
   console.log('\n⚔️  Kits are live content.\n');
 };
 

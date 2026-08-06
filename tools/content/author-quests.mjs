@@ -28,6 +28,8 @@
  */
 
 import { openAdminSession } from './admin-session.mjs';
+import { ownerEditGuards } from './owner-edits.mjs';
+import { publishRail } from './publish.mjs';
 import { CHUNK_SIZE_M, WORLD_ORIGIN_M } from '@dawned/shared';
 import { INTERACTABLES, NPC_DEFS, NPC_PLACEMENTS, POIS, QUEST_DEFS } from './quest-data.mjs';
 
@@ -68,39 +70,25 @@ const main = async () => {
 
   // --- 1. NPCs + quests ----------------------------------------------------
 
-  for (const def of NPC_DEFS) await put('npcs', def);
+  // Never revert something the owner retuned in the panel (owner-edits.mjs).
+  const guard = await ownerEditGuards([
+    ['npcs', 'content_npcs'],
+    ['quests', 'content_quests'],
+  ]);
+
+  for (const def of NPC_DEFS) if (guard.mayWrite('npcs', def.id, def)) await put('npcs', def);
   ok(`${NPC_DEFS.length} NPCs saved as drafts`);
-  for (const def of QUEST_DEFS) await put('quests', def);
+  for (const def of QUEST_DEFS) if (guard.mayWrite('quests', def.id, def)) await put('quests', def);
+  guard.report();
   ok(`${QUEST_DEFS.length} quests saved as drafts`);
 
-  /**
-   * Publishing an unchanged set refuses with "nothing to publish", because a
-   * draft identical to what is live prunes itself on save. That is SUCCESS for
-   * a re-run, not failure — this script has to be safe to run twice, or fixing
-   * one placement would mean re-authoring the whole set.
-   */
-  const result = await post('publish/quests', {});
-  const problems = result.payload?.problems ?? [];
-  const nothingPending =
-    problems.length > 0 && problems.every((problem) => /nothing to publish/i.test(problem));
-  if (nothingPending) {
-    ok('quests + NPCs: already live, nothing to publish');
-  } else if (!result.response.ok || !result.payload?.ok) {
-    fail(
-      `quest publish refused:\n${(problems.length ? problems : [JSON.stringify(result.payload)]).join('\n')}`,
-    );
-  } else {
-    ok(
-      `published ${result.payload.publishedQuests} quest(s) and ` +
-        `${result.payload.publishedNpcs} NPC(s)`,
-    );
-    for (const warning of result.payload.warnings ?? []) note(`⚠️  ${warning}`);
-    note(
-      result.payload.reload?.ok
-        ? `game hot-reloaded: ${result.payload.reload.note}`
-        : `game NOT reloaded: ${result.payload.reload?.note}`,
-    );
-  }
+  // The shared rule (publish.mjs), not a third copy of it.
+  await publishRail(BASE_URL, headers, 'quests', 'quest/NPC rows');
+
+  // AFTER the publish: recording before it would claim ownership of rows a
+  // refused publish never wrote, and the next run would then overwrite the
+  // owner's version believing it had written that value itself.
+  await guard.commit();
 
   if (SKIP_MAP) {
     console.log('\n📜 Quests are live content. Placements skipped (--no-map).\n');

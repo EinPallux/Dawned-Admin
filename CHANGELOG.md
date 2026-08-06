@@ -5,6 +5,33 @@ versions track the game's release trains (0.1.0 = tooling that shipped Dawned 0.
 
 ## [Unreleased]
 
+### Fixed — the panel stops locking you out of itself (2026-08-06)
+
+- **Login limiting counted successful sign-ins.** On one household address the owner and a GM
+  share the budget, so ten ordinary logins in a minute locked both out — with a missing cookie
+  rather than a message. Only failed attempts count now, a correct password clears the address, and
+  the refusal says how many seconds to wait.
+- `progression.ts` uses the shared reload helper instead of its own copy, and three private copies
+  of "publishing an unchanged set is success" became one.
+- The **owner-edit guard now covers every content rail** — abilities, skill nodes, enemies,
+  spawners and NPCs join items, loot, vendors, resource nodes and quests.
+
+### Added — World Settings publishes, and scripts never revert your edits (2026-08-06)
+
+- **`POST /api/publish/world-settings`** — the rail A0 documented and A1 never built. The game reads
+  `content_world_settings WHERE status = 'published'`; this page wrote drafts only, so for eleven
+  phases none of its edits could reach the game and the world ran on `defaultWorldSettings()`,
+  `xpRate` included. Transactional, validates the merged RESULT (the game falls back to defaults on
+  a bad merge, silently), pokes `/ops/reload-content`, and the page gains a Publish button that
+  reports what the game did with it. +1 test.
+- **`tools/content/owner-edits.mjs`** — content scripts leave alone any published row that no longer
+  matches the hash they recorded when they last wrote it, and name the ones they skipped. Wired into
+  `author-items`, `author-nodes` and `author-quests`; `--force-authored` overrides. Backed by the
+  game's migration 0021.
+- The trap: the first version hashed what the script **sent**, and this panel `.parse()`s every def
+  on save, filling defaults — so the first clean re-run reported **200 rows as owner-edited** on a
+  database nobody had touched. Both sides of the comparison have to be the STORED row.
+
 ### Changed — content scripts take a real login (2026-08-06)
 
 - `tools/content/admin-session.mjs` replaces eleven inline copies of "mint an admin account, log

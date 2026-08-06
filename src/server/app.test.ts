@@ -241,6 +241,68 @@ describe('world-settings drafts (A0 DoD round-trip)', () => {
     expect(trail.length).toBe(2);
   });
 
+  // The half A0 documented and A1 never built. Until 2026-08-06 there was no
+  // publish route at all, so the game — which reads status='published' — could
+  // not see a single edit made on this page, and every world lever ran at its
+  // compiled-in default. The test asserts what the GAME will read, not what the
+  // panel echoes back.
+  it('publishes a draft onto the live rows and clears it', async () => {
+    // The SHARED admin session, not a fresh login: the limiter allows 10/min per
+    // IP and the whole file has to fit inside one window. Adding an eleventh
+    // login here is what made the three content suites fail with a bare
+    // "expected undefined to be defined" — a missing cookie, three tests away
+    // from its cause.
+    const session = await contentSession();
+
+    const before = await ctx.app.inject({
+      method: 'GET',
+      url: '/api/world-settings',
+      cookies: session,
+    });
+    const publishedNow = before.json<{ published: WorldSettings }>().published;
+    const nextRate = publishedNow.xpRate === 1 ? 2 : 1;
+
+    await ctx.app.inject({
+      method: 'PUT',
+      url: '/api/world-settings',
+      cookies: session,
+      headers: CSRF,
+      payload: { ...publishedNow, xpRate: nextRate },
+    });
+
+    const published = await ctx.app.inject({
+      method: 'POST',
+      url: '/api/publish/world-settings',
+      cookies: session,
+      headers: CSRF,
+      payload: {},
+    });
+    expect(published.statusCode).toBe(200);
+    expect(published.json<{ published: number }>().published).toBe(1);
+
+    // What the game reads is the PUBLISHED row; the draft must be gone, or the
+    // page would keep showing a pending change that is already live.
+    const after = await ctx.app.inject({
+      method: 'GET',
+      url: '/api/world-settings',
+      cookies: session,
+    });
+    const state = after.json<{ published: WorldSettings; draftKeys: string[] }>();
+    expect(state.published.xpRate).toBe(nextRate);
+    expect(state.draftKeys).toEqual([]);
+
+    // Re-running with nothing pending is refused rather than publishing a no-op.
+    const again = await ctx.app.inject({
+      method: 'POST',
+      url: '/api/publish/world-settings',
+      cookies: session,
+      headers: CSRF,
+      payload: {},
+    });
+    expect(again.statusCode).toBe(422);
+    expect(again.json<{ problems: string[] }>().problems).toContain('nothing to publish');
+  });
+
   it('rejects out-of-range values with field messages and writes nothing', async () => {
     const cookie = sessionCookieOf(await login(ADMIN_NAME));
     const response = await ctx.app.inject({
