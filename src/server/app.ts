@@ -206,7 +206,7 @@ export const buildApp = async (config: Config): Promise<App> => {
     const result = await auth.login(body.data.name, body.data.password, request.ip);
     if (!result.ok) {
       const messages = {
-        rate_limited: 'Too many attempts — wait a minute.',
+        rate_limited: `Too many failed sign-ins. Try again in ${result.retryAfterSec ?? 60}s.`,
         invalid_credentials: 'Wrong account name or password.',
         banned: 'This account is banned.',
         no_panel_access: 'This account has no panel access (gm/admin role required).',

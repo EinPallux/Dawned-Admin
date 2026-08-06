@@ -19,6 +19,8 @@
 
 import pg from 'pg';
 import { openAdminSession } from './admin-session.mjs';
+import { ownerEditGuards } from './owner-edits.mjs';
+import { publishRail } from './publish.mjs';
 import { placeAll } from './placement.js';
 import { SETTLEMENTS, buildingWorldPos } from './settlement-data.js';
 import { NPC_DEFS, NPC_TOWN, PILOT_NPCS } from './npc-data.mjs';
@@ -55,8 +57,11 @@ const main = async () => {
   const headers = session.headers;
   ok('panel session open');
 
+  // Never revert an NPC the owner retuned in the panel (owner-edits.mjs).
+  const guard = await ownerEditGuards([['npcs', 'content_npcs']]);
   // --- 1. definitions -------------------------------------------------------
   for (const def of NPC_DEFS) {
+    if (!guard.mayWrite('npcs', def.id, def)) continue;
     const response = await fetch(`${BASE_URL}/api/npcs/${def.id}`, {
       method: 'PUT',
       headers,
@@ -66,25 +71,10 @@ const main = async () => {
   }
   ok(`${NPC_DEFS.length} NPC definitions saved as drafts`);
 
-  const publish = await fetch(`${BASE_URL}/api/publish/quests`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({}),
-  });
-  const published = await publish.json().catch(() => null);
-  const problems = published?.problems ?? [];
-  const nothingPending =
-    problems.length > 0 && problems.every((problem) => /nothing to publish/i.test(problem));
-  if (nothingPending) {
-    ok('NPCs: already live, nothing to publish');
-  } else if (!publish.ok || !published?.ok) {
-    fail(
-      `NPC publish refused:\n${(problems.length ? problems : [JSON.stringify(published)]).join('\n')}`,
-    );
-  } else {
-    ok(`published ${published.published} NPC/quest rows`);
-    for (const warning of published.warnings ?? []) note(`⚠️  ${warning}`);
-  }
+  guard.report();
+  await publishRail(BASE_URL, headers, 'quests', 'NPC/quest rows');
+  // AFTER the publish, so a refused one never claims rows it did not write.
+  await guard.commit();
 
   if (SKIP_MAP) {
     console.log('\n👥 Definitions are live. Placements skipped (--no-map).\n');

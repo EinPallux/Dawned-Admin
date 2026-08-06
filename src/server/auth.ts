@@ -19,7 +19,21 @@ const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 /** Sliding expiry writes are throttled to one per this interval per session. */
 const SESSION_TOUCH_INTERVAL_MS = 10 * 60 * 1000;
 const LOGIN_WINDOW_MS = 60_000;
-const LOGIN_WINDOW_LIMIT = 10;
+/**
+ * FAILED logins per IP per minute.
+ *
+ * It used to count every attempt, successful ones included, and that is a real
+ * usability bug on a private server: the owner and a GM are usually behind the
+ * SAME address, so ten ordinary sign-ins in a minute locked both of them out of
+ * their own panel — and the symptom is a missing cookie, not a message. The
+ * panel's own test suite tripped it, which is how three unrelated suites once
+ * failed with a bare "expected undefined to be defined".
+ *
+ * Only failures count now, and a success clears the counter. That is the shape
+ * that actually resists guessing: an attacker only ever produces failures, and a
+ * person who knows their password is never slowed down.
+ */
+const LOGIN_FAILURES_PER_WINDOW = 10;
 
 /**
  * Burned when the account name is unknown so response timing doesn't reveal
@@ -30,7 +44,12 @@ const DUMMY_HASH =
 
 export type LoginResult =
   | { ok: true; token: string; user: AdminUser }
-  | { ok: false; code: 'rate_limited' | 'invalid_credentials' | 'no_panel_access' | 'banned' };
+  | {
+      ok: false;
+      code: 'rate_limited' | 'invalid_credentials' | 'no_panel_access' | 'banned';
+      /** Seconds until the limiter forgets this address (rate_limited only). */
+      retryAfterSec?: number;
+    };
 
 interface WindowCounter {
   windowStart: number;
@@ -43,13 +62,19 @@ export class AdminAuth {
   constructor(private readonly db: Db) {}
 
   async login(name: string, password: string, ip: string): Promise<LoginResult> {
-    if (!this.allowAttempt(ip)) return { ok: false, code: 'rate_limited' };
+    const wait = this.blockedFor(ip);
+    if (wait > 0) return { ok: false, code: 'rate_limited', retryAfterSec: wait };
 
     const account = await this.db.query.accounts.findFirst({ where: eq(accounts.name, name) });
     const valid = account
       ? await verifyHash(account.passHash, password)
       : await verifyHash(DUMMY_HASH, password).then(() => false);
-    if (!account || !valid) return { ok: false, code: 'invalid_credentials' };
+    if (!account || !valid) {
+      this.recordFailure(ip);
+      return { ok: false, code: 'invalid_credentials' };
+    }
+    // A banned or role-less account still had the right password, so it is not a
+    // guess — counting it would let one disabled account lock out the household.
     if (account.status !== 'active') return { ok: false, code: 'banned' };
     // Role gate AFTER the password check: an authenticated player hearing
     // "no panel access" is honest UX; an attacker learns nothing new.
@@ -57,6 +82,7 @@ export class AdminAuth {
       return { ok: false, code: 'no_panel_access' };
     }
 
+    this.clearFailures(ip);
     const token = randomBytes(24).toString('hex');
     await this.db.insert(sessions).values({
       accountId: account.id,
@@ -112,15 +138,26 @@ export class AdminAuth {
       .where(and(eq(sessions.kind, 'admin'), lt(sessions.expiresAt, sql`now()`)));
   }
 
-  private allowAttempt(ip: string, now = Date.now()): boolean {
+  /** Seconds this address must wait, or 0 when it may try. */
+  private blockedFor(ip: string, now = Date.now()): number {
+    const entry = this.loginByIp.get(ip);
+    if (!entry || now - entry.windowStart >= LOGIN_WINDOW_MS) return 0;
+    if (entry.count < LOGIN_FAILURES_PER_WINDOW) return 0;
+    return Math.max(1, Math.ceil((LOGIN_WINDOW_MS - (now - entry.windowStart)) / 1000));
+  }
+
+  private recordFailure(ip: string, now = Date.now()): void {
     const entry = this.loginByIp.get(ip);
     if (!entry || now - entry.windowStart >= LOGIN_WINDOW_MS) {
       this.loginByIp.set(ip, { windowStart: now, count: 1 });
-      return true;
+      return;
     }
-    if (entry.count >= LOGIN_WINDOW_LIMIT) return false;
     entry.count++;
-    return true;
+  }
+
+  /** A correct password clears the address: the person is not the attacker. */
+  private clearFailures(ip: string): void {
+    this.loginByIp.delete(ip);
   }
 }
 

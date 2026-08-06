@@ -13,6 +13,7 @@
  */
 
 import { openAdminSession } from './admin-session.mjs';
+import { ownerEditGuards } from './owner-edits.mjs';
 import { publishRail } from './publish.mjs';
 import { defaultXpCurveEntries } from '@dawned/shared';
 import { SKILL_NODE_DEFS } from './progression-data.mjs';
@@ -45,7 +46,10 @@ const main = async () => {
   ok(`${curveEntries.length} xp-curve rows saved as drafts (formula defaults)`);
 
   let saved = 0;
+  // Never revert a node the owner retuned in the panel (owner-edits.mjs).
+  const guard = await ownerEditGuards([['skill_nodes', 'content_skill_nodes']]);
   for (const def of SKILL_NODE_DEFS) {
+    if (!guard.mayWrite('skill_nodes', def.id, def)) continue;
     const response = await fetch(`${BASE_URL}/api/skill-nodes/${def.id}`, {
       method: 'PUT',
       headers,
@@ -54,6 +58,7 @@ const main = async () => {
     if (!response.ok) fail(`node draft ${def.id} rejected: ${await response.text()}`);
     saved++;
   }
+  guard.report();
   ok(`${saved} skill nodes saved as drafts (validated by the shared schema)`);
 
   const diff = await fetch(`${BASE_URL}/api/publish/progression/diff`, { headers });
@@ -61,6 +66,7 @@ const main = async () => {
   ok(`publish diff: ${pending.curve.length} curve rows + ${pending.nodes.length} nodes pending`);
 
   await publishRail(BASE_URL, headers, 'progression', 'progression rows');
+  await guard.commit();
   console.log('\n🌳 The XP curve and all four skill trees are live content.\n');
 };
 
