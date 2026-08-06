@@ -702,8 +702,26 @@ export const bakeDraft = async (
 
   const finalDir = path.join(mapDir, version);
   const stageDir = `${finalDir}.tmp`;
-  await rm(stageDir, { recursive: true, force: true });
-  await mkdir(path.join(stageDir, 'minimap_tiles'), { recursive: true });
+  // Not being able to prepare the staging directory is a DEPLOYMENT fault, not
+  // a content one, and the raw errno is actively misleading about it: on the VPS
+  // the panel runs under `ProtectSystem=strict`, which makes everything outside
+  // `ReadWritePaths` read-only, and a recursive mkdir into a read-only tree
+  // reports ENOENT naming a path whose parents plainly exist. That cost an hour
+  // the first time a world was deployed (P12-H). Say what it actually means.
+  try {
+    await rm(stageDir, { recursive: true, force: true });
+    await mkdir(path.join(stageDir, 'minimap_tiles'), { recursive: true });
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code ?? 'unknown';
+    throw new Error(
+      `cannot create the bake staging directory in MAP_DIR (${mapDir}): ${code}. ` +
+        `The directory must exist and be writable by the panel's user. On a systemd box ` +
+        `that also means MAP_DIR has to be listed in dawned-admin.service's ReadWritePaths — ` +
+        `ProtectSystem=strict makes everything else read-only, and reports it as ENOENT. ` +
+        `See the game repo's docs/tech/DEPLOYMENT.md §5.1.`,
+      { cause: error },
+    );
+  }
 
   try {
     return await bakeInto(stageDir, finalDir, {

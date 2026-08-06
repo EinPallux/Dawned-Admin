@@ -5,7 +5,7 @@
  * it by walking there in the live game.
  */
 
-import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -697,6 +697,31 @@ describe('bakeDraft', () => {
         ),
       ).rejects.toThrow();
       expect(await readdir(dir)).toEqual([]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  // The first real world deploy (game P12-H) died here with
+  // `ENOENT: ... mkdir '/opt/dawned/Dawned/assets_baked/map/map-1786018245.tmp'`
+  // — a path whose parents plainly existed. The panel runs under
+  // ProtectSystem=strict on the VPS, so MAP_DIR was read-only and a recursive
+  // mkdir into a read-only tree reports ENOENT rather than EROFS. The errno on
+  // its own sends you looking for a missing directory that is right there, so
+  // the failure has to say what it means. Provoked here with ENOTDIR, which
+  // needs no permission bits and therefore behaves the same when tests run as
+  // root.
+  it('says what an unwritable MAP_DIR means instead of surfacing the raw errno', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'dawned-bake-'));
+    try {
+      await writeFile(path.join(dir, 'not-a-directory'), 'x');
+      const error = await bakeDraft(bundle({}), path.join(dir, 'not-a-directory'), 'test-bake')
+        .then(() => null)
+        .catch((thrown: unknown) => thrown as Error);
+      expect(error).toBeInstanceOf(Error);
+      expect(error?.message).toContain('MAP_DIR');
+      expect(error?.message).toContain('ReadWritePaths');
+      expect(error?.message).toContain('ENOTDIR');
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

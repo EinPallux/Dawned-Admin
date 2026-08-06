@@ -19,6 +19,19 @@ versions track the game's release trains (0.1.0 = tooling that shipped Dawned 0.
   not the smokes' `zz_admin_smoke`), banned when the run ends. The random password is the part
   that holds: a crash can skip the ban, and what survives is then an account nobody can log into.
 
+### Fixed — a bake that cannot be staged says why (2026-08-06, game P12-H)
+
+- The first real world deploy died on `ENOENT: … mkdir '…/assets_baked/map/map-1786018245.tmp'`,
+  naming a path whose parents plainly existed. `dawned-admin.service` runs under
+  `ProtectSystem=strict` on the VPS, so `MAP_DIR` was read-only to the panel — and a recursive
+  `mkdir` into a read-only tree reports ENOENT rather than EROFS. **Map publish had therefore never
+  worked on a real box since A2**; nothing had exercised it there.
+- `bakeDraft` now catches the staging failure and names the cause — MAP_DIR, the errno, and the
+  `ReadWritePaths` requirement — instead of surfacing an errno that sends you looking for a missing
+  directory that is right there. +1 test, provoked with ENOTDIR so it behaves the same as root.
+- The service-side fix is in the game repo (`deploy/systemd/dawned-admin.service` plus a drop-in
+  that `UPDATE.sh` and `WORLD.sh` install on boxes provisioned before it).
+
 ### Added — quest hints are derived from the world, not typed (2026-08-06, game P12-F)
 
 - **`pnpm world:quests`** publishes 20 new quests (28 in 5 chains with P11's eight) and resolves

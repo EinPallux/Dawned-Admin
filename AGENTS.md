@@ -425,3 +425,16 @@ every request. Verified against the running panel both ways: supplied credential
 account created, the fallback ended `banned`, and `world:author` — the TypeScript entry point,
 which needed `admin-session.mjs` listed in `tools/tsconfig.json` — regenerated all 1024 chunks
 through it. **264 tests green.**
+
+**The owner's first world deploy found what that path had been hiding: the panel could never
+publish a map on a real box.** It died on `ENOENT: … mkdir '…/assets_baked/map/map-….tmp'`,
+naming a path whose parents plainly existed. `dawned-admin.service` runs under
+`ProtectSystem=strict` with `ReadWritePaths=/var/lib/dawned`, and `MAP_DIR` is the GAME
+checkout's `assets_baked/map` — outside it, therefore read-only — and **a recursive `mkdir` into
+a read-only tree reports ENOENT rather than EROFS**, which sends you hunting for a missing
+directory that is right there. The unit was written at game P0, months before A2 gave this panel
+a map to publish, and a dev container has no sandbox, which is why every smoke and both browser
+suites had always passed. `bakeDraft` catches the staging failure now and names MAP_DIR, the
+errno and the `ReadWritePaths` requirement (+1 test, provoked with ENOTDIR so it behaves the same
+when tests run as root). The service-side fix is the game repo's: the shipped unit grants it, and
+`UPDATE.sh`/`WORLD.sh` install a drop-in on boxes provisioned before it. **265 tests green.**
