@@ -13,6 +13,8 @@
 
 import { useState } from 'react';
 import type { ScatterSet } from '@dawned/shared';
+import { AssetPicker } from './AssetPicker.js';
+import type { ModelCache } from './model-cache.js';
 
 export const ScatterCard = ({
   sets,
@@ -27,6 +29,7 @@ export const ScatterCard = ({
   onStrength,
   onSave,
   onDelete,
+  modelCache,
 }: {
   sets: readonly ScatterSet[];
   models: readonly string[];
@@ -40,6 +43,8 @@ export const ScatterCard = ({
   onStrength: (value: number) => void;
   onSave: (set: ScatterSet) => void;
   onDelete: (id: string) => void;
+  /** Shared model cache — the picker's thumbnails and the viewport use one. */
+  modelCache: ModelCache;
 }): React.JSX.Element => {
   const active = sets.find((set) => set.id === activeSetId) ?? null;
   const [expanded, setExpanded] = useState(false);
@@ -85,36 +90,69 @@ export const ScatterCard = ({
   return (
     <section className="ws-panel me-card">
       <h3>Scatter</h3>
-      <div className="me-row">
-        <select
-          className="ws-input"
-          value={activeSetId}
-          onChange={(event) => {
-            onSelect(event.target.value);
-          }}
-        >
-          <option value="">— pick a set —</option>
-          {sets.map((set) => (
-            <option key={set.id} value={set.id}>
-              {set.name}
-            </option>
-          ))}
-        </select>
-        <button
-          type="button"
-          className="ws-btn me-tiny"
-          disabled={readOnly || busy}
-          onClick={addSet}
-        >
-          New set
-        </button>
-      </div>
+      {/*
+        Pick a TREE and paint it. Owner pain point: "No real Scatter Placement
+        (you have to weirdly create own scatter groups)."
 
-      {!active && (
-        <p className="me-hint">
-          A set is the weighted list of models the brush paints. Make one to scatter a forest.
-        </p>
-      )}
+        The format genuinely stores a weighted set per painted cell — that is
+        what makes a forest a few hundred bytes instead of thousands of rows —
+        but that is a storage fact, and the owner was being asked to author it
+        before they could paint anything. Picking a model here creates (or
+        re-uses) a one-entry set named after it, so the common case is one
+        click. Mixed sets are still editable below for when a forest wants
+        three trees and a fern.
+      */}
+      <p className="me-hint">Pick something to paint, then drag on the ground.</p>
+      <AssetPicker
+        cache={modelCache}
+        value={active?.entries.length === 1 ? (active.entries[0]?.modelRef ?? null) : null}
+        title="Paint with"
+        onPick={(modelRef) => {
+          const existing = sets.find(
+            (set) => set.entries.length === 1 && set.entries[0]?.modelRef === modelRef,
+          );
+          if (existing) {
+            onSelect(existing.id);
+            return;
+          }
+          onSave({
+            id: `scatter_${modelRef}`.slice(0, 48),
+            name: modelRef.replace(/^world_(nature|props|buildings)_/, '').replace(/_/g, ' '),
+            entries: [{ modelRef, weight: 1, scaleMin: 0.85, scaleMax: 1.2 }],
+            densityPer100m2: 60,
+            maxSlopeDeg: 35,
+            minHeight: 0.2,
+          });
+        }}
+      />
+
+      <details className="me-details">
+        <summary>Mixes ({sets.length})</summary>
+        <div className="me-row">
+          <select
+            className="ws-input"
+            value={activeSetId}
+            onChange={(event) => {
+              onSelect(event.target.value);
+            }}
+          >
+            <option value="">— pick a mix —</option>
+            {sets.map((set) => (
+              <option key={set.id} value={set.id}>
+                {set.name}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="ws-btn me-tiny"
+            disabled={readOnly || busy}
+            onClick={addSet}
+          >
+            New mix
+          </button>
+        </div>
+      </details>
 
       {active && (
         <>

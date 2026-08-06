@@ -93,6 +93,14 @@ export class ModelCache {
     return null;
   }
 
+  /** The loaded glTF for `ref`, for the picker's thumbnailer. Null until loaded. */
+  gltfFor(ref: string): { scene: THREE.Object3D } | null {
+    const scene = this.loaded.get(ref);
+    if (scene) return { scene };
+    void this.request(ref);
+    return null;
+  }
+
   /** True once we know this ref names nothing we can draw. */
   isMissing(ref: string): boolean {
     return this.missing.has(ref);

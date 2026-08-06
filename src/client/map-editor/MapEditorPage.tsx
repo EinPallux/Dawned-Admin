@@ -120,6 +120,28 @@ import type { ScatterSet } from '@dawned/shared';
 
 type ToolId = 'sculpt' | 'paint' | 'water' | 'board' | 'place' | 'scatter' | 'zone' | 'measure';
 
+/**
+ * What each tool DOES and what the mouse does in it.
+ *
+ * Owner pain point: "Horrible UI-Guidance." The editor showed a row of tool
+ * buttons and left you to find out by clicking, which on a tool that edits
+ * terrain is an expensive way to learn. This line is always on screen, right
+ * under the toolbar, and says the two things you need: what you are about to
+ * change, and what a click will do.
+ */
+const TOOL_GUIDE: Record<ToolId, string> = {
+  sculpt: 'Reshape the ground — drag to raise, lower or smooth it. Hold Shift to invert.',
+  paint: 'Paint the ground texture — grass, rock, sand. Drag to paint, pick a layer on the right.',
+  water: 'Set how deep the sea is in one chunk. Click a chunk to give it water or take it away.',
+  board: 'Decide which chunks exist at all. Click to add a chunk to the world or remove it.',
+  place:
+    'Put a single thing down — a house, a chest, a camp. Click the ground to place, click a thing to select it.',
+  scatter:
+    'Paint many of one thing at once — a forest, a field. Pick a model on the right, then drag.',
+  zone: 'Draw a region border. Click to add corners, Enter to close it, Esc to abandon.',
+  measure: 'Measure a distance. Click once to start, once to finish.',
+};
+
 interface LockState {
   heldBy: string | null;
   mine: boolean;
@@ -1956,7 +1978,7 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
               setShowGenerators((v) => !v);
             }}
           >
-            Generate…
+            Build new terrain…
           </button>
           <button
             type="button"
@@ -1966,10 +1988,15 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
               setShowPublish(true);
             }}
           >
-            Validate ▸ Publish
+            Put it live
           </button>
         </div>
       </header>
+      {/* Always-on guidance (2026-08-06). See TOOL_GUIDE. */}
+      <p className="me-guide">
+        <b>{tool}</b>
+        <span>{TOOL_GUIDE[tool]}</span>
+      </p>
 
       <div className="me-body">
         <div className="me-viewport" ref={wrapRef}>
@@ -2268,6 +2295,7 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
           </section>
 
           <ScatterCard
+            modelCache={modelCache}
             sets={scatterSets.data?.sets ?? []}
             models={placementRefs.data?.models ?? []}
             activeSetId={scatterBrush.setId}
