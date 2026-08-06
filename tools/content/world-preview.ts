@@ -12,6 +12,7 @@
  */
 
 import {
+  BRIDGES,
   ISLANDS,
   ISLETS,
   SEA_LEVEL,
@@ -50,7 +51,7 @@ console.log('');
 console.log('The Dawnlands — preview');
 console.log('─'.repeat(64));
 console.log(
-  `${ISLANDS.length} isle(s), ${ISLETS.length} islet(s), ${STRAITS.length} strait(s), ${eroded.toLocaleString()} vertices eroded in ${ms} ms`,
+  `${ISLANDS.length} isle(s), ${ISLETS.length} islet(s), ${STRAITS.length} strait(s), ${BRIDGES.length} bridge(s), ${eroded.toLocaleString()} vertices eroded in ${ms} ms`,
 );
 console.log(
   `land ${coverage.toFixed(1)} % of the world  ` +
@@ -181,21 +182,54 @@ for (const isle of [...ISLANDS, ...ISLETS]) {
 }
 console.log('');
 
-console.log('strait                          deepest point   severs');
+console.log('bridge                          deck at centre   joins');
+for (const span of BRIDGES) {
+  const here = field.get(Math.round(span.centerX - ORIGIN), Math.round(span.centerZ - ORIGIN));
+  // A bridge is only a bridge if both its ends are the SAME landmass now — the
+  // whole point is that the crossing is walkable, and only a flood fill can
+  // say so. Walking out along the deck axis finds the shores it lands on.
+  const axis = span.rotation ?? 0;
+  const reach = span.radius * 1.1;
+  const endA = landmassOf(
+    span.centerX + Math.cos(axis) * reach,
+    span.centerZ + Math.sin(axis) * reach,
+  );
+  const endB = landmassOf(
+    span.centerX - Math.cos(axis) * reach,
+    span.centerZ - Math.sin(axis) * reach,
+  );
+  const mass = landmassOf(span.centerX, span.centerZ);
+  const joined = mass >= 0 && mass === endA && mass === endB;
+  console.log(
+    `${span.id.padEnd(28)} ${here.toFixed(1).padStart(9)} m   ` +
+      (joined
+        ? `✅ both shores are landmass #${mass}`
+        : `❌ deck #${mass}, shores #${endA} and #${endB} — not a crossing`),
+  );
+}
+console.log('');
+
+console.log('strait                     deepest away from its bridge');
 for (const strait of STRAITS) {
+  // Sampling a strait at its own centre now reads the CAUSEWAY, not the water:
+  // the bridge is built exactly there. What matters is that the channel is open
+  // everywhere else — a crossing is a chokepoint only if going round it means
+  // swimming. So this walks out along the channel and takes the deepest point
+  // clear of the deck.
+  const axis = strait.rotation ?? 0;
   let deepest = Number.POSITIVE_INFINITY;
-  const gx = Math.round(strait.centerX - ORIGIN);
-  const gz = Math.round(strait.centerZ - ORIGIN);
-  for (let dz = -6; dz <= 6; dz++) {
-    for (let dx = -6; dx <= 6; dx++) {
-      const x = Math.min(field.side - 1, Math.max(0, gx + dx));
-      const z = Math.min(field.side - 1, Math.max(0, gz + dz));
-      deepest = Math.min(deepest, field.get(x, z));
+  for (let along = 60; along <= strait.radius * 0.9; along += 20) {
+    for (const sign of [1, -1]) {
+      const x = strait.centerX + Math.cos(axis) * along * sign;
+      const z = strait.centerZ + Math.sin(axis) * along * sign;
+      const gx = Math.min(field.side - 1, Math.max(0, Math.round(x - ORIGIN)));
+      const gz = Math.min(field.side - 1, Math.max(0, Math.round(z - ORIGIN)));
+      deepest = Math.min(deepest, field.get(gx, gz));
     }
   }
   console.log(
     `${strait.id.padEnd(28)} ${deepest.toFixed(1).padStart(8)} m   ` +
-      (deepest < SEA_LEVEL ? 'open water' : '❌ still walkable at its centre'),
+      (deepest < SEA_LEVEL ? 'open water' : '❌ walkable all along — the bridge gates nothing'),
   );
 }
 console.log('');

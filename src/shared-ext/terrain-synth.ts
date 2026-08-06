@@ -38,8 +38,18 @@ const WORLD_CELLS_PER_CHUNK = 64;
 export interface IslandMask {
   /** Names the landmass for progress lines and for the report a run prints. */
   readonly id: string;
-  /** `land` raises (default); `carve` cuts a channel through whatever is there. */
-  readonly kind?: 'land' | 'carve';
+  /**
+   * `land` raises (default); `carve` cuts a channel through whatever is there;
+   * `causeway` raises a neck back up AFTER the carves, which is how a bridge
+   * gets built.
+   *
+   * Walkability comes from the terrain heightfield, not from props — a bridge
+   * model laid across a channel is scenery you swim underneath. So a crossing
+   * has to BE ground: a narrow neck at the one place the bridge belongs,
+   * dressed with plank props on top. The game repo's USER_QUESTIONS Q30 carries
+   * that decision and its alternative (giving props real collision).
+   */
+  readonly kind?: 'land' | 'carve' | 'causeway';
   readonly seed: number;
   readonly centerX: number;
   readonly centerZ: number;
@@ -229,10 +239,15 @@ export const synthWorld = (
   seaLevel: number,
   oceanFloor: number,
 ): SynthReport => {
-  const lands = masks.filter((mask) => mask.kind !== 'carve');
+  // Three passes, and the ORDER is the whole design: land composes, carves cut
+  // it apart, causeways put one neck back. A causeway that competed for the max
+  // alongside the land masks would be cut by its own strait.
+  const lands = masks.filter((mask) => (mask.kind ?? 'land') === 'land');
   const carves = masks.filter((mask) => mask.kind === 'carve');
+  const causeways = masks.filter((mask) => mask.kind === 'causeway');
   const landNoises = lands.map((mask) => makeNoise(mask.seed));
   const carveNoises = carves.map((mask) => makeNoise(mask.seed));
+  const causewayNoises = causeways.map((mask) => makeNoise(mask.seed));
   const perIsland: Record<string, number> = {};
   for (const mask of lands) perIsland[mask.id] = 0;
   let land = 0;
@@ -248,8 +263,22 @@ export const synthWorld = (
         best = height;
         bestId = lands[i]!.id;
       }
-      if (bestId === null) {
+      // A causeway can reach where no isle does — its whole job is spanning
+      // open water — so it is measured before the "no land here" bail-out.
+      let deck = Number.NEGATIVE_INFINITY;
+      for (let i = 0; i < causeways.length; i++) {
+        const raised = maskHeightAt(causeways[i]!, causewayNoises[i]!, x, z, seaLevel);
+        if (raised !== null && raised > deck) deck = raised;
+      }
+
+      if (bestId === null && deck === Number.NEGATIVE_INFINITY) {
         field.set(gx, gz, oceanFloor);
+        continue;
+      }
+      if (bestId === null) {
+        // Open water spanned by a causeway alone: the deck IS the ground here.
+        field.set(gx, gz, deck);
+        if (deck > seaLevel + 0.2) land++;
         continue;
       }
       // Carves cut AFTER the land is composed: a strait has to be able to sever
@@ -262,6 +291,10 @@ export const synthWorld = (
         // fading to nothing at its edge, so the banks slope into the water.
         best = Math.max(oceanFloor, best - (cut - seaLevel));
       }
+      // Last word: a causeway lifts the ground back over its own strait. It
+      // takes the max rather than adding, so a deck laid over dry land leaves
+      // the hill alone instead of stacking a ramp on it.
+      if (deck > best) best = deck;
       field.set(gx, gz, best);
       if (best > seaLevel + 0.2) {
         land++;

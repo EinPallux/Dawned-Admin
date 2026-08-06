@@ -193,6 +193,73 @@ describe('archipelago synthesis', () => {
     for (const h of f.heights) expect(h).toBeGreaterThanOrEqual(FLOOR);
   });
 
+  it('a causeway puts a walkable neck back across a strait', () => {
+    const f = field(6);
+    const left = island({ id: 'left', centerX: -60, radius: 120, peak: 40, roughness: 0 });
+    const right = island({ id: 'right', centerX: 60, radius: 120, peak: 40, roughness: 0 });
+    const strait = island({
+      id: 'strait',
+      kind: 'carve',
+      radius: 200,
+      peak: 90,
+      roughness: 0,
+      stretchX: 0.14,
+    });
+    const mid = Math.floor(f.side / 2);
+
+    synthWorld(f, [left, right, strait], SEA, FLOOR);
+    expect(f.get(mid, mid)).toBeLessThan(SEA);
+
+    // The bridge: a short deck laid ACROSS the channel. Walkability comes from
+    // the heightfield, so the crossing has to be ground — see Q30.
+    const bridge = island({
+      id: 'bridge',
+      kind: 'causeway',
+      radius: 90,
+      peak: 6,
+      roughness: 0,
+      stretchZ: 0.14, // narrow north-south, spanning east-west
+    });
+    synthWorld(f, [left, right, strait, bridge], SEA, FLOOR);
+
+    expect(f.get(mid, mid)).toBeGreaterThan(SEA);
+    // And only there — six metres north the channel is still open water, which
+    // is what makes the neck a chokepoint rather than a filled-in strait.
+    expect(f.get(mid, mid + 30)).toBeLessThan(SEA);
+  });
+
+  it('does not stack a causeway on top of ground that is already higher', () => {
+    const f = field(6);
+    const hill = island({ id: 'hill', radius: 200, peak: 40, roughness: 0 });
+    const plain = field(6);
+    synthWorld(plain, [hill], SEA, FLOOR);
+    synthWorld(
+      f,
+      [hill, island({ id: 'deck', kind: 'causeway', radius: 200, peak: 6 })],
+      SEA,
+      FLOOR,
+    );
+    const mid = Math.floor(f.side / 2);
+    // The summit is 40 m; a 6 m deck must not raise it, or every crossing would
+    // leave a ramp scar up the hillside it starts from.
+    expect(f.get(mid, mid)).toBe(plain.get(mid, mid));
+  });
+
+  it('is not counted as a landmass of its own', () => {
+    const f = field(6);
+    const report = synthWorld(
+      f,
+      [
+        island({ id: 'a', centerX: -60, radius: 120, peak: 40, roughness: 0 }),
+        island({ id: 'deck', kind: 'causeway', radius: 90, peak: 6, roughness: 0 }),
+      ],
+      SEA,
+      FLOOR,
+    );
+    expect(report.perIsland['a']!).toBeGreaterThan(0);
+    expect(report.perIsland['deck']).toBeUndefined();
+  });
+
   it('counts only land above the waterline', () => {
     const f = field();
     const report = synthWorld(f, [island({ id: 'a', radius: 60, peak: 30 })], SEA, FLOOR);

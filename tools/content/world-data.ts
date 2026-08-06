@@ -302,6 +302,59 @@ export const STRAITS: IslandMask[] = [
 ];
 
 /**
+ * The four bridge crossings, as CAUSEWAYS.
+ *
+ * Walkability is computed from the terrain heightfield; a prop is something you
+ * see, not something you stand on. A bridge model laid across a channel would
+ * therefore be scenery you swim underneath, and WORLD.md §1's "joined by
+ * bridges" would be false. So each crossing is a narrow neck of ground laid
+ * back over its own strait, dressed with plank and dock props in P12-B's
+ * placement pass. Game USER_QUESTIONS Q30 carries the decision and the
+ * alternative (giving props real collision).
+ *
+ * Each one is derived from the strait it crosses: same centre, same axis, only
+ * wide enough to be a road. `deckHalfWidthM` is in METRES on purpose — the
+ * first version expressed it as a fraction of the strait's own width, which
+ * amplified rather than narrowed and produced 218 m "bridges". The preview
+ * caught it as land coverage jumping to 64 %.
+ *
+ * `peak` is deliberately low: a 5 m deck is a bridge over water, a 40 m one is
+ * a mountain range. The `1 - d²` falloff means the deck stands ~4.7 m above the
+ * waterline right across the ~190 m channel and settles into both shores.
+ *
+ * The Elder Grove gets none. §3.6: no bridge, no map label, reachable only by
+ * a long swim or the one-way Ashcrag portal.
+ */
+const bridge = (id: string, seed: number, straitId: string, deckHalfWidthM = 11): IslandMask => {
+  const cut = STRAITS.find((entry) => entry.id === straitId);
+  if (!cut) throw new Error(`no strait named ${straitId}`);
+  // Long enough to reach dry land on both shores of the channel it spans.
+  const radius = Math.round(cut.radius * 0.42);
+  return {
+    id,
+    kind: 'causeway',
+    seed,
+    centerX: cut.centerX,
+    centerZ: cut.centerZ,
+    radius,
+    peak: 5,
+    roughness: 0.1,
+    // The strait is thin ACROSS and long ALONG; the bridge is the other way
+    // round, which is what makes them cross rather than overlap.
+    stretchX: 1.0,
+    stretchZ: deckHalfWidthM / radius,
+    rotation: (cut.rotation ?? 0) + Math.PI / 2,
+  };
+};
+
+export const BRIDGES: IslandMask[] = [
+  bridge('bridge_shore_weald', 4201, 'strait_shore_weald'),
+  bridge('bridge_weald_ember', 4202, 'strait_weald_ember'),
+  bridge('bridge_ember_sungraze', 4203, 'strait_ember_sungraze'),
+  bridge('bridge_sungraze_ashcrag', 4204, 'strait_sungraze_ashcrag'),
+];
+
+/**
  * Splat layers, fixed across the world because a chunk carries one 8-layer
  * weight map and the client binds one texture array (WORLD.md §6). Zones differ
  * by WHICH of the eight they use and where, not by having their own set.
@@ -619,7 +672,7 @@ export const ZONES: Zone[] = [
 export const WORLD_GEN_PLAN = {
   // Order matters only for the carves, which are applied after every land mask
   // whatever their position in this list — see `synthWorld`.
-  masks: [...ISLANDS, ...ISLETS, ...STRAITS],
+  masks: [...ISLANDS, ...ISLETS, ...STRAITS, ...BRIDGES],
   splatRules: SPLAT_RULES,
   seaLevel: SEA_LEVEL,
   erosion: { passes: 4, minSlopeDeg: 24, strength: 0.5 },
