@@ -210,6 +210,53 @@ describe('placements', () => {
   });
 });
 
+describe('resource nodes belong to a place', () => {
+  // Two chunks side by side, each its own zone: a cluster authored for one and
+  // scattered across the border is the shape of the game P12-E bug, where 39 of
+  // 322 land nodes stood one zone over — a T5 vein in the T4 savanna, and 4 of
+  // the 12 Dawnpetal outside the Grove that exists for them.
+  const here = centreOf(4, 4);
+  const there = centreOf(5, 4);
+  const twoZones = {
+    chunks: [chunk(4, 4), chunk(5, 4)],
+    objects: [zoneOver(4, 4, 'zone_home'), zoneOver(5, 4, 'zone_next')],
+  };
+  const birch = (id: string, at: { x: number; z: number }) =>
+    object('node', { id, nodeId: 'node_woodcutting_birch', x: at.x, z: at.z });
+
+  it('says nothing when every placement of a node stands in one zone', () => {
+    const report = validateDraft(
+      bundle({
+        ...twoZones,
+        objects: [
+          ...twoZones.objects,
+          birch('node_a', here),
+          birch('node_b', { x: here.x + 4, z: here.z }),
+        ],
+      }),
+    );
+    expect(report.warnings.join(' ')).not.toContain('stand outside');
+  });
+
+  it('warns — without blocking — when some of them stray into another zone', () => {
+    const report = validateDraft(
+      bundle({
+        ...twoZones,
+        objects: [
+          ...twoZones.objects,
+          birch('node_a', here),
+          birch('node_b', { x: here.x + 4, z: here.z }),
+          birch('node_c', there),
+        ],
+      }),
+    );
+    expect(report.problems).toEqual([]);
+    const warning = report.warnings.find((line) => line.includes('node_woodcutting_birch'));
+    expect(warning).toContain('1 of 3 placements stand outside zone_home');
+    expect(warning).toContain('1 in zone_next');
+  });
+});
+
 describe('interactables', () => {
   const centre = centreOf(4, 4);
   const chest = (over: Record<string, unknown> = {}) =>

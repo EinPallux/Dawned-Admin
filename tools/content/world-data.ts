@@ -680,5 +680,17 @@ export const WORLD_GEN_PLAN = {
   splatRules: SPLAT_RULES,
   seaLevel: SEA_LEVEL,
   erosion: { passes: 4, minSlopeDeg: 24, strength: 0.5 },
-  waterLevel: null,
+  /**
+   * The sea, as a rendered plane.
+   *
+   * This was `null` through P12-A and P12-B, which meant every one of the 1024
+   * chunks carried NO water plane: the client draws a water surface only where
+   * a chunk declares one (`terrain-mesh.ts`), so 42 % of the world was an
+   * invisible hole you fell into, and a fishing spot could never be authored
+   * because "submerged" is defined as ground below its chunk's water. Nothing
+   * had asked for water until P12-E did, which is why two whole phases passed
+   * without it. Sea level for every chunk; a chunk entirely above it simply
+   * renders its plane underground.
+   */
+  waterLevel: SEA_LEVEL,
 };

@@ -5,6 +5,45 @@ versions track the game's release trains (0.1.0 = tooling that shipped Dawned 0.
 
 ## [Unreleased]
 
+### Added — the gathering catalogue is placed through this panel (2026-08-06, game P12-E)
+
+- **`pnpm world:nodes`** re-authors the 21 resource-node definitions and plants **362 placements**
+  across all six zones, resolving every cluster against the real height field with the same
+  `placeAll` the camps use. Safe to re-run: an unchanged catalogue prunes itself and reports
+  "already live, nothing to publish".
+- **`tools/content/node-clusters.mjs`** holds the layout as 73 wishes — zone, bearing, distance,
+  count, spread — rather than 362 typed coordinates, so re-shaping a forest is one row.
+- The run now prints **where the nodes actually STAND**, resolved the way the bake resolves it, not
+  only how many of each kind it planted. A per-definition count says the catalogue is complete and
+  says nothing about whether the tier ladder ended up where the design put it.
+
+### Added — publish cross-checks a node's placements against its zone (2026-08-06, game P12-E)
+
+- A node definition carries a tier and no zone, so the panel cannot check it against a design
+  mapping without inventing one. It checks the data against **itself** instead: when one node id's
+  placements are split across zones, publish warns and names the split. It **warns rather than
+  blocks**, on `questHintCoverage`'s precedent — a material that genuinely grows in two regions is
+  a design choice, and 5 of 19 across a border is not.
+- This is the guard the content script's own fix cannot give, because nodes get dragged by hand in
+  the map editor too.
+
+### Fixed — cluster members ignored the zone their cluster was authored for (2026-08-06, game P12-E)
+
+- `placeAll` validates the cluster CENTRE's zone; `author-nodes.mjs` then scattered members up to
+  `spread` metres around it and asked only about the GROUND. **39 of 322 land nodes stood in a zone
+  they were never authored for** — Ashcrag's T5 veins in the T4 savanna, and 4 of the 12 Dawnpetal
+  outside the Elder Grove that exists for them, which is the same promise game P12-D had just
+  fixed in the data. The member loop asks the DRAFT's zone layer now, ordered exactly as
+  `bakeDraft` orders it, and the existing shrink-toward-centre retry absorbed every stray: 362
+  placed, 0 dropped.
+
+### Fixed — the generated world had no sea (2026-08-06, game P12-E)
+
+- `WORLD_GEN_PLAN.waterLevel` was `null`, so all 1024 chunks were written declaring no water. The
+  client draws a water surface only where a chunk declares one, so 42 % of the map was an invisible
+  hole — and no fishing node could be authored at all, because "submerged" is ground below its own
+  chunk's water. Nothing had needed water to exist until the gathering pass did.
+
 ### Added — the whole item catalogue runs through this panel (2026-08-06, game P12-D)
 
 - **`node tools/content/author-items.mjs` now owns the entire catalogue** — T1–T2 from P8 and the

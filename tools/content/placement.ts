@@ -48,6 +48,20 @@ export interface Wish {
   maxSlope?: number;
   /** Minimum height above sea level. Default 1 m — not in the surf. */
   minHeight?: number;
+  /**
+   * Look for WATER instead of ground: shallow enough to fish (deeper than the
+   * shore, shallower than `maxDepth`) and within `nearLand` metres of a shore
+   * you can stand on. Zone membership is not tested for these — every point of
+   * open water is the Dawnsea, so a shoal would never pass — the bearing and
+   * distance from the isle keep it where it belongs instead.
+   */
+  water?: boolean;
+  /** Water wishes only: deepest the spot may be. Default 6 m. */
+  maxDepth?: number;
+  /** Water wishes only: how close a walkable shore must be. Default 30 m. */
+  nearLand?: number;
+  /** Skip the settlement keep-out (nodes may sit at a town's edge). */
+  allowNearTown?: boolean;
 }
 
 export interface Placed {
@@ -88,6 +102,21 @@ export const placeAll = (wishes: readonly Wish[]): Placed[] => {
     const clearance = wish.clearance ?? 26;
     const maxSlope = wish.maxSlope ?? 22;
     const minHeight = wish.minHeight ?? LAND_Y + 0.8;
+    const maxDepth = wish.maxDepth ?? 6;
+    const nearLand = wish.nearLand ?? 30;
+
+    /** Is there walkable shore within `nearLand` of this water? */
+    const reachable = (x: number, z: number): boolean => {
+      for (let step = 0; step < 12; step++) {
+        const theta = (step / 12) * Math.PI * 2;
+        for (let out = 8; out <= nearLand; out += 8) {
+          if (w.groundAt(x + Math.cos(theta) * out, z + Math.sin(theta) * out) > LAND_Y) {
+            return true;
+          }
+        }
+      }
+      return false;
+    };
 
     // A little deterministic scatter so a row of camps at the same bearing does
     // not read as a line drawn on the map.
@@ -118,19 +147,32 @@ export const placeAll = (wishes: readonly Wish[]): Placed[] => {
         const x = Math.round(wantX + Math.cos(theta) * radius);
         const z = Math.round(wantZ + Math.sin(theta) * radius);
         const y = w.groundAt(x, z);
-        if (y < minHeight) {
-          rejected.water++;
-          continue;
+        if (wish.water) {
+          // A shoal has to be IN the water and REACHABLE from a shore; open
+          // ocean 200 m out is a fishing spot nobody will ever cast into.
+          if (y > LAND_Y || y < -maxDepth) {
+            rejected.water++;
+            continue;
+          }
+          if (!reachable(x, z)) {
+            rejected.zone++;
+            continue;
+          }
+        } else {
+          if (y < minHeight) {
+            rejected.water++;
+            continue;
+          }
+          if (w.slopeAt(x, z) > maxSlope) {
+            rejected.steep++;
+            continue;
+          }
+          if (w.zoneAt(x, z) !== wish.zone) {
+            rejected.zone++;
+            continue;
+          }
         }
-        if (w.slopeAt(x, z) > maxSlope) {
-          rejected.steep++;
-          continue;
-        }
-        if (w.zoneAt(x, z) !== wish.zone) {
-          rejected.zone++;
-          continue;
-        }
-        if (!clearOfTowns(x, z)) {
+        if (!wish.allowNearTown && !clearOfTowns(x, z)) {
           rejected.town++;
           continue;
         }

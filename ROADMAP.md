@@ -385,6 +385,27 @@ tooling that later passes (nodes, POIs, NPCs) reuse:
       last script to run silently reverted the other's content fix. Gathering materials belong to
       the node catalogue.
 
+### A1-e/A2 addendum — the gathering catalogue is planted (2026-08-06, for game P12-E)
+
+- [x] `pnpm world:nodes` re-authors the 21 definitions and plants **362 placements** across all six
+      zones (from 65 on the dev island), with the layout held as 73 wishes in
+      `node-clusters.mjs` rather than 362 typed coordinates. Re-run safe. All five fishing bands
+      have water for the first time — the gap game P10-G reported and declined to fake.
+- [x] **The bug that mattered: a zone constraint that reached the cluster centre and not its
+      members.** `placeAll` checks the centre; the members scattered `spread` metres off it and
+      were asked only about the GROUND, so **39 of 322 land nodes stood in a zone they were never
+      authored for** — the T5 canyon band in the T4 savanna, and 4 of the 12 Dawnpetal outside the
+      Grove. The member loop asks the DRAFT's zone layer now, ordered as `bakeDraft` orders it, and
+      the existing retry absorbed every stray: 362 placed, 0 dropped, per zone 70/70/70/70/70 + 12.
+- [x] **Publish cross-check**: one node id whose placements split across zones warns, with the
+      split named. A definition carries a tier and no zone, so the panel checks the data against
+      itself rather than inventing a design mapping. Warns, never blocks — `questHintCoverage`'s
+      precedent. +2 tests.
+- [x] **`WORLD_GEN_PLAN.waterLevel` was `null`**, so every generated chunk declared no water: 42 %
+      of the map was an invisible hole and a fishing spot could not be authored at all, because
+      "submerged" is ground below its own chunk's water. Two phases passed without it because
+      nothing had needed water to exist.
+
 ## A5 — Live Ops (M) — with game P13
 
 Players online/search + inspector (sheet, inventory grant/remove audited, tp/bring/kick),

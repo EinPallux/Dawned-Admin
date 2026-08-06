@@ -496,6 +496,38 @@ and Legendary effect in the game was decoration. They are wired now, and because
 shared, any character-sheet surface this panel grows gets the same answer the server fights with.
 **259 tests green here.**
 
+**Game P12-E planted the gathering catalogue through this panel (2026-08-06)** — `pnpm world:nodes`:
+the 21 definitions re-authored and **362 placements** written into the map's `node` layer across all
+six zones, up from 65 on the dev island. The layout lives in `node-clusters.mjs` as **73 wishes**
+(zone, bearing, distance, count, spread) rather than 362 coordinates, resolved by the same
+`placeAll` the camps use, and the per-member ground check reads the DRAFT CHUNKS with a 6-attempt
+retry that shrinks toward the centre — the retry is what makes a shoal land 8 of 8 instead of 3 of 8.
+The game reports **362 nodes, 0 orphans**.
+**The bug that mattered is this panel's tooling, and it is the sharpest example yet of a check that
+stops one level too early.** `placeAll` validates the cluster CENTRE's zone. The members scatter up
+to `spread` metres off that centre and were only ever asked about the GROUND — so **39 of 322 land
+nodes stood in a zone they were never authored for**: 7 ashwood, 5 dawnstone and 5 duskthorn (the
+canyons' T5 band) in the T4 savanna where nothing gates a player from them, and 4 of the 12 Dawnpetal
+in Emberwood — which is exactly the promise game P12-D had just repaired in the DATA, broken again by
+geometry a day later. Nothing was wrong with any single row. The member loop asks the DRAFT's zone
+layer now (not the offline synthesis: the owner can drag a corner, and then the copy is stale),
+ordered exactly as `bakeDraft` orders it, and the retry that already existed absorbed every stray at
+no cost — 362 placed, 0 dropped, per zone 70/70/70/70/70 + 12.
+**It became a publish cross-check, for the same reason `questHintCoverage` did:** the script fix
+protects the script, and the owner places nodes by hand. Publish now warns when one node id's
+placements split across zones, naming the split. A node definition carries a tier and no zone, so
+the panel checks the data against ITSELF rather than inventing a design mapping it would then own.
+Warns, never blocks — two regions can be deliberate, 5 of 19 across a line is not. +2 tests.
+**Two script lessons, both general.** A run must report **where its output STANDS**, not only how
+much of it there is: the per-definition counts were perfect through every broken run, because a
+count cannot see a border. And the offline synthesis is the right source for a wish and the wrong
+source for a verdict — the draft is what the bake reads.
+**One thing that was not this repo's but was found here:** `WORLD_GEN_PLAN.waterLevel` was `null`,
+so every generated chunk declared no water. The game draws a water surface only where a chunk
+declares one, so 42 % of the map was an invisible hole and **no fishing node could be authored at
+all**, because "submerged" means ground below its own chunk's water. Two phases passed without it
+because nothing had needed water to EXIST. **261 tests green here.**
+
 ### Running it locally
 
 ```bash
@@ -507,4 +539,5 @@ node tools/smoke/map-scenario.mjs   # MAP_EDITOR §7 — needs the GAME server o
 node tools/smoke/quest-editor.mjs   # the quest editor, in a real browser (cleans up after itself)
 node tools/content/author-quests.mjs  # re-author + re-place the P11 pilot set (PUBLISHES a map)
 pnpm world:bestiary                 # 50 enemies + 124 camps (PUBLISHES content, writes the map layer)
+pnpm world:nodes                    # 21 node definitions + 362 placements (PUBLISHES content + a map)
 ```

@@ -102,6 +102,19 @@ checks — not a game client).
   scale. Markers take the placement's scale and are ringed at the definition's radius × that
   scale — the placement cannot answer its own size, so the viewport looks the definition up. A map
   publish refuses a placement whose definition is not published.
+- **As built (game P12-E, 2026-08-06) — a node's placements are checked against each other's
+  zone.** Publish warns when one node id's placements are split across zones, naming the split and
+  the counts. PROFESSIONS §4 gives every zone a tier band, so a vein one zone over is a T5 material
+  standing where nothing gates a player from it — but a node definition carries a `tier` and no
+  `zone`, so this page cannot compare it to a design mapping without inventing and then owning one.
+  It compares the data to ITSELF instead: placements mostly in one zone and partly in another are
+  strays, which is exactly what a cluster scattered across a border produces. It **warns rather
+  than blocks**, on the same reasoning as §1 rule 4's quest hints — a material that genuinely grows
+  in two regions is a design choice, and 5 of 19 across a line is not.
+  Found when game P12-E's authoring run planted 362 nodes and 39 of the 322 land ones came out in a
+  region they were never authored for: the placement resolver validates a cluster's CENTRE and the
+  members scatter metres past it, so nothing had ever compared the result to the zone layer. Two
+  pages that had never met, again.
 - Overlays: aggro radii, leash radii, patrol paths, spawn density heat (per-zone counts vs.
   CONTENT_0.1 targets — a live "content budget" meter per zone in the panel!).
 - "Simulate populate" preview: ghost-render one spawn resolution to eyeball camp compositions.

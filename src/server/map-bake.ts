@@ -420,6 +420,8 @@ export const validateDraft = (bundle: DraftBundle): ValidationReport => {
   // checking is therefore about the definition RESOLVING — a birch pointing at
   // a node row someone renamed is a tree nobody can chop, and invisible in the
   // viewport because the marker draws either way.
+  /** nodeId → zone id → how many of its placements stand there. */
+  const nodeZones = new Map<string, Map<string, number>>();
   for (const object of nodes) {
     const row = nodePlacementSchema.safeParse(object.def);
     if (!row.success) {
@@ -432,6 +434,35 @@ export const validateDraft = (bundle: DraftBundle): ValidationReport => {
     if (sampler.heightAt(row.data.x, row.data.z) === null) {
       problems.push(`node ${row.data.id} sits on a disabled chunk`);
     }
+    const home = zones.find((zone) => pointInPolygon(row.data.x, row.data.z, zone.polygon));
+    const seen = nodeZones.get(row.data.nodeId) ?? new Map<string, number>();
+    const key = home?.id ?? 'no zone';
+    seen.set(key, (seen.get(key) ?? 0) + 1);
+    nodeZones.set(row.data.nodeId, seen);
+  }
+  // A definition belongs to a place: PROFESSIONS §4 gives every zone a tier
+  // band, so a vein one zone over is a T5 material standing in the T4 savanna
+  // where nobody is gated from it. The definition carries a tier and no zone,
+  // so the panel cannot check it against a design mapping without inventing
+  // one — but it can check the data against ITSELF: placements of one node id
+  // that are mostly in one zone and partly in another are strays, which is
+  // exactly what a cluster scattered across a border produces.
+  //
+  // Found by game P12-E: 39 of 322 land nodes stood outside the zone they were
+  // authored for, including 4 of the 12 Dawnpetal — the bloom the Elder Grove
+  // exists for — growing in Emberwood. A warning rather than a block, for the
+  // same reason `questHintCoverage` warns: a material that genuinely grows in
+  // two regions is a design choice, and 5 of 19 across a line is not.
+  for (const [nodeId, spread] of nodeZones) {
+    if (spread.size < 2) continue;
+    const ranked = [...spread].sort((a, b) => b[1] - a[1]);
+    const [home, ...strays] = ranked;
+    const stray = strays.reduce((sum, [, count]) => sum + count, 0);
+    const total = stray + (home?.[1] ?? 0);
+    warnings.push(
+      `node ${nodeId}: ${stray} of ${total} placements stand outside ${home?.[0]} ` +
+        `(${strays.map(([zone, count]) => `${count} in ${zone}`).join(', ')})`,
+    );
   }
 
   // --- NPCs (P11) ----------------------------------------------------------

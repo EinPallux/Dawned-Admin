@@ -26,7 +26,8 @@
     "world:author": "tsx tools/content/author-world.ts",
     "world:settle": "tsx tools/content/author-settlements.ts",
     "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test",
-    "world:bestiary": "tsx tools/content/author-bestiary.mjs"
+    "world:bestiary": "tsx tools/content/author-bestiary.mjs",
+    "world:nodes": "tsx tools/content/author-nodes.mjs"
   },
   "dependencies": {
     "@dawned/shared": "file:../Dawned/packages/shared",

@@ -22,7 +22,10 @@ quests, vendors, zones, curves), and the live server (players, bans, broadcasts,
 > The game's P12 world was built entirely through this panel: the Dawnlands generated whole-world
 > from island masks, five settlements and nine shrines placed, and **50 enemy types across 124
 > camps** — each camp resolved against the real terrain by `pnpm world:bestiary` rather than typed
-> as a coordinate, then counted back out of the running game.
+> as a coordinate, then counted back out of the running game. `pnpm world:nodes` did the same for
+> the gathering catalogue: **362 resource nodes** across all six zones, every one of the 21
+> definitions with a place to stand, and publish now warns when one node id's placements straddle
+> a zone border — the check that caught 39 nodes standing in a region they were never authored for.
 > **The Map
 > Editor is done**: open the island in 3D, sculpt and paint it, generate a new one, scatter a
 > forest, place props, camps, discovery points, chests and shrines, keep a group as a reusable
