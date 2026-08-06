@@ -19,6 +19,10 @@ quests, vendors, zones, curves), and the live server (players, bans, broadcasts,
 > that a step's **hint circle actually contains the thing it points at**, quoting the distance
 > when it does not (four of the pilot's kill hints were 85–170 m off their only spawner: the
 > circle is typed here, the spawner is placed in the map editor, and nothing had compared them).
+> The game's P12 world was built entirely through this panel: the Dawnlands generated whole-world
+> from island masks, five settlements and nine shrines placed, and **50 enemy types across 124
+> camps** — each camp resolved against the real terrain by `pnpm world:bestiary` rather than typed
+> as a coordinate, then counted back out of the running game.
 > **The Map
 > Editor is done**: open the island in 3D, sculpt and paint it, generate a new one, scatter a
 > forest, place props, camps, discovery points, chests and shrines, keep a group as a reusable

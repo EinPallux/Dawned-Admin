@@ -348,6 +348,32 @@ and the world is 32×32.
       to the preview's offline figures. The preview's flood fill found the bug that mattered:
       three of five straits severed NOTHING while a centre-depth probe called them all open water.
 
+### A2/A4 addendum — the world's population passes (2026-08-06, for game P12-B/C)
+
+The panel is where P12's content is authored, so its scripts carry the phase. Two new pieces of
+tooling that later passes (nodes, POIs, NPCs) reuse:
+
+- [x] `tools/content/world-sample.ts` — ONE in-memory synthesis of the Dawnlands every content
+      script can ask "is there land at (x, z), how steep, which landmass, which zone". It runs the
+      same `synthWorld` + `erodeField` the generate endpoint runs, so it reports what the server
+      made rather than a model of it.
+- [x] `tools/content/placement.ts` — a placement is a **wish** (zone, bearing, distance), resolved
+      by spiralling outward until the ground satisfies every constraint, and it reports WHY each
+      candidate was rejected. Capped at 120 m on purpose: an unbounded search always succeeds and
+      quietly moves a camp a third of an isle away, which reads as "it worked".
+- [x] `pnpm world:bestiary` — 50 enemies, 7 zone loot stubs and 124 camps, published on the
+      Enemies rail AND written into the map's `spawner` layer, because Q23 makes the map the owner
+      of where a camp stands and a map publish delete-then-inserts that whole set.
+- [x] **The Enemies page's prune-on-match was broken** since A1-d: it compared the RAW jsonb
+      column, whose key order Postgres normalises, so an identical draft could never prune and
+      re-running a content script republished the entire bestiary — 174 rows in a diff review
+      whose only job is to say what changed. The A1-c fix had landed on the item and progression
+      editors and this one kept the comment without the code. Parsed-against-parsed now.
+- [x] **`world:author` clears the zone layer first.** The draft was seeded from the dev island by
+      `import-live`, so `ashen_reach` survived a whole world regeneration and — being a smaller
+      ring, which is the order `zoneAt` resolves in — WON inside the savanna and the canyons.
+      Found by the GAME's new `/ops/camps`, not by anything here.
+
 ## A5 — Live Ops (M) — with game P13
 
 Players online/search + inspector (sheet, inventory grant/remove audited, tp/bring/kick),

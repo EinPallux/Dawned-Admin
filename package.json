@@ -2,7 +2,7 @@
   "name": "dawned-admin",
   "version": "0.0.0",
   "private": true,
-  "description": "Dawned-Admin — map editor, content database editors and live ops panel for the Dawned MMORPG",
+  "description": "Dawned-Admin \u2014 map editor, content database editors and live ops panel for the Dawned MMORPG",
   "type": "module",
   "packageManager": "pnpm@10.33.0",
   "engines": {
@@ -25,7 +25,8 @@
     "world:preview": "tsx tools/content/world-preview.ts",
     "world:author": "tsx tools/content/author-world.ts",
     "world:settle": "tsx tools/content/author-settlements.ts",
-    "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test"
+    "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test",
+    "world:bestiary": "tsx tools/content/author-bestiary.mjs"
   },
   "dependencies": {
     "@dawned/shared": "file:../Dawned/packages/shared",

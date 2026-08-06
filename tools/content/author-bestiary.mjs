@@ -1,22 +1,32 @@
 #!/usr/bin/env node
 /**
- * Author the P9 bestiary THROUGH the panel API — the editor path end to end.
- * Provisions the dev admin account, logs into the panel, PUTs every enemy and
- * spawner as a DRAFT through the same endpoints the Enemies page calls, then
- * runs the enemy publish: validate → cross-check (clips, loot refs, spawner
- * refs, archetype sanity) → copy live → hot-reload the game.
+ * Author the whole bestiary THROUGH the panel API — the editor path end to end.
  *
- * It also runs the TTK simulator over every published enemy afterwards and
- * prints the table, so a content change is never merged without someone
- * having looked at what it does to the fights.
+ * P9-C shipped the Dawnshore and Weald half of this. P12-C adds the other four
+ * zones and, more importantly, RE-PLACES every camp: the P4–P9 spawners stood
+ * on the dev island, and the Dawnlands put open water there.
  *
- * Usage: node tools/content/author-bestiary.mjs [http://localhost:8082]
+ * Order matters and is not arbitrary:
+ *   1. loot table stubs, because the enemy publish BLOCKS on a loot ref that is
+ *      not published, and the T3–T5 drops themselves are P12-D's slice.
+ *   2. enemy + spawner drafts → the enemies publish rail (validate → clip,
+ *      loot and spawner cross-checks → copy live → hot reload).
+ *   3. the map's `spawner` layer, cleared and rewritten. Camps live on the MAP
+ *      (owner decision Q23) and a map publish delete-then-inserts every
+ *      published spawner from that layer — so a bestiary that only went through
+ *      the Enemies page would be erased by the next world publish.
+ *
+ * Then it prints the TTK table for every published enemy, so a content change
+ * is never merged without someone having looked at what it does to the fights.
+ *
+ * Usage: pnpm world:bestiary [http://localhost:8082]
  * Requires: admin API (pnpm dev) + the game repo's migrated Postgres.
  */
 
 import pg from 'pg';
 import argon2 from 'argon2';
-import { ENEMY_DEFS, SPAWNER_DEFS } from './bestiary-data.mjs';
+import { ENEMY_DEFS } from './bestiary-data.mjs';
+import { buildSpawners } from './camp-data.mjs';
 
 const BASE_URL = process.argv[2] ?? 'http://localhost:8082';
 const ACCOUNT = 'zz_admin_smoke';
@@ -24,12 +34,35 @@ const PASSWORD = 'admin-smoke-pass-1';
 const DATABASE_URL = process.env.DATABASE_URL ?? 'postgres://dawned:dawned@127.0.0.1:5432/dawned';
 
 const ok = (message) => console.log(`✅ ${message}`);
+const note = (message) => console.log(`   ${message}`);
 const fail = (message) => {
   console.error(`\n❌ ${message}\n`);
   process.exit(1);
 };
 
-const provision = async () => {
+/**
+ * The zone loot tables the new enemies point at.
+ *
+ * They ship with ONE `nothing` entry: a table has to exist and be published
+ * before an enemy may name it, and what actually falls out of an Ashcrag demon
+ * is the item catalogue P12-D authors. A stub is honest — the panel's loot
+ * simulator will show a flat "nothing 100 %" until it is filled — where
+ * pointing a level-28 demon at the Dawnshore trash table would be wrong content
+ * that nobody would notice was wrong.
+ */
+const LOOT_STUBS = [
+  ['loot_emberwood_trash', 'Emberwood — trash'],
+  ['loot_emberwood_gear', 'Emberwood — gear'],
+  ['loot_sungraze_trash', 'Sungraze — trash'],
+  ['loot_sungraze_gear', 'Sungraze — gear'],
+  ['loot_ashcrag_trash', 'Ashcrag — trash'],
+  ['loot_ashcrag_gear', 'Ashcrag — gear'],
+  ['loot_elder_grove', 'Elder Grove'],
+];
+
+const main = async () => {
+  console.log(`\nDawned bestiary authoring → ${BASE_URL}\n`);
+
   const db = new pg.Client({ connectionString: DATABASE_URL });
   await db.connect();
   const hash = await argon2.hash(PASSWORD, { type: argon2.argon2id });
@@ -39,11 +72,6 @@ const provision = async () => {
     [ACCOUNT, hash],
   );
   await db.end();
-};
-
-const main = async () => {
-  console.log(`Dawned bestiary authoring → ${BASE_URL}\n`);
-  await provision();
 
   const login = await fetch(`${BASE_URL}/api/auth/login`, {
     method: 'POST',
@@ -55,7 +83,8 @@ const main = async () => {
     .getSetCookie()
     .map((entry) => entry.split(';')[0])
     .join('; ');
-  const headers = { 'content-type': 'application/json', 'x-dawned-admin': '1', cookie };
+  const bare = { 'x-dawned-admin': '1', cookie };
+  const headers = { ...bare, 'content-type': 'application/json' };
   ok('panel session open');
 
   const put = async (path, def) => {
@@ -68,6 +97,38 @@ const main = async () => {
     return response.json();
   };
 
+  // --- 1 · the zone loot tables the bestiary needs to exist ----------------
+  console.log('');
+  const liveTables = await (await fetch(`${BASE_URL}/api/loot-tables`, { headers })).json();
+  const known = new Set(liveTables.tables.map((row) => row.id));
+  let stubbed = 0;
+  for (const [id, name] of LOOT_STUBS) {
+    // Never overwrite a table that already carries drops: re-running this after
+    // P12-D fills them in must not empty them again.
+    if (known.has(id)) continue;
+    await put('loot-tables', { id, name, entries: [{ kind: 'nothing', weight: 1 }] });
+    stubbed++;
+  }
+  if (stubbed > 0) {
+    const publish = await fetch(`${BASE_URL}/api/publish/items`, {
+      method: 'POST',
+      headers,
+      body: '{}',
+    });
+    const result = await publish.json();
+    if (!publish.ok || !result.ok) {
+      fail(
+        `loot stub publish refused:\n${(result.problems ?? []).map((p) => `   • ${p}`).join('\n')}`,
+      );
+    }
+    ok(`${stubbed} zone loot table(s) published as stubs — P12-D fills the drops`);
+  } else {
+    ok('every zone loot table already exists');
+  }
+
+  // --- 2 · the bestiary and its camps -------------------------------------
+  console.log('');
+  const spawners = buildSpawners();
   let pruned = 0;
   for (const def of ENEMY_DEFS) {
     const result = await put('enemies', def);
@@ -75,35 +136,126 @@ const main = async () => {
   }
   ok(`${ENEMY_DEFS.length} enemies saved as drafts (${pruned} already matched live and pruned)`);
 
-  for (const def of SPAWNER_DEFS) await put('spawners', def);
-  ok(`${SPAWNER_DEFS.length} spawners saved as drafts`);
+  for (const row of spawners) {
+    // `$zone`/`$ground` are the placement report's, not the schema's.
+    const { $zone, $ground, $slope, $movedM, ...def } = row;
+    void $zone;
+    void $ground;
+    void $slope;
+    void $movedM;
+    await put('spawners', def);
+  }
+  ok(`${spawners.length} camps saved as drafts`);
 
   const diff = await (await fetch(`${BASE_URL}/api/publish/enemies/diff`, { headers })).json();
   const pending = diff.enemies.length + diff.spawners.length;
-  ok(`publish diff: ${diff.enemies.length} enemies + ${diff.spawners.length} spawners pending`);
-  if (pending === 0) {
-    console.log('\nNothing to publish — the live bestiary already matches this file.\n');
-    return;
+  ok(`publish diff: ${diff.enemies.length} enemies + ${diff.spawners.length} camps pending`);
+  if (pending > 0) {
+    const publish = await fetch(`${BASE_URL}/api/publish/enemies`, {
+      method: 'POST',
+      headers,
+      body: '{}',
+    });
+    const result = await publish.json();
+    if (!publish.ok || !result.ok) {
+      fail(`publish refused:\n${(result.problems ?? []).map((p) => `   • ${p}`).join('\n')}`);
+    }
+    ok(`published ${result.published} content rows`);
+    for (const warning of (result.warnings ?? []).slice(0, 10)) note(`⚠️  ${warning}`);
+    console.log(
+      result.reload.ok
+        ? `✅ game hot-reloaded: ${result.reload.note}`
+        : `⚠️  game not reloaded (${result.reload.note})`,
+    );
+  } else {
+    note('nothing to publish — the live bestiary already matches this file');
   }
 
-  const publish = await fetch(`${BASE_URL}/api/publish/enemies`, {
-    method: 'POST',
-    headers,
-    body: '{}',
-  });
-  const result = await publish.json();
-  if (!publish.ok || !result.ok) {
-    fail(`publish refused:\n${(result.problems ?? []).map((p) => `   • ${p}`).join('\n')}`);
+  // --- 3 · the same camps onto the MAP ------------------------------------
+  // Q23: the map owns where a camp stands, and its publish delete-then-inserts
+  // the whole published spawner set. Skipping this would mean the next world
+  // publish silently emptied the world.
+  console.log('');
+  const lock = await fetch(`${BASE_URL}/api/map/lock`, { method: 'POST', headers: bare });
+  if (!lock.ok) fail(`could not take the map lock: ${await lock.text()}`);
+  ok('map lock held');
+  try {
+    // The `spawner` layer is this script's alone — every camp in the world is
+    // in this file — so it clears first. Overwriting by id would leave the
+    // previous run's rows standing wherever they used to be (the P10-E lesson).
+    const cleared = await fetch(`${BASE_URL}/api/map/objects/clear-layer`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ layer: 'spawner' }),
+    });
+    if (!cleared.ok) fail(`clearing the spawner layer failed: ${await cleared.text()}`);
+    const clearedCount = (await cleared.json()).removed ?? 0;
+    note(`cleared ${clearedCount} old camp placement(s)`);
+
+    const objects = spawners.map((row) => {
+      const { $zone, $ground, $slope, $movedM, ...def } = row;
+      void $zone;
+      void $ground;
+      void $slope;
+      void $movedM;
+      return { layer: 'spawner', def };
+    });
+    for (let start = 0; start < objects.length; start += 200) {
+      const response = await fetch(`${BASE_URL}/api/map/objects`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ objects: objects.slice(start, start + 200) }),
+      });
+      if (!response.ok) fail(`placing camps failed: ${await response.text()}`);
+    }
+    ok(`${objects.length} camps placed on the map`);
+
+    const after = await fetch(`${BASE_URL}/api/map/validate`, { headers: bare });
+    if (after.ok) {
+      const report = await after.json();
+      const problems = report.problems ?? [];
+      if (problems.length === 0) ok('the draft validates — it is ready to publish');
+      else {
+        note(`${problems.length} problem(s) still block a publish:`);
+        for (const line of problems.slice(0, 12)) note(`  • ${line}`);
+        if (problems.length > 12) note(`  … and ${problems.length - 12} more`);
+      }
+      for (const line of (report.warnings ?? []).slice(0, 8)) note(`⚠️  ${line}`);
+    }
+  } finally {
+    await fetch(`${BASE_URL}/api/map/lock`, { method: 'DELETE', headers: bare }).catch(() => null);
   }
-  ok(`published ${result.published} content rows`);
-  for (const warning of result.warnings ?? []) console.log(`   ⚠️  ${warning}`);
+
+  // --- 4 · what does the world look like now? ------------------------------
+  console.log('\n  zone             camps  enemies  levels   ground');
+  console.log('  ' + '-'.repeat(56));
+  const byZone = new Map();
+  for (const row of spawners) {
+    const zone = byZone.get(row.$zone) ?? { camps: 0, enemies: 0, lo: 999, hi: 0, moved: 0 };
+    zone.camps++;
+    for (const entry of row.entries) zone.enemies += entry.count;
+    for (const entry of row.entries) {
+      const def = ENEMY_DEFS.find((candidate) => candidate.id === entry.enemyId);
+      if (!def) fail(`camp ${row.id} names ${entry.enemyId}, which no enemy row defines`);
+      zone.lo = Math.min(zone.lo, def.levelMin);
+      zone.hi = Math.max(zone.hi, def.levelMax);
+    }
+    zone.moved = Math.max(zone.moved, row.$movedM);
+    byZone.set(row.$zone, zone);
+  }
+  let totalEnemies = 0;
+  for (const [zone, stats] of byZone) {
+    totalEnemies += stats.enemies;
+    console.log(
+      `  ${zone.padEnd(16)} ${String(stats.camps).padStart(5)}  ${String(stats.enemies).padStart(7)}` +
+        `  ${`${stats.lo}–${stats.hi}`.padStart(6)}   worst move ${stats.moved} m`,
+    );
+  }
   console.log(
-    result.reload.ok
-      ? `✅ game hot-reloaded: ${result.reload.note}`
-      : `⚠️  game not reloaded (${result.reload.note})`,
+    `  ${'total'.padEnd(16)} ${String(spawners.length).padStart(5)}  ${String(totalEnemies).padStart(7)}`,
   );
 
-  // --- what did we just make the fights into? ------------------------------
+  // --- 5 · the fights ------------------------------------------------------
   const live = await (await fetch(`${BASE_URL}/api/enemies`, { headers })).json();
   console.log('\n  enemy                     lvl  archetype  hp     kill    dies   rotation');
   console.log('  ' + '-'.repeat(78));
@@ -143,10 +295,10 @@ const main = async () => {
         `${kill.padStart(5)}  ${dies.padStart(5)}  ` +
         report.rotation.map((r) => `${r.id} ${r.sharePct.toFixed(0)}%`).join(', '),
     );
-    for (const note of report.notes) console.log(`      ⚠️  ${note}`);
+    for (const line of report.notes) console.log(`      ⚠️  ${line}`);
   }
 
-  console.log('\n🐛 The Dawnshore and Weald bestiary is live content.\n');
+  console.log('\n🐛 The Dawnlands have a bestiary.\n');
 };
 
 main().catch((error) => {

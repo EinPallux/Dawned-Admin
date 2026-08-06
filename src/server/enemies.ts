@@ -169,20 +169,26 @@ export const listSpawners = async (db: Db): Promise<SpawnerListEntry[]> => {
 // Draft CRUD
 // ---------------------------------------------------------------------------
 
-const saveDraft = async (
+const saveDraft = async <T>(
   db: Db,
   table: Table,
   id: string,
-  def: unknown,
+  def: T,
+  parse: (raw: unknown) => { ok: true; def: T } | { ok: false; message: string },
   updatedBy: number,
 ): Promise<{ pruned: boolean }> => {
   // Prune-on-match: a draft identical to what is already live is not a change,
-  // and leaving it there would show a permanent "unpublished" dot. Compare the
-  // PARSED defs, never the raw jsonb — Postgres normalises key order, so the
-  // raw rows differ even when the content is identical (the A1-c bug).
+  // and leaving it there would show a permanent "unpublished" dot.
+  //
+  // Compare PARSED against PARSED. The A1-c fix landed on the item and
+  // progression editors and this one kept comparing the RAW jsonb column, whose
+  // key order Postgres normalises — so an identical row could never prune, and
+  // re-running a content script republished the whole bestiary and showed 174
+  // "changes" in a diff review whose entire job is to say what changed.
   const rows = await db.select().from(table).where(eq(table.id, id));
-  const live = rows.find((row) => row.status === 'published');
-  if (live && JSON.stringify(live.def) === JSON.stringify(def)) {
+  const liveRow = rows.find((row) => row.status === 'published');
+  const live = liveRow ? parse(liveRow.def) : null;
+  if (live?.ok && JSON.stringify(live.def) === JSON.stringify(def)) {
     await db.delete(table).where(and(eq(table.id, id), eq(table.status, 'draft')));
     return { pruned: true };
   }
@@ -197,10 +203,10 @@ const saveDraft = async (
 };
 
 export const saveEnemyDraft = (db: Db, def: EnemyDef, updatedBy: number) =>
-  saveDraft(db, contentEnemies, def.id, def, updatedBy);
+  saveDraft(db, contentEnemies, def.id, def, parseEnemy, updatedBy);
 
 export const saveSpawnerDraft = (db: Db, def: SpawnerDef, updatedBy: number) =>
-  saveDraft(db, contentSpawners, def.id, def, updatedBy);
+  saveDraft(db, contentSpawners, def.id, def, parseSpawner, updatedBy);
 
 export const discardEnemyDraft = async (db: Db, kind: 'enemies' | 'spawners', id: string) => {
   const table = kind === 'enemies' ? contentEnemies : contentSpawners;

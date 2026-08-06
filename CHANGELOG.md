@@ -5,6 +5,31 @@ versions track the game's release trains (0.1.0 = tooling that shipped Dawned 0.
 
 ## [Unreleased]
 
+### Added — the world's camps are placed, not typed (2026-08-06, game P12-C)
+
+- **`pnpm world:bestiary`** authors 50 enemies, the zone loot tables and **124 camps** through the
+  Enemies page's rail, and writes the same camps into the map's `spawner` layer — camps live on the
+  MAP, and a map publish replaces that whole set, so a bestiary authored only on the Enemies page
+  would be erased by the next world publish.
+- **A camp is a wish, not a coordinate.** New `placement.ts` resolves "somewhere north-east of the
+  Emberwood" against the real height field, spiralling outward until it finds ground above water,
+  gentle enough to fight on, inside the right zone, clear of every town and of the other camps —
+  and says which of those a candidate failed. The search is capped at 120 m, because an unbounded
+  one always succeeds and quietly scatters an authored difficulty gradient.
+- **`world-sample.ts`** holds one in-memory synthesis of the world for every content script to
+  share, so the preview, the settlement pass and the camp pass all read the same ground.
+
+### Fixed — re-running a content script republished everything (2026-08-06, game P12-C)
+
+- **The Enemies page's prune-on-match compared the RAW jsonb column.** Postgres normalises key
+  order, so an identical draft could never prune: every re-run of a content script showed the whole
+  bestiary as changed — 174 rows in a diff review whose only purpose is to say what changed. The
+  A1-c fix landed on the item and progression editors; this one kept the comment without the code.
+- **`world:author` never cleared the zone layer.** The draft was seeded from the dev island by
+  `import-live`, so `ashen_reach` survived the entire world regeneration and, being a smaller ring,
+  won inside the savanna and the canyons — nine camps stood in a zone the design does not have.
+  Found by the game's new `/ops/camps`, which counts what the world actually seeded.
+
 ### Fixed — two ways the map bake could give different answers for the same draft (2026-08-06, game P12-B)
 
 - **`listObjects` had no `ORDER BY`.** Postgres returns rows in physical order, which changes

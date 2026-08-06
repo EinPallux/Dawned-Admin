@@ -123,6 +123,20 @@ const main = async (): Promise<void> => {
     // names a zone the draft has never heard of is refused rather than
     // silently painting the whole world.
     console.log('');
+    // CLEAR first. Writing by id leaves every zone the draft already had, and
+    // the draft was seeded from the dev island by `import-live` — so the old
+    // `ashen_reach` ring survived the whole world regeneration, sat inside the
+    // savanna and the canyons, and (being a smaller ring, which is the order
+    // `zoneAt` resolves in) WON there: 9 camps and 36 enemies reported
+    // themselves as standing in a zone WORLD.md does not have. Found by the
+    // game's own `/ops/camps`, not by anything in this repo.
+    const cleared = await fetch(`${BASE_URL}/api/map/objects/clear-layer`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ layer: 'zone' }),
+    });
+    if (!cleared.ok) fail(`clearing the zone layer failed: ${await cleared.text()}`);
+    note(`cleared ${((await cleared.json()) as { removed?: number }).removed ?? 0} old zone(s)`);
     const zoneSave = await fetch(`${BASE_URL}/api/map/objects`, {
       method: 'PUT',
       headers,

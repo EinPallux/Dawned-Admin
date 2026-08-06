@@ -256,3 +256,40 @@ truth).
   zones by area (smallest wins), the starter settlement is the lowest level band. A third, in the
   content script: pruning by matching validateDraft's PROSE missed props, which use a different
   sentence. **259 tests green.**
+
+**Game P12-C ran the whole bestiary through this panel (2026-08-06)** — `pnpm world:bestiary`:
+50 enemies, 7 zone loot-table stubs and **124 camps**, published on the Enemies rail AND written
+into the map's `spawner` layer, because Q23 makes the MAP the owner of where a camp stands and a
+map publish delete-then-inserts that whole published set. Every P4–P9 camp was re-placed: they
+stood on the dev island, which the Dawnlands put under open water.
+**Two pieces of tooling landed with it, and the node/POI/NPC passes reuse both.**
+`tools/content/world-sample.ts` holds ONE in-memory synthesis of the world (the same `synthWorld`
+
+- `erodeField` the generate endpoint runs) so every content script asks the same ground "is there
+  land here, how steep, which landmass, which zone". `tools/content/placement.ts` turns a WISH —
+  zone, bearing from that isle's heart, distance — into a coordinate by spiralling outward until
+  every constraint holds, and it reports WHICH constraint each rejected candidate failed. It is
+  **capped at 120 m on purpose**: an unbounded search always succeeds and quietly moves a camp a
+  third of an isle away, which turns an authored difficulty gradient into scatter and reads as
+  success. Two wishes hit that cap and were fixed rather than absorbed.
+  **The bug that mattered is this panel's, and it had been live since A1-d: the Enemies page's
+  prune-on-match compared the RAW jsonb column.** Postgres normalises key order, so an identical
+  draft could never prune — every re-run of a content script republished the entire bestiary and
+  showed 174 "changes" in a diff review whose only job is to say what changed. The A1-c fix landed
+  on the item and progression editors and this one kept the COMMENT without the code. Parsed against
+  parsed now; a third run of `world:bestiary` reports "50 pruned, nothing to publish", which is what
+  "safe to re-run" is supposed to look like.
+  **A second one was found by the GAME rather than here**: `world:author` wrote its seven zones by
+  id and never cleared the layer, so `ashen_reach` — seeded from the dev island by `import-live` —
+  survived a whole world regeneration and, being a smaller ring, WON inside the savanna and the
+  canyons. Nine camps reported a zone WORLD.md does not have. The game's new `/ops/camps` counts what
+  the world actually seeded per zone; that is the line that showed it, and it is the same shape of
+  evidence as `/ops/respawnnodes` and `/ops/worldobjects`. After the fix the game reports **124
+  spawners, 400 enemies alive, 0 unresolved refs, 0 camps that produced nothing**, per zone identical
+  to this repo's offline placement.
+  **One shared-schema change to pull in:** `enemyDefSchema` gained `tint` (`#rrggbb`, nullable) —
+  the bestiary reuses models across bands and a boss wearing its own minions' mesh is not a boss.
+  The schema-driven form picks it up for free after a rebuild; a colour swatch instead of a text
+  field is worth doing next time the Enemies page is touched, and so is the fact that its TTK sim
+  names COMBAT.md §12's 60–120 s window for WORLD bosses too, where §12 says "zone boss".
+  **259 tests green here.**
