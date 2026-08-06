@@ -325,6 +325,29 @@ flow (owner drives, we watch); validation catches seeded errors in a fixture que
       same circle), and it WARNS rather than blocks — QUESTS_POI §1 rule 4 says the map hints
       _roughly_ where, so a loose circle is a choice and a 170 m one is not.
 
+### A2 addendum — whole-world generation (2026-08-06, for game P12)
+
+MAP_EDITOR §2.1 always promised the island-mask synth would "seed the base world (game P12)". The
+editor's own island button cannot: it generates into the RESIDENT region, capped at 13×13 chunks,
+and the world is 32×32.
+
+- [x] `GET /api/map/generate-stream` — admin-only, lock-held, **checkpoint taken first**, SSE
+      progress. Rewrites terrain and only terrain; placed objects re-sit on the new heights, which
+      is what §2.1's "non-destructive to placed props" means.
+- [x] Masks **combine** (overlapping isles become an isthmus) and `carve` masks **subtract** (a
+      strait severs one). That pairing is what lets a world be 55–60 % land and still have bridges
+      that gate the path.
+- [x] Erosion over ONE world-sized height field — the per-chunk pass must skip the border rows
+      adjacent chunks share, which leaves an un-eroded lattice every 64 m.
+- [x] A splat rule names a **`zoneId`**, resolved against the draft's zone layer, rather than
+      carrying a copy of the ring that goes stale when a corner moves.
+- [x] `pnpm world:preview` (offline: coverage, per-isle area, landmass flood fill, land in no
+      zone, unpainted texels, an ASCII map) and `pnpm world:author` (for real, through the panel,
+      then asks the GAME which map it serves).
+- [x] **Ran it:** 1024 chunks, 766 carrying land, 57.6 % coverage, 0 unclaimed texels — identical
+      to the preview's offline figures. The preview's flood fill found the bug that mattered:
+      three of five straits severed NOTHING while a centre-depth probe called them all open water.
+
 ## A5 — Live Ops (M) — with game P13
 
 Players online/search + inspector (sheet, inventory grant/remove audited, tp/bring/kick),

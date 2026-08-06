@@ -5,6 +5,36 @@ versions track the game's release trains (0.1.0 = tooling that shipped Dawned 0.
 
 ## [Unreleased]
 
+### Added — generate a whole world from island masks (2026-08-06, A2, game P12-A)
+
+- **The map editor could not build the world it was written to build.** Its island button has been
+  there since A2-d, and it generates into the RESIDENT region — capped at 13×13 chunks after 17×17
+  was measured at 7.5 M triangles a frame. The Dawnlands are 32×32. A tool that can only see a
+  fifth of the map cannot compose an archipelago out of it, so the whole-world pass runs on the
+  server: `GET /api/map/generate-stream`, admin-only, lock-held, checkpoint taken first, progress
+  streamed. It rewrites terrain and only terrain — placed objects re-sit on the new heights, which
+  is what MAP_EDITOR §2.1's "non-destructive to placed props" means.
+- Two things the per-chunk generator could not do. Masks **combine** rather than overwrite, so two
+  overlapping isles become an isthmus instead of the second erasing the first; and `carve` masks
+  **subtract**, which is how a strait severs an isthmus the masks just merged. That pairing is what
+  lets a world be 55–60 % land AND have bridges that gate the path — six landmasses far enough
+  apart to leave open water between them cannot cover that much of a 2048 m box.
+- Erosion runs over the world as **one height field** rather than chunk by chunk. The per-chunk
+  version has to skip border vertices because adjacent chunks share them and a one-sided edit tears
+  the world open; that leaves an un-eroded lattice every 64 m.
+- A splat rule can name a **`zoneId`** instead of carrying its own ring, and the server resolves it
+  against the draft's zone layer. A copied polygon goes stale the first time somebody drags a zone
+  corner, leaving the paint and the region describing different ground.
+- **`pnpm world:preview`** runs the same synthesis in memory and prints what the result would be —
+  land coverage, per-isle area, which isles are actually separate landmasses, land standing in no
+  zone, unpainted texels, and an ASCII map. **`pnpm world:author`** does it for real through the
+  panel and then asks the game which map it is serving.
+- The preview earned its keep on the first run: its **flood fill found that three of five straits
+  severed nothing**. A depth probe at each channel's own centre reported open water for all of
+  them, which was true and beside the point — the isles simply joined around the ends of the cuts,
+  and one carve had been typed at nearly a right angle to where it belonged. Straits derive their
+  centre, angle and length from the two isles they separate now.
+
 ### Added — publish checks that a hint circle contains the thing it points at (2026-08-05, game P11-E)
 
 - A hint circle is the only pointer the world map gives for a kill, collect, interact or deliver

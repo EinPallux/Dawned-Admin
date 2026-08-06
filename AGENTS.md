@@ -233,3 +233,15 @@ truth).
   be taken. Spent state is per-character; both are 300 000 ms now, and an interactable a quest
   step NAMES with `respawnMs: 0` is worth a form-level nudge next time this page is touched.
   **225 tests green** (the cross-check added 6 of them); the game finished at 642.
+
+  **A2 grew whole-world generation for game P12 (2026-08-06).** The editor's island button works
+  on the RESIDENT region (13×13 chunks) and the world is 32×32, so `/api/map/generate-stream`
+  does it server-side: admin-only, lock-held, checkpointed first, streamed. Masks COMBINE rather
+  than overwrite (overlapping isles make an isthmus) and `carve` masks SUBTRACT (a strait severs
+  one) — which is what lets a world be 55–60 % land AND have bridges that gate. Erosion runs over
+  ONE 2049² field, because the per-chunk pass must skip the border rows chunks share. A splat rule
+  names a `zoneId` resolved against the draft rather than carrying a ring that can go stale.
+  `pnpm world:preview` runs the same maths offline; its flood fill found **three of five straits
+  severing nothing** while a centre-depth probe called them all open water. `pnpm world:author`
+  ran it for real — 1024 chunks, 766 with land, 57.6 % coverage, 0 unclaimed texels, matching the
+  preview exactly. Not published: the new sea sits where the dev island was. **248 tests green.**

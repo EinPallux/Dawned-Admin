@@ -381,6 +381,35 @@ a quest STEP names with `respawnMs: 0` is a soft-lock the JSON does not look lik
 **225 tests green here** (the hint cross-check added 6 of them); the game side
 finished at 642.
 
+**A2 grew the tool P12 needed: whole-world generation (2026-08-06).** The map editor's island
+button has been there since A2-d and it cannot build the Dawnlands — it generates into the
+RESIDENT region, capped at 13×13 chunks, and the world is 32×32. MAP_EDITOR §2.1 has always said
+the mask synth is what seeds the base world for game P12; this is the half that can do it.
+`GET /api/map/generate-stream` is admin-only, lock-held, checkpointed FIRST and streamed, and it
+rewrites terrain and ONLY terrain — placed objects re-sit on the new heights, which is what §2.1's
+"non-destructive to placed props" means. Two things the per-chunk generator could not do: masks
+COMBINE rather than overwrite, so two overlapping isles make an isthmus instead of the second
+erasing the first; and `carve` masks SUBTRACT, so a strait can sever an isthmus the masks just
+merged. That pairing is what lets a world be 55–60 % land AND have bridges that gate the path.
+Erosion runs over ONE 2049² height field, because the per-chunk pass must skip the border rows
+adjacent chunks SHARE and that leaves an un-eroded lattice every 64 m.
+**A splat rule names a `zoneId` rather than carrying its own ring**, resolved server-side against
+the draft's zone layer: a copied polygon goes stale the first time somebody drags a corner, leaving
+the paint and the region describing different ground. (It is also the only thing that fits — an
+SSE endpoint takes its plan in a URL and six rings of 28 corners is 15 kB.)
+**`pnpm world:preview` is the piece that made the layout tractable**, and it earned its keep on
+the first run. Its flood fill found that **three of five straits severed nothing**: the isles
+joined around the ends of the cuts and one carve had been typed at nearly a right angle to where
+it belonged — while a depth probe at each channel's own centre reported "open water" for all five,
+which was true and completely beside the point. Straits derive their centre, angle and length from
+the two isles they separate now. The preview also caught islets drowned inside their own channel
+and land standing in no zone (which blocks publish), each before a chunk was written.
+**`pnpm world:author` ran it for real:** 1024 chunks written, 766 carrying land, **57.6 % coverage,
+0 unclaimed splat texels** — every figure identical to the preview's offline numbers, which is the
+proof both run one copy of the maths. It stops short of publishing on purpose: the new archipelago
+puts open water where the dev island was, so validation refuses every game-side P8–P11 placement as
+standing on a disabled chunk. Answering that is the game's P12-B onward. **248 tests green.**
+
 ### Running it locally
 
 ```bash
