@@ -53,6 +53,7 @@ import {
 import { PublishPanel } from './PublishPanel.js';
 import { ObjectStore, mintId } from './object-store.js';
 import { LAYER_COLOR, buildObjectView, type PlacedObject } from './placement.js';
+import { ModelCache } from './model-cache.js';
 
 import {
   DEFAULT_AMBIENCE,
@@ -118,6 +119,28 @@ import { actionFor, loadKeymap, saveKeymap, type EditorAction, type Keymap } fro
 import type { ScatterSet } from '@dawned/shared';
 
 type ToolId = 'sculpt' | 'paint' | 'water' | 'board' | 'place' | 'scatter' | 'zone' | 'measure';
+
+/**
+ * What each tool DOES and what the mouse does in it.
+ *
+ * Owner pain point: "Horrible UI-Guidance." The editor showed a row of tool
+ * buttons and left you to find out by clicking, which on a tool that edits
+ * terrain is an expensive way to learn. This line is always on screen, right
+ * under the toolbar, and says the two things you need: what you are about to
+ * change, and what a click will do.
+ */
+const TOOL_GUIDE: Record<ToolId, string> = {
+  sculpt: 'Reshape the ground — drag to raise, lower or smooth it. Hold Shift to invert.',
+  paint: 'Paint the ground texture — grass, rock, sand. Drag to paint, pick a layer on the right.',
+  water: 'Set how deep the sea is in one chunk. Click a chunk to give it water or take it away.',
+  board: 'Decide which chunks exist at all. Click to add a chunk to the world or remove it.',
+  place:
+    'Put a single thing down — a house, a chest, a camp. Click the ground to place, click a thing to select it.',
+  scatter:
+    'Paint many of one thing at once — a forest, a field. Pick a model on the right, then drag.',
+  zone: 'Draw a region border. Click to add corners, Enter to close it, Esc to abandon.',
+  measure: 'Measure a distance. Click once to start, once to finish.',
+};
 
 interface LockState {
   heldBy: string | null;
@@ -580,6 +603,30 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
    * only place its true size exists is the definition — without this a node is
    * the one placed thing drawn with no ring.
    */
+  /**
+   * The real baked models. One cache for the page: a model loads once and every
+   * placement that names it redraws, which is what turns the viewport from a
+   * field of coloured boxes into the world the game will show.
+   */
+  const modelCache = useMemo(() => new ModelCache(), []);
+  const [modelsVersion, setModelsVersion] = useState(0);
+  useEffect(() => {
+    let raf = 0;
+    // Coalesce: a town is a dozen models arriving within a second of each other
+    // and each one would otherwise rebuild every marker on screen.
+    const off = modelCache.onLoaded(() => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        setModelsVersion((v) => v + 1);
+      });
+    });
+    void modelCache.init();
+    return () => {
+      cancelAnimationFrame(raf);
+      off();
+    };
+  }, [modelCache]);
+
   const nodeRadii = useMemo(
     () => new Map(nodeChoices.map((node) => [node.id, node.def.radius])),
     [nodeChoices],
@@ -1142,11 +1189,11 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
         object,
         (x, z) => session.store.heightAt(x, z),
         selectedIds.has(object.id),
-        { nodeRadii },
+        { nodeRadii, modelFor: (ref) => modelCache.instance(ref) },
       );
       session.viewport.setObjectView(object.id, view);
     }
-  }, [objects, selectedIds, hiddenLayers, saveState, nodeRadii]);
+  }, [objects, selectedIds, hiddenLayers, saveState, nodeRadii, modelCache, modelsVersion]);
 
   // --- spawns mode (A3-b) ---------------------------------------------------
   //
@@ -1931,7 +1978,7 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
               setShowGenerators((v) => !v);
             }}
           >
-            Generate…
+            Build new terrain…
           </button>
           <button
             type="button"
@@ -1941,10 +1988,15 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
               setShowPublish(true);
             }}
           >
-            Validate ▸ Publish
+            Put it live
           </button>
         </div>
       </header>
+      {/* Always-on guidance (2026-08-06). See TOOL_GUIDE. */}
+      <p className="me-guide">
+        <b>{tool}</b>
+        <span>{TOOL_GUIDE[tool]}</span>
+      </p>
 
       <div className="me-body">
         <div className="me-viewport" ref={wrapRef}>
@@ -2243,6 +2295,7 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
           </section>
 
           <ScatterCard
+            modelCache={modelCache}
             sets={scatterSets.data?.sets ?? []}
             models={placementRefs.data?.models ?? []}
             activeSetId={scatterBrush.setId}

@@ -28,6 +28,9 @@
 import { createHash } from 'node:crypto';
 import pg from 'pg';
 
+/** Marks a hash for a row that was already live when the guard first saw it. */
+const ADOPTED = 'adopted:';
+
 const DEFAULT_DATABASE_URL = 'postgres://dawned:dawned@127.0.0.1:5432/dawned';
 
 /**
@@ -145,10 +148,41 @@ export const ownerEditGuard = async (kind, table, opts = {}) => {
       }
       const recorded = authored.get(id);
       const liveHash = stableHash(liveDef);
+
+      // A row this guard has never seen the script WRITE stays the owner's.
+      //
+      // Recording the live hash alone is not enough: the next run then reads
+      // "live == recorded" as "the script wrote this" and overwrites it, which
+      // is what the first version did — the owner's edit survived run 1 and
+      // died on run 2. The `adopted:` prefix keeps the distinction, so a row
+      // that was already live when the guard arrived needs `--force-authored`
+      // to be replaced, for ever.
+      //
+      // The cost is real and deliberate: shipping a change to a PRE-EXISTING
+      // row (a rebalanced enemy in a later phase) needs --force-authored. That
+      // is the right way round — an explicit flag to overwrite the owner's
+      // database beats a silent revert.
+      if (recorded?.startsWith(ADOPTED)) {
+        if (force) return true;
+        kept.push(id);
+        pending.set(id, `${ADOPTED}${liveHash}`);
+        return false;
+      }
       if (recorded === undefined) {
+        // A live row with no record was here before this guard existed, so it
+        // is exactly what must NOT be clobbered: it may be something the owner
+        // tuned months ago. Adopt the LIVE value as the baseline and leave it
+        // alone; from the next run on, "changed since we wrote it" is
+        // answerable.
+        //
+        // The first version wrote the authored value here and recorded that —
+        // an "adoption window" that silently reverted every panel edit on the
+        // very first deploy after shipping the guard, which is the one thing
+        // the guard exists to prevent. `--force-authored` is the way to push
+        // authored values over pre-existing rows on purpose.
         adopted.push(id);
-        pending.set(id, stableHash(def));
-        return true;
+        pending.set(id, `${ADOPTED}${liveHash}`);
+        return force;
       }
       if (recorded === liveHash || force) {
         pending.set(id, stableHash(def));
@@ -182,11 +216,15 @@ export const ownerEditGuard = async (kind, table, opts = {}) => {
         let written = 0;
         for (const row of stored.rows) {
           const def = typeof row.def === 'string' ? JSON.parse(row.def) : row.def;
+          // Keep the adopted marker: a row the script has never written must
+          // not become script-owned just because a later run touched nothing.
+          const wasAdopted = pending.get(row.id)?.startsWith(ADOPTED) ?? false;
+          const hash = `${wasAdopted ? ADOPTED : ''}${stableHash(def)}`;
           await client.query(
             `insert into content_authored (kind, row_id, hash, authored_at)
              values ($1, $2, $3, now())
              on conflict (kind, row_id) do update set hash = $3, authored_at = now()`,
-            [kind, row.id, stableHash(def)],
+            [kind, row.id, hash],
           );
           written++;
         }
@@ -198,8 +236,8 @@ export const ownerEditGuard = async (kind, table, opts = {}) => {
     report() {
       if (adopted.length > 0) {
         console.log(
-          `   ℹ️  ${adopted.length} ${kind} row(s) adopted into change-tracking (first run only —` +
-            ` edits made from here on are protected)`,
+          `   🛡️  ${adopted.length} ${kind} row(s) already live were left as they are and are now` +
+            ` tracked — anything you tuned in the panel is protected from here on.`,
         );
       }
       if (kept.length > 0) {

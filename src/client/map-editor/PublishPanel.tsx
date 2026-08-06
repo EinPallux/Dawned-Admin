@@ -1,5 +1,12 @@
 /**
- * Validate ▸ Publish (MAP_EDITOR.md §4).
+ * "Put this world live" (MAP_EDITOR.md §4).
+ *
+ * The owner, 2026-08-06: "I dont know what 'Validate' 'Generate -> Publish' or
+ * any of that shit means (just make it a Live Map Editor)." They were right —
+ * those are pipeline words that leaked into the UI. The STEPS still happen and
+ * still matter (a world that fails its checks takes the game down with it), but
+ * they are one button and plain sentences now: the panel says what is wrong in
+ * words about the world, not about the pipeline.
  *
  * Validation runs first and on its own, because most of the time the answer is
  * "fix this before you bake" and a bake the owner has to sit through only to be
@@ -28,16 +35,17 @@ interface BakeStep {
   total: number;
 }
 
+/** What each step is doing, said the way you would say it out loud. */
 const STEP_LABELS: Record<string, string> = {
-  validate: 'Validating the draft',
-  chunks: 'Writing chunk bins',
-  walkgrid: 'Baking the walkgrid',
-  zones: 'Writing zones',
-  placements: 'Resolving placements',
-  renders: 'Rendering world map',
-  spawners: 'Publishing spawners',
-  prune: 'Sweeping old bakes',
-  reload: 'Asking the game to load it',
+  validate: 'Checking the world',
+  chunks: 'Saving the terrain',
+  walkgrid: 'Working out where players can walk',
+  zones: 'Saving the regions',
+  placements: 'Saving everything you placed',
+  renders: 'Drawing the world map',
+  spawners: 'Moving the camps across',
+  prune: 'Tidying up old versions',
+  reload: 'Switching the game onto it',
 };
 
 export const PublishPanel = ({
@@ -120,7 +128,7 @@ export const PublishPanel = ({
     <div className="palette-backdrop me-modal-backdrop" role="dialog" aria-modal="true">
       <div className="ws-panel me-publish">
         <header className="me-publish-head">
-          <h2>Publish the map</h2>
+          <h2>Put this world live</h2>
           <button type="button" className="ws-btn" onClick={onClose}>
             Close
           </button>
@@ -209,16 +217,20 @@ export const PublishPanel = ({
               void validation.refetch();
             }}
           >
-            Re-validate
+            Check again
           </button>
           <button
             type="button"
             className="ws-btn ws-btn--primary"
             disabled={publishing || blocked || checking || result !== null}
             onClick={publish}
-            title={blocked ? 'Fix the problems above first' : 'Bake and publish'}
+            title={
+              blocked
+                ? 'Fix the problems above first'
+                : 'Checks the world, builds it and switches the running game onto it. No restart.'
+            }
           >
-            {publishing ? 'Publishing…' : 'Bake ▸ Publish'}
+            {publishing ? 'Going live…' : 'Put it live'}
           </button>
         </footer>
       </div>
