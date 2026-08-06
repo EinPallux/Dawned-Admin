@@ -245,3 +245,14 @@ truth).
   severing nothing** while a centre-depth probe called them all open water. `pnpm world:author`
   ran it for real — 1024 chunks, 766 with land, 57.6 % coverage, 0 unclaimed texels, matching the
   preview exactly. Not published: the new sea sits where the dev island was. **248 tests green.**
+
+  **Game P12-B settled the world through this panel (2026-08-06).** `pnpm world:settle`: 40
+  buildings, 9 shrines, 35 plank sections, and a prune of the 46 rows the new sea drowned. New
+  mask kinds `causeway` and `plateau`. **Two latent panel bugs surfaced:** `listObjects` had no
+  ORDER BY (harmless until the Dawnsea's ring overlapped every land zone — `zoneAt` takes the
+  first match, so an unchanged draft could bake Dawnshore as ocean one publish and not the next);
+  and `findSpawn` took the first zone with a settlement, so with five settlements **a new
+  character could have spawned in the level 24–30 camp**. Objects order by id, the bake sorts
+  zones by area (smallest wins), the starter settlement is the lowest level band. A third, in the
+  content script: pruning by matching validateDraft's PROSE missed props, which use a different
+  sentence. **259 tests green.**

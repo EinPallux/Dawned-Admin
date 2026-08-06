@@ -5,6 +5,35 @@ versions track the game's release trains (0.1.0 = tooling that shipped Dawned 0.
 
 ## [Unreleased]
 
+### Fixed — two ways the map bake could give different answers for the same draft (2026-08-06, game P12-B)
+
+- **`listObjects` had no `ORDER BY`.** Postgres returns rows in physical order, which changes
+  whenever a row is updated. Nothing depended on it while no two zones overlapped — and then the
+  game's P12 added the Dawnsea, a zone whose ring covers the whole map, so every land point is
+  inside two zones and `zoneAt` takes the FIRST match. An unchanged draft could have baked
+  Dawnshore as ocean one publish and not the next, with no code change between them. Objects are
+  ordered by id now, which also means two publishes of one draft produce the same bytes.
+- **Zones bake smallest-first.** `bakeDraft` sorts them by polygon area ascending, so the more
+  specific zone wins: a containing zone is always the larger one, and the sea can never shadow an
+  isle. Ties break on id so the order is total.
+- **`findSpawn` picked whichever settlement came first.** With one settlement that was fine;
+  P12 gives all five of them one, and the answer came from row order — a new character could have
+  woken up in Rustpick Camp, in the level 24–30 zone. The spawn is the settlement zone with the
+  lowest level band now, which is already what makes Dawnshore the starter.
+
+### Added — whole-world generation grew causeways and plateaus (2026-08-06, A2, game P12-B)
+
+- **`causeway` masks** raise a neck of ground back over a strait after the carves. Walkability is
+  computed from the terrain and a `solid` prop only ever SUBTRACTS from the walkgrid, so a bridge
+  model laid over a channel is scenery you swim underneath — a crossing has to be ground.
+- **`plateau` masks** level what is there toward a target: full pull across the inner 55 %,
+  smoothstepped out, so a settlement sits on a shelf with the hillside running off it. They lower
+  as readily as they raise.
+- **`pnpm world:settle`** places settlements, shrines and bridge dressing, pruning anything the
+  new terrain drowned. `pnpm world:preview` now reads the ground under every building and reports
+  the height spread and steepest slope — which caught two settlements built on 37–44° hillsides
+  and a shrine standing in the sea, before a single row was written.
+
 ### Added — generate a whole world from island masks (2026-08-06, A2, game P12-A)
 
 - **The map editor could not build the world it was written to build.** Its island button has been

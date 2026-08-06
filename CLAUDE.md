@@ -410,6 +410,30 @@ proof both run one copy of the maths. It stops short of publishing on purpose: t
 puts open water where the dev island was, so validation refuses every game-side P8–P11 placement as
 standing on a disabled chunk. Answering that is the game's P12-B onward. **248 tests green.**
 
+**Game P12-B settled the world through this panel (2026-08-06)** — `pnpm world:settle`: 40
+buildings across five settlements, nine shrines, 35 plank sections on the causeways, and a prune
+of the 46 P8–P11 rows the new sea drowned. **The draft validates.** Two new mask kinds went in
+with it: `causeway` (a bridge has to BE ground — the walkgrid only subtracts) and `plateau`
+(levelled, smoothstepped ground, because a house on noise-generated terrain stands on a slope).
+**Two of the three bugs it found were this panel's, and both had been latent since A2.**
+`listObjects` had **no ORDER BY**, so it returned Postgres's physical row order — which changes
+whenever a row is updated. Nothing depended on it while no two zones overlapped; game P12 added
+the Dawnsea, whose ring covers the whole map, and `zoneAt` takes the FIRST match, so an unchanged
+draft could have baked Dawnshore as ocean one publish and not the next. Objects order by id now
+(which also makes two publishes of one draft produce the same bytes, so a diff is readable), and
+`bakeDraft` sorts zones by polygon area ascending — the smaller, more specific zone wins, as a
+property of the data. Ordering them then broke a reachability test, which was the real find:
+`findSpawn` took `zones.find(z => z.settlement !== null)`, fine with one settlement and a coin
+flip with five, so **a new character could have spawned in the level 24–30 mining camp**. The
+starter is the lowest level band now, tested through the bake's own `meta.json`.
+The third was in the content script and is a lesson about coupling: it pruned drowned placements
+by matching `validateDraft`'s prose, and props use a DIFFERENT sentence from nodes and spawners
+("stands on a disabled chunk (it would fall into the sea)" vs "sits on"). It reported success
+while 37 rows sat in the sea. It asks the chunks whether they are enabled now.
+`pnpm world:preview` grew the check that matters for settlements — the ground under every
+building — and it found Dawnhaven's harbour on a 37° slope, Sunwatch's farms on 44°, and a shrine
+in 8 m of ocean, all before a row was written. **259 tests green.**
+
 ### Running it locally
 
 ```bash
