@@ -93,6 +93,16 @@ const num = (value: unknown, fallback: number): number =>
 export interface PlacementContext {
   /** Node definition id → radius in metres. */
   nodeRadii?: ReadonlyMap<string, number>;
+  /**
+   * The real baked model for a `modelRef`, when one is loaded.
+   *
+   * Supplying this is what turns the editor from a diagram into the world: for
+   * its whole life before 2026-08-06 every placement was a coloured box, which
+   * is the whole of "I was not able to see the real map". Null while a model
+   * loads (or for a layer that has no mesh, like a spawner) and the box is
+   * drawn instead — it is still the thing you click.
+   */
+  modelFor?: (ref: string) => THREE.Object3D | null;
 }
 
 /**
@@ -122,6 +132,25 @@ export const buildObjectView = (
   group.position.set(x, ground, z);
   group.userData = { objectId: object.id, layer: object.layer };
 
+  // The real model, when this placement names one and it has arrived. It is
+  // added ALONGSIDE a much smaller marker rather than instead of it: the marker
+  // stays the click target and the selection tint, so picking a 12 m building
+  // and picking a pebble feel the same.
+  const modelRef = typeof object.def.modelRef === 'string' ? object.def.modelRef : null;
+  const model = modelRef ? (context.modelFor?.(modelRef) ?? null) : null;
+  if (model) {
+    const modelScale = num(object.def.scale, 1);
+    model.scale.setScalar(modelScale);
+    model.position.y = num(object.def.yOffset, 0);
+    model.rotation.set(
+      num(object.def.tiltX, 0),
+      num(object.def.rotation, 0),
+      num(object.def.tiltZ, 0),
+    );
+    model.userData = { objectId: object.id, layer: object.layer, isModel: true };
+    group.add(model);
+  }
+
   // The marker. Props get their authored scale; everything else gets a size
   // that reads at map scale, because a spawner has no model to be true to.
   const marker = new THREE.Mesh(boxGeometry, solidMaterial(object.layer, selected));
@@ -132,8 +161,12 @@ export const buildObjectView = (
   // The authored proportions, kept separately: the viewport multiplies these by
   // a camera-distance factor so a marker stays clickable from map height, and
   // overwriting the base would turn every marker into a cube.
-  marker.userData = { baseScale: [1.2 * scale, 2.4 * scale, 1.2 * scale] };
-  marker.scale.set(1.2 * scale, 2.4 * scale, 1.2 * scale);
+  const handle = model ? 0.35 : 1;
+  marker.userData = {
+    baseScale: [1.2 * scale * handle, 2.4 * scale * handle, 1.2 * scale * handle],
+  };
+  marker.scale.set(1.2 * scale * handle, 2.4 * scale * handle, 1.2 * scale * handle);
+  if (model && !selected) marker.visible = false;
   marker.position.y = num(object.def.yOffset, 0);
   marker.rotation.y = num(object.def.rotation, 0);
   group.add(marker);

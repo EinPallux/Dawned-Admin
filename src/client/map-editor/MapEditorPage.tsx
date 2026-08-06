@@ -53,6 +53,7 @@ import {
 import { PublishPanel } from './PublishPanel.js';
 import { ObjectStore, mintId } from './object-store.js';
 import { LAYER_COLOR, buildObjectView, type PlacedObject } from './placement.js';
+import { ModelCache } from './model-cache.js';
 
 import {
   DEFAULT_AMBIENCE,
@@ -580,6 +581,30 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
    * only place its true size exists is the definition — without this a node is
    * the one placed thing drawn with no ring.
    */
+  /**
+   * The real baked models. One cache for the page: a model loads once and every
+   * placement that names it redraws, which is what turns the viewport from a
+   * field of coloured boxes into the world the game will show.
+   */
+  const modelCache = useMemo(() => new ModelCache(), []);
+  const [modelsVersion, setModelsVersion] = useState(0);
+  useEffect(() => {
+    let raf = 0;
+    // Coalesce: a town is a dozen models arriving within a second of each other
+    // and each one would otherwise rebuild every marker on screen.
+    const off = modelCache.onLoaded(() => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        setModelsVersion((v) => v + 1);
+      });
+    });
+    void modelCache.init();
+    return () => {
+      cancelAnimationFrame(raf);
+      off();
+    };
+  }, [modelCache]);
+
   const nodeRadii = useMemo(
     () => new Map(nodeChoices.map((node) => [node.id, node.def.radius])),
     [nodeChoices],
@@ -1142,11 +1167,11 @@ export const MapEditorPage = ({ user }: { user: AdminUser }): React.JSX.Element 
         object,
         (x, z) => session.store.heightAt(x, z),
         selectedIds.has(object.id),
-        { nodeRadii },
+        { nodeRadii, modelFor: (ref) => modelCache.instance(ref) },
       );
       session.viewport.setObjectView(object.id, view);
     }
-  }, [objects, selectedIds, hiddenLayers, saveState, nodeRadii]);
+  }, [objects, selectedIds, hiddenLayers, saveState, nodeRadii, modelCache, modelsVersion]);
 
   // --- spawns mode (A3-b) ---------------------------------------------------
   //
