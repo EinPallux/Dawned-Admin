@@ -38,24 +38,54 @@ const fail = (message) => {
 };
 
 /**
- * The zone loot tables the new enemies point at.
- *
- * They ship with ONE `nothing` entry: a table has to exist and be published
- * before an enemy may name it, and what actually falls out of an Ashcrag demon
- * is the item catalogue P12-D authors. A stub is honest — the panel's loot
- * simulator will show a flat "nothing 100 %" until it is filled — where
- * pointing a level-28 demon at the Dawnshore trash table would be wrong content
- * that nobody would notice was wrong.
+ * Readable names for the tables this pass may have to stub. Presentation only —
+ * `author-items.mjs` owns what a table is CALLED once it owns its contents.
  */
-const LOOT_STUBS = [
-  ['loot_emberwood_trash', 'Emberwood — trash'],
-  ['loot_emberwood_gear', 'Emberwood — gear'],
-  ['loot_sungraze_trash', 'Sungraze — trash'],
-  ['loot_sungraze_gear', 'Sungraze — gear'],
-  ['loot_ashcrag_trash', 'Ashcrag — trash'],
-  ['loot_ashcrag_gear', 'Ashcrag — gear'],
-  ['loot_elder_grove', 'Elder Grove'],
-];
+const LOOT_STUB_NAMES = {
+  loot_emberwood_trash: 'Emberwood — trash',
+  loot_emberwood_gear: 'Emberwood — gear',
+  loot_sungraze_trash: 'Sungraze — trash',
+  loot_sungraze_gear: 'Sungraze — gear',
+  loot_ashcrag_trash: 'Ashcrag — trash',
+  loot_ashcrag_gear: 'Ashcrag — gear',
+  loot_elder_grove: 'Elder Grove',
+};
+
+/**
+ * Every loot table the bestiary names — DERIVED from the enemies, never typed.
+ *
+ * A stub ships with ONE `nothing` entry: a table has to exist and be published
+ * before an enemy may name it, and what actually falls out of an Ashcrag demon
+ * is the item catalogue `author-items.mjs` authors in the next step. A stub is
+ * honest — the panel's loot simulator shows a flat "nothing 100 %" until it is
+ * filled — where pointing a level-28 demon at the Dawnshore trash table would be
+ * wrong content nobody would notice was wrong.
+ *
+ * This list used to be typed out, and it covered the seven ZONE tables only.
+ * That held for as long as every other table an enemy named already existed —
+ * which was true in a checkout that had grown through P8 → P9 → P12-D in order,
+ * and false on a freshly-deployed box, where `deploy/WORLD.sh` runs the whole
+ * chain against a database holding only the seed migrations. The six
+ * `loot_boss_*` tables are P12-D's, so the bestiary refused to publish and the
+ * deploy stopped at step 3. Reading the refs off the enemies cannot drift: a new
+ * enemy pointing at a new table is stubbed by the same code that publishes it.
+ */
+const referencedLootTables = () => {
+  const ids = new Set();
+  for (const def of ENEMY_DEFS) {
+    if (def.loot?.tableId) ids.add(def.loot.tableId);
+  }
+  return [...ids].sort();
+};
+
+/** `loot_boss_mushroom_king` → `Boss Mushroom King` — a placeholder, not a name. */
+const stubName = (id) =>
+  LOOT_STUB_NAMES[id] ??
+  id
+    .replace(/^loot_/, '')
+    .split('_')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
 
 const main = async () => {
   console.log(`\nDawned bestiary authoring → ${BASE_URL}\n`);
@@ -75,16 +105,21 @@ const main = async () => {
     return response.json();
   };
 
-  // --- 1 · the zone loot tables the bestiary needs to exist ----------------
+  // --- 1 · the loot tables the bestiary needs to exist ---------------------
   console.log('');
   const liveTables = await (await fetch(`${BASE_URL}/api/loot-tables`, { headers })).json();
   const known = new Set(liveTables.tables.map((row) => row.id));
+  const needed = referencedLootTables();
   let stubbed = 0;
-  for (const [id, name] of LOOT_STUBS) {
+  for (const id of needed) {
     // Never overwrite a table that already carries drops: re-running this after
-    // P12-D fills them in must not empty them again.
+    // the item pass fills them in must not empty them again.
     if (known.has(id)) continue;
-    await put('loot-tables', { id, name, entries: [{ kind: 'nothing', weight: 1 }] });
+    await put('loot-tables', {
+      id,
+      name: stubName(id),
+      entries: [{ kind: 'nothing', weight: 1 }],
+    });
     stubbed++;
   }
   if (stubbed > 0) {
@@ -99,9 +134,11 @@ const main = async () => {
         `loot stub publish refused:\n${(result.problems ?? []).map((p) => `   • ${p}`).join('\n')}`,
       );
     }
-    ok(`${stubbed} zone loot table(s) published as stubs — P12-D fills the drops`);
+    ok(
+      `${stubbed} of ${needed.length} loot table(s) published as stubs — the item pass fills the drops`,
+    );
   } else {
-    ok('every zone loot table already exists');
+    ok(`all ${needed.length} loot table(s) the bestiary names already exist`);
   }
 
   // --- 2 · the bestiary and its camps -------------------------------------
