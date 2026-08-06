@@ -12,5 +12,7 @@
     "allowJs": true,
     "checkJs": false
   },
-  "include": ["./**/*.ts", "../src/shared-ext/**/*.ts"]
+  // `admin-session.mjs` is listed explicitly because the two .ts authoring
+  // scripts import it; the rest of the .mjs scripts stay out of the program.
+  "include": ["./**/*.ts", "./content/admin-session.mjs", "../src/shared-ext/**/*.ts"]
 }

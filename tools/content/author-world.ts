@@ -30,14 +30,11 @@
  * the GAME server on :8081 for the publish's hot reload.
  */
 
-import pg from 'pg';
-import argon2 from 'argon2';
+import { openAdminSession } from './admin-session.mjs';
 import { SEA_LEVEL, WORLD_GEN_PLAN, ZONES } from './world-data.js';
 
 const BASE_URL = process.argv.find((arg) => arg.startsWith('http')) ?? 'http://localhost:8082';
 const SKIP_PUBLISH = process.argv.includes('--no-publish');
-const ACCOUNT = 'zz_admin_smoke';
-const PASSWORD = 'admin-smoke-pass-1';
 const DATABASE_URL = process.env.DATABASE_URL ?? 'postgres://dawned:dawned@127.0.0.1:5432/dawned';
 
 const ok = (message: string): void => {
@@ -81,31 +78,12 @@ const readStream = async (
 const main = async (): Promise<void> => {
   console.log(`\nRaising the Dawnlands through the panel → ${BASE_URL}\n`);
 
-  const db = new pg.Client({ connectionString: DATABASE_URL });
-  await db.connect();
-  const hash = await argon2.hash(PASSWORD, { type: argon2.argon2id });
-  await db.query(
-    `INSERT INTO accounts (name, pass_hash, role) VALUES ($1, $2, 'admin')
-     ON CONFLICT (name) DO UPDATE SET pass_hash = $2, role = 'admin', status = 'active'`,
-    [ACCOUNT, hash],
-  );
-  await db.end();
-
-  const login = await fetch(`${BASE_URL}/api/auth/login`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-dawned-admin': '1' },
-    body: JSON.stringify({ name: ACCOUNT, password: PASSWORD }),
-  });
-  if (!login.ok) fail(`panel login failed (${login.status})`);
-  const cookie = login.headers
-    .getSetCookie()
-    .map((entry) => entry.split(';')[0])
-    .join('; ');
+  const session = await openAdminSession(BASE_URL, DATABASE_URL);
   // Two header sets on purpose. Fastify rejects a body-less request that still
   // announces `content-type: application/json` — the same trap the panel's own
   // `api.ts` fixed for the publish button, and the lock is a body-less POST.
-  const bare = { 'x-dawned-admin': '1', cookie };
-  const headers = { ...bare, 'content-type': 'application/json' };
+  const bare = session.bare;
+  const headers = session.headers;
   ok('panel session open');
 
   // --- 1 · the lock -------------------------------------------------------

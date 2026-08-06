@@ -33,7 +33,11 @@ quests, vendors, zones, curves), and the live server (players, bans, broadcasts,
 > publish — the game hot-loads the new map without a deploy. The whole
 > [MAP_EDITOR.md §7](docs/MAP_EDITOR.md) acceptance scenario now runs end to end in a browser
 > (`node tools/smoke/map-scenario.mjs`): a new islet sculpted out of open water reaches the live
-> game, and the run says out loud which three parts of §7 the game cannot receive yet. Phase
+> game, and the run says out loud which three parts of §7 the game cannot receive yet.
+> **The content scripts take a real login now** (`DAWNED_ADMIN_USER` / `DAWNED_ADMIN_PASS`), because
+> the game's new `deploy/WORLD.sh` runs them on the live server — a published map does not travel in
+> git, so deploying the world means authoring it on the box. They used to create an admin account
+> whose password is written down in this repository. Phase
 > status: [ROADMAP.md](ROADMAP.md) ·
 > what shipped:
 > [CHANGELOG.md](CHANGELOG.md). The game repo's planning docs are the design source of truth for

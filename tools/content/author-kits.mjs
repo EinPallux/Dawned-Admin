@@ -11,13 +11,10 @@
  * game server may be up (reload reported) or down (rows apply at next boot).
  */
 
-import pg from 'pg';
-import argon2 from 'argon2';
+import { openAdminSession } from './admin-session.mjs';
 import { KIT_DEFS } from './kits-data.mjs';
 
 const BASE_URL = process.argv[2] ?? 'http://localhost:8082';
-const ACCOUNT = 'zz_admin_smoke';
-const PASSWORD = 'admin-smoke-pass-1';
 const DATABASE_URL = process.env.DATABASE_URL ?? 'postgres://dawned:dawned@127.0.0.1:5432/dawned';
 
 const ok = (message) => console.log(`✅ ${message}`);
@@ -26,34 +23,11 @@ const fail = (message) => {
   process.exit(1);
 };
 
-const provision = async () => {
-  const db = new pg.Client({ connectionString: DATABASE_URL });
-  await db.connect();
-  const hash = await argon2.hash(PASSWORD, { type: argon2.argon2id });
-  await db.query(
-    `INSERT INTO accounts (name, pass_hash, role) VALUES ($1, $2, 'admin')
-     ON CONFLICT (name) DO UPDATE SET pass_hash = $2, role = 'admin', status = 'active'`,
-    [ACCOUNT, hash],
-  );
-  await db.end();
-};
-
 const main = async () => {
   console.log(`Authoring P5 kits through the panel API → ${BASE_URL}\n`);
-  await provision();
-  ok(`admin account "${ACCOUNT}" provisioned`);
 
-  const login = await fetch(`${BASE_URL}/api/auth/login`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-dawned-admin': '1' },
-    body: JSON.stringify({ name: ACCOUNT, password: PASSWORD }),
-  });
-  if (!login.ok) fail(`panel login failed (${login.status})`);
-  const cookie = login.headers
-    .getSetCookie()
-    .map((entry) => entry.split(';')[0])
-    .join('; ');
-  const headers = { 'content-type': 'application/json', 'x-dawned-admin': '1', cookie };
+  const session = await openAdminSession(BASE_URL, DATABASE_URL);
+  const headers = session.headers;
   ok('panel session open');
 
   let saved = 0;

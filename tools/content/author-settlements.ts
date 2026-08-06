@@ -24,16 +24,13 @@
  * Usage: pnpm world:settle [http://localhost:8082] [--keep-drowned]
  */
 
-import pg from 'pg';
 import { CHUNK_SIZE_M, WORLD_CHUNKS, WORLD_ORIGIN_M } from '@dawned/shared';
-import argon2 from 'argon2';
+import { openAdminSession } from './admin-session.mjs';
 import { BRIDGES } from './world-data.js';
 import { BRIDGE_DRESSING, SETTLEMENTS, SHRINES, buildingWorldPos } from './settlement-data.js';
 
 const BASE_URL = process.argv.find((arg) => arg.startsWith('http')) ?? 'http://localhost:8082';
 const KEEP_DROWNED = process.argv.includes('--keep-drowned');
-const ACCOUNT = 'zz_admin_smoke';
-const PASSWORD = 'admin-smoke-pass-1';
 const DATABASE_URL = process.env.DATABASE_URL ?? 'postgres://dawned:dawned@127.0.0.1:5432/dawned';
 
 const ok = (message: string): void => {
@@ -59,28 +56,9 @@ const ours = (id: string): boolean =>
 const main = async (): Promise<void> => {
   console.log(`\nSettling the Dawnlands → ${BASE_URL}\n`);
 
-  const db = new pg.Client({ connectionString: DATABASE_URL });
-  await db.connect();
-  const hash = await argon2.hash(PASSWORD, { type: argon2.argon2id });
-  await db.query(
-    `INSERT INTO accounts (name, pass_hash, role) VALUES ($1, $2, 'admin')
-     ON CONFLICT (name) DO UPDATE SET pass_hash = $2, role = 'admin', status = 'active'`,
-    [ACCOUNT, hash],
-  );
-  await db.end();
-
-  const login = await fetch(`${BASE_URL}/api/auth/login`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-dawned-admin': '1' },
-    body: JSON.stringify({ name: ACCOUNT, password: PASSWORD }),
-  });
-  if (!login.ok) fail(`panel login failed (${login.status})`);
-  const cookie = login.headers
-    .getSetCookie()
-    .map((entry) => entry.split(';')[0])
-    .join('; ');
-  const bare = { 'x-dawned-admin': '1', cookie };
-  const headers = { ...bare, 'content-type': 'application/json' };
+  const session = await openAdminSession(BASE_URL, DATABASE_URL);
+  const bare = session.bare;
+  const headers = session.headers;
   ok('panel session open');
 
   const lock = await fetch(`${BASE_URL}/api/map/lock`, { method: 'POST', headers: bare });

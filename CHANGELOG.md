@@ -5,6 +5,20 @@ versions track the game's release trains (0.1.0 = tooling that shipped Dawned 0.
 
 ## [Unreleased]
 
+### Changed — content scripts take a real login (2026-08-06)
+
+- `tools/content/admin-session.mjs` replaces eleven inline copies of "mint an admin account, log
+  in, walk away". It reads **`DAWNED_ADMIN_USER` / `DAWNED_ADMIN_PASS`** and touches the `accounts`
+  table only when neither is set — so a run against a real deployment creates nothing, and every
+  row it publishes is attributed to a person in `audit_log`.
+- The old path minted `zz_admin_smoke` with a password that is a literal in a public repository.
+  Fine in a throwaway dev container; a permanent admin back door anywhere else — and the game
+  repo's new `deploy/WORLD.sh` makes "anywhere else" the point, since deploying a world means
+  running these scripts on the live box.
+- The dev fallback is now a **per-run random password** on its own account (`zz_admin_content`,
+  not the smokes' `zz_admin_smoke`), banned when the run ends. The random password is the part
+  that holds: a crash can skip the ban, and what survives is then an account nobody can log into.
+
 ### Added — quest hints are derived from the world, not typed (2026-08-06, game P12-F)
 
 - **`pnpm world:quests`** publishes 20 new quests (28 in 5 chains with P11's eight) and resolves

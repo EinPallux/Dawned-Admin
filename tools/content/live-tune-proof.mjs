@@ -8,13 +8,10 @@
  * Usage: node tools/content/live-tune-proof.mjs [http://localhost:8082]
  */
 
-import pg from 'pg';
-import argon2 from 'argon2';
+import { openAdminSession } from './admin-session.mjs';
 
 const BASE_URL = process.argv[2] ?? 'http://localhost:8082';
 const GAME_URL = 'http://127.0.0.1:8081';
-const ACCOUNT = 'zz_admin_smoke';
-const PASSWORD = 'admin-smoke-pass-1';
 const TARGET = 'ability_warrior_crushing_blow';
 const DATABASE_URL = process.env.DATABASE_URL ?? 'postgres://dawned:dawned@127.0.0.1:5432/dawned';
 
@@ -33,27 +30,8 @@ const gameCoef = async () => {
 };
 
 const main = async () => {
-  const db = new pg.Client({ connectionString: DATABASE_URL });
-  await db.connect();
-  const hash = await argon2.hash(PASSWORD, { type: argon2.argon2id });
-  await db.query(
-    `INSERT INTO accounts (name, pass_hash, role) VALUES ($1, $2, 'admin')
-     ON CONFLICT (name) DO UPDATE SET pass_hash = $2, role = 'admin', status = 'active'`,
-    [ACCOUNT, hash],
-  );
-  await db.end();
-
-  const login = await fetch(`${BASE_URL}/api/auth/login`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-dawned-admin': '1' },
-    body: JSON.stringify({ name: ACCOUNT, password: PASSWORD }),
-  });
-  if (!login.ok) fail(`panel login failed (${login.status})`);
-  const cookie = login.headers
-    .getSetCookie()
-    .map((entry) => entry.split(';')[0])
-    .join('; ');
-  const headers = { 'content-type': 'application/json', 'x-dawned-admin': '1', cookie };
+  const session = await openAdminSession(BASE_URL, DATABASE_URL);
+  const headers = session.headers;
 
   const detail = await (await fetch(`${BASE_URL}/api/abilities/${TARGET}`, { headers })).json();
   const original = detail.published;
