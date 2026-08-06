@@ -19,6 +19,7 @@
 
 import pg from 'pg';
 import { openAdminSession } from './admin-session.mjs';
+import { publishRail } from './publish.mjs';
 import { ENEMY_LOOT, ITEM_DEFS, LOOT_TABLE_DEFS, VENDOR_DEFS } from './item-data.mjs';
 import { DEEP_ITEM_DEFS, DEEP_LOOT_TABLES, DEEP_VENDOR_DEFS } from './item-data-deep.mjs';
 
@@ -93,22 +94,7 @@ const main = async () => {
     `publish diff: ${pending.items.length} items + ${pending.loot.length} tables + ${pending.vendors.length} vendors pending`,
   );
 
-  const publish = await fetch(`${BASE_URL}/api/publish/items`, {
-    method: 'POST',
-    headers,
-    body: '{}',
-  });
-  const result = await publish.json();
-  if (!publish.ok || !result.ok) {
-    fail(`publish refused: ${JSON.stringify(result.problems ?? result, null, 2)}`);
-  }
-  ok(`published ${result.published} content rows`);
-  for (const warning of result.warnings ?? []) console.log(`   ⚠️  ${warning}`);
-  console.log(
-    result.reload.ok
-      ? `✅ game hot-reloaded: ${result.reload.note}`
-      : `⚠️  game not reloaded (${result.reload.note})`,
-  );
+  await publishRail(BASE_URL, headers, 'items', 'item/loot/vendor rows');
 
   const bound = await bindEnemyLoot();
   ok(`${bound} enemy loot binding(s) applied (already-bound rows left alone)`);

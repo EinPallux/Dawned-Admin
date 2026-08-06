@@ -12,6 +12,7 @@
  */
 
 import { openAdminSession } from './admin-session.mjs';
+import { publishRail } from './publish.mjs';
 import { KIT_DEFS } from './kits-data.mjs';
 
 const BASE_URL = process.argv[2] ?? 'http://localhost:8082';
@@ -49,21 +50,7 @@ const main = async () => {
   const entries = (await diff.json()).entries;
   ok(`publish diff: ${entries.length} pending`);
 
-  const publish = await fetch(`${BASE_URL}/api/publish/abilities`, {
-    method: 'POST',
-    headers,
-    body: '{}',
-  });
-  const result = await publish.json();
-  if (!publish.ok || !result.ok) {
-    fail(`publish refused: ${JSON.stringify(result.problems ?? result)}`);
-  }
-  ok(`published ${result.published} abilities`);
-  console.log(
-    result.reload.ok
-      ? `✅ game hot-reloaded: ${result.reload.note}`
-      : `⚠️  game not reloaded (${result.reload.note})`,
-  );
+  await publishRail(BASE_URL, headers, 'abilities', 'abilities');
   console.log('\n⚔️  Kits are live content.\n');
 };
 
