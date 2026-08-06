@@ -461,3 +461,26 @@ root). The service-side fix is the game repo's.
 already contained the previous phase's output.** The game repo's `deploy/WORLD.sh` runs them
 against one that contains only the seed migrations, which is a different program. A run of the
 whole chain against a virgin database is now part of verifying a change to any of them.
+
+**World Settings publishes now, and scripts stop reverting the owner (2026-08-06, game P12-H).**
+The QA sweep the owner asked for before P13 found the panel's oldest hole: **the World Settings page
+could never change the game.** It wrote DRAFT rows and no `/api/publish/world-settings` route
+existed — A0's DoD was the draft round-trip, and `world-settings.ts`'s own header claimed published
+rows changed "exclusively via the A1 publish pipeline" while A1 never wired this surface into it.
+The game reads `status = 'published'`; there were **zero such rows in existence**, so eleven phases
+of `xpRate` and every other lever sat at their compiled-in defaults. Fixed with a transactional rail
+
+- `/ops/reload-content` + a Publish button on the page.
+  Alongside it, **`tools/content/owner-edits.mjs`**: the content scripts now compare each live
+  published row against the hash they recorded when they last wrote it, and keep the owner's version
+  when it differs — naming the skipped rows on screen. Wired into `author-items`, `author-nodes` and
+  `author-quests`, backed by the game's migration 0021, overridable with `--force-authored`. This is
+  what makes the game repo's new automatic world step in `UPDATE.sh` safe: without it, every deploy
+  that touched content would quietly undo the owner's tuning.
+  **The bug worth keeping:** the first version hashed what the script SENT, and this panel `.parse()`s
+  every def on save (defaults filled in), so the stored row is never byte-equal to the posted one —
+  the first clean re-run called **200 rows owner-edited** on an untouched database. `commit()` re-reads
+  the live rows now: the question is "does this still look the way it did when the script last wrote
+  it", so both sides have to be the stored row. Proven over four runs against a real database —
+  adopt 218 → silent re-run → a hand-edited row named and preserved → `--force-authored` restores the
+  authored value. **266 tests green.**
