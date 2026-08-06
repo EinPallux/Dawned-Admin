@@ -19,6 +19,21 @@ versions track the game's release trains (0.1.0 = tooling that shipped Dawned 0.
   not the smokes' `zz_admin_smoke`), banned when the run ends. The random password is the part
   that holds: a crash can skip the ban, and what survives is then an account nobody can log into.
 
+### Fixed — the bestiary stubs every loot table it names, not seven of them (2026-08-06, game P12-H)
+
+- `world:bestiary` publishes a `nothing`-only stub for each loot table its enemies point at, because
+  the enemy publish blocks on an unpublished ref and the drops themselves are the item pass's. That
+  list was **typed out, and covered the seven zone tables only** — which held in a checkout grown
+  through P8 → P9 → P12-D in order, and failed on a freshly deployed box, where the six
+  `loot_boss_*` tables do not exist yet and `deploy/WORLD.sh` runs the whole chain against a
+  database holding nothing but the seed migrations. The deploy stopped at step 3.
+- The set is **derived from `ENEMY_DEFS`** now. A new enemy pointing at a new table is stubbed by the
+  same code that publishes it, so the list cannot go stale again — the same rule the quest hint
+  resolver follows.
+- Reproduced before fixing (the six published rows dropped from a dev database) and verified after:
+  `6 of 18 loot table(s) published as stubs`, the bestiary publishes, and `author-items.mjs` fills
+  all six with their real names and entries.
+
 ### Fixed — a bake that cannot be staged says why (2026-08-06, game P12-H)
 
 - The first real world deploy died on `ENOENT: … mkdir '…/assets_baked/map/map-1786018245.tmp'`,

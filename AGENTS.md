@@ -438,3 +438,26 @@ suites had always passed. `bakeDraft` catches the staging failure now and names 
 errno and the `ReadWritePaths` requirement (+1 test, provoked with ENOTDIR so it behaves the same
 when tests run as root). The service-side fix is the game repo's: the shipped unit grants it, and
 `UPDATE.sh`/`WORLD.sh` install a drop-in on boxes provisioned before it. **265 tests green.**
+
+**Two fresh-box faults came out of the owner's first world deploy (2026-08-06, game P12-H), and
+both were invisible in a checkout that had grown through the phases in order.**
+(1) **`world:bestiary` stubbed a TYPED list of seven zone loot tables.** An enemy publish blocks on
+an unpublished loot ref, so the pass creates `nothing`-only stubs and the item pass fills them —
+but the list named only the zone tables, and the six `loot_boss_*` are P12-D's. On a box holding
+nothing but the seed migrations they do not exist, so the deploy stopped at step 3 with six
+refusals. The set is DERIVED from `ENEMY_DEFS` now: a new enemy pointing at a new table is stubbed
+by the same code that publishes it, which is the quest hint resolver's rule applied to references.
+Reproduced before fixing by dropping the six published rows, and verified after — `6 of 18 …
+published as stubs`, the bestiary publishes, `author-items.mjs` restores all six with their real
+names and entries.
+(2) **`bakeDraft` surfaced a raw `ENOENT`** for a staging directory whose parents plainly existed —
+`dawned-admin.service` runs under `ProtectSystem=strict` on the VPS, so `MAP_DIR` was read-only and
+a recursive `mkdir` into a read-only tree reports ENOENT rather than EROFS. **Map publish had
+therefore never worked on a real box since A2**; a dev container has no sandbox, which is why every
+smoke and both browser suites had always passed. The staging failure names MAP_DIR, the errno and
+the `ReadWritePaths` requirement now (+1 test, provoked with ENOTDIR so it behaves the same as
+root). The service-side fix is the game repo's.
+**The lesson both share: this repo's content scripts had only ever run against a database that
+already contained the previous phase's output.** The game repo's `deploy/WORLD.sh` runs them
+against one that contains only the seed migrations, which is a different program. A run of the
+whole chain against a virgin database is now part of verifying a change to any of them.

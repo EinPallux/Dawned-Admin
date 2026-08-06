@@ -419,6 +419,19 @@ tooling that later passes (nodes, POIs, NPCs) reuse:
       account nobody can log into. The ban must come at the END of a run: `auth.ts` re-checks
       `accounts.status` on every request. Verified both ways against the running panel, including
       the TypeScript entry point (`world:author` regenerated all 1024 chunks through it).
+- [x] **Two fresh-box faults, found by the owner's first world deploy** (2026-08-06, game P12-H).
+      (1) `world:bestiary` stubbed a TYPED list of seven zone loot tables. An enemy publish blocks
+      on an unpublished loot ref, so the pass stubs and the item pass fills — but the six
+      `loot_boss_*` tables are P12-D's, and on a box holding only the seed migrations they do not
+      exist. The deploy stopped at step 3 with six refusals. The set is DERIVED from `ENEMY_DEFS`
+      now, so a new enemy naming a new table is stubbed by the code that publishes it.
+      (2) `bakeDraft` surfaced a raw ENOENT for a staging directory whose parents existed —
+      ProtectSystem=strict made MAP_DIR read-only and a recursive mkdir into a read-only tree
+      reports ENOENT, not EROFS. It names MAP_DIR, the errno and the ReadWritePaths requirement now.
+      **The lesson both share:** these scripts had only ever run against a database that already
+      held the previous phase's output. `deploy/WORLD.sh` runs them against one holding only the
+      seed migrations, which is a different program — so a change to any of them is verified by
+      running the whole chain against a virgin database.
 
 ## A5 — Live Ops (M) — with game P13
 
