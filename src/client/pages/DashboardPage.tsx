@@ -158,14 +158,21 @@ export const DashboardPage = () => {
                 <span className="k">Drafts pending</span>
                 <span className="v">{data.publish.draftsPending}</span>
               </div>
+              {/*
+                This said "the publish pipeline arrives with A1" until
+                2026-08-06 — A1 shipped months ago and every editor has
+                published through it since. A dashboard that describes a
+                future that already happened teaches you to stop reading it.
+              */}
               <div className="ws-help" style={{ marginTop: 6 }}>
                 {data.publish.draftsPending > 0 ? (
                   <>
-                    Pending changes live in <Link to="/content/world-settings">World Settings</Link>
-                    . The validate → diff → publish pipeline arrives with A1.
+                    You have unpublished changes in{' '}
+                    <Link to="/content/world-settings">World Settings</Link>. Publish them there to
+                    put them in the running game.
                   </>
                 ) : (
-                  'No drafts. The publish pipeline (validate → diff → bake) arrives with A1.'
+                  'Everything you have edited is live in the game.'
                 )}
               </div>
             </div>

@@ -500,3 +500,31 @@ ability retuned to cooldown 77777 is named and kept; an enemy's `aggroRadius` se
 `--force-authored` puts the authored 10 back. **A test artifact worth keeping:** the first bestiary
 attempt edited `level`, which that def does not carry at all, so "restore" had no target and the run
 looked broken — the guard was fine, the question had no answer. **266 tests green.**
+
+**The map editor was a diagram, not the world (2026-08-06).** The owner's five pain points, four of
+them fixed here. **Every placed object was a `BoxGeometry(1,1,1)`** in a per-layer colour — a house,
+an oak, a chest and a villager were the same cube — which is the whole of "I was not able to see the
+real map"; the game meanwhile skipped props and scatter entirely, so the two surfaces genuinely
+never showed the same thing. `model-cache.ts` loads the SAME baked glTF files the game client loads,
+from the same manifest, and the marker shrinks to a 35 % handle that hides unless selected so it
+stays the click target without being a box inside the house. **`AssetPicker` + `thumbnailer.ts`**
+answer "No preview of Placeable Assets": tiles render the real model with its real height in metres,
+RENDERED rather than baked (a thumbnail step is a second artifact that goes stale exactly when a
+model is re-baked), framed from each model's own bounding sphere so a cathedral and a pebble both
+fill their tile. **Scatter is a model pick now** — the format really does store a weighted set per
+painted cell, but that is a storage fact and the owner was being asked to author it before painting
+anything; picking a model creates or re-uses a one-entry set, with mixes kept under their own
+heading. **The jargon is gone**: "Put it live", "Build new terrain…", "Check again", and progress in
+sentences. **An always-on line under the toolbar** names the active tool and what the mouse does,
+because on a tool that edits terrain, finding out by clicking is an expensive way to learn.
+**The guard bug caught on the last check before telling the owner to deploy.** `owner-edits.mjs`
+had an "adoption window": a published row with no recorded hash was OVERWRITTEN once and recorded,
+so the first content deploy after shipping the guard would silently revert every panel edit made
+before it — precisely what it exists to prevent, firing on the owner's very next `UPDATE.sh`. The
+first fix (keep the live value, record its hash) survived run 1 and died on run 2, because
+"live == recorded" then reads as "the script wrote this". Measured rather than reasoned: three
+consecutive runs against a real database, with run 2 publishing over what run 1 had protected.
+Rows are marked `adopted:` when first seen live and are never written without `--force-authored`,
+however many times the chain runs — proven over three runs plus a forced one. The deliberate cost:
+shipping a change to a PRE-EXISTING row in a later phase needs the flag, which is the right way
+round. **266 tests green.**

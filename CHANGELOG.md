@@ -5,6 +5,21 @@ versions track the game's release trains (0.1.0 = tooling that shipped Dawned 0.
 
 ## [Unreleased]
 
+### Changed — the map editor shows the real world (2026-08-06)
+
+- **Placed objects are the real models**, not coloured boxes. A house, an oak, a chest and a
+  villager used to be the same cube in a different colour; the editor and the game now show the
+  same thing.
+- **You pick a model by looking at it.** A searchable grid of tiles that render the actual model,
+  each with its real height in metres, replaces a dropdown of slugs.
+- **Scatter is "pick a tree and drag"** — no more building a group first. Mixes are still there,
+  under their own heading, for a forest that wants three trees and a fern.
+- **Plain words instead of pipeline jargon.** "Validate ▸ Publish" is **Put it live**, "Generate…"
+  is **Build new terrain…**, and progress reads "Checking the world", "Working out where players
+  can walk", "Switching the game onto it".
+- **The toolbar always says what the current tool does** and what the mouse will do in it.
+- The dashboard no longer claims the publish pipeline "arrives with A1" — it shipped months ago.
+
 ### Fixed — the panel stops locking you out of itself (2026-08-06)
 
 - **Login limiting counted successful sign-ins.** On one household address the owner and a GM
