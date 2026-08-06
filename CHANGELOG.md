@@ -5,6 +5,19 @@ versions track the game's release trains (0.1.0 = tooling that shipped Dawned 0.
 
 ## [Unreleased]
 
+### Added — quest hints are derived from the world, not typed (2026-08-06, game P12-F)
+
+- **`pnpm world:quests`** publishes 20 new quests (28 in 5 chains with P11's eight) and resolves
+  every hint circle against the live map draft. A step declares WHAT it points at — an enemy, a
+  resource node, a placed object, an NPC, a POI — and the run computes a circle over the densest
+  cluster of real matches. A hint built from the thing it points at cannot point at nothing.
+- Encircling _every_ match produced a **327 m** ring when two camps sat on opposite sides of an
+  isle, so it clusters instead, reports matches left outside, and **fails the run** on a derived
+  radius over 260 m rather than shipping a circle that means "somewhere on this landmass".
+- The same pass **repairs P11's eight pilot quests**, which pointed 420–815 m off after P12 moved
+  every spawner and node under them, and re-points the Weald chain's `zoneId` at the zone that
+  now exists.
+
 ### Added — the world's places and people, placed through this panel (2026-08-06, game P12-F)
 
 - **`pnpm world:places`** resolves 45 POIs, 47 interactables (chests, campfires, signposts, the

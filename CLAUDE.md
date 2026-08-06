@@ -555,7 +555,32 @@ alone so `world:folk` clears it, while `poi`, `interactable` and `prop` are shar
 placement and are upserted by id with the owned ids printed. And the publish cross-checks earn
 their keep — the run caught a `vendor`-role NPC with no `vendorId` (her `F` would have opened
 nothing) and warns, correctly, that eleven new quest givers are named by no quest yet.
-**Still owed on the game side: the ~20 remaining side quests.** **264 tests green here.**
+**264 tests green here.**
+**Game P12-F's quest set closed it (2026-08-06)** — `pnpm world:quests`: 20 new quests published on
+the Quests rail, taking the game to **28 in 5 chains**, and P11's eight pilot quests repaired in
+the same pass. The script's point is the **hint resolver**. A step declares WHAT it points at
+(`{ enemy: … }`, `{ node: … }`, `{ object: … }`, `{ npc: … }`, `{ poi: … }`) and the run resolves
+that against the live map draft — the rows the bake reads — then circles the DENSEST cluster of
+matches. `questHintCoverage` at publish is a backstop; deriving the circle is the fix, because a
+hint built from the thing it points at cannot point at nothing.
+**Clustering, not encircling, is what makes it a hint.** The first version drew one circle around
+every match and produced a **327 m** ring when two camps sat on opposite sides of an isle. Matches
+outside the chosen cluster are reported now, and a derived radius over 260 m fails the run.
+**The repair pass is the finding.** Five of P11's eight quests pointed **420–815 m** from their
+targets — the same failure P11-E documented, arriving by a different road: they were authored
+against the dev island and P12 moved every spawner, node and villager under them. They go through
+the same resolver rather than being re-typed. One was worse than a bad circle: `quest_shore_lost_
+crate` names a crate that P12-B pruned as drowned, so a live quest referenced a placement that did
+not exist — re-placed via `world:places`. The Weald chain's four `zoneId` labels moved to
+`verdant_weald`, which is exactly the edit P11-C wrote down as owed.
+**One thing measured here and NOT fixed (game USER_QUESTIONS Q32):** `bakeDraft`'s
+`orderZones` sorts by polygon area ascending — P12-B's fix for `zoneAt` non-determinism — and that
+is right for containment (the Dawnsea must always lose) and arbitrary for two peer zones that
+overlap at the edges. Dawnshore's ring is 6 % larger than the Weald's where they meet, and that
+overlap contains **Dawnhaven**: the starter town resolves to the level 6–12 zone. Three fixes
+measured; nearest-centroid alone is wrong (it drags 572 of 3 100 land samples into the Dawnsea).
+Recorded rather than patched, because it re-points ambience, discovery and journal headings for the
+whole world at once.
 
 ### Running it locally
 
@@ -571,4 +596,5 @@ pnpm world:bestiary                 # 50 enemies + 124 camps (PUBLISHES content,
 pnpm world:nodes                    # 21 node definitions + 362 placements (PUBLISHES content + a map)
 pnpm world:places                   # 45 POIs + 47 interactables + 68 town props (PUBLISHES a map)
 pnpm world:folk                     # 37 NPC defs + 41 placements (PUBLISHES content + a map)
+pnpm world:quests                   # 20 quests + repairs P11's 8 (PUBLISHES content)
 ```

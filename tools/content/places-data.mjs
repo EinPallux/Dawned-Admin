@@ -139,6 +139,15 @@ const CHESTS = [
   ['ashcrag', 'chest_ash_4', 'Slag-Buried Chest', 340, 295, 'loot_ashcrag_trash'],
   ['ashcrag', 'chest_ash_5', "Prospector's Cache", 25, 350, 'loot_ashcrag_trash'],
   ['elder_grove', 'chest_grove_1', 'The Root Vault', 210, 90, 'loot_elder_grove'],
+  /**
+   * Torv's lost crate — re-placed, because P11's quest still names it.
+   *
+   * The original stood on the dev island and P12-B's drowned-row prune removed
+   * it, which left `quest_shore_lost_crate` pointing at an object that no longer
+   * existed: a live quest nobody could finish, and silent, because a quest step
+   * naming a missing placement is not something any check was looking for.
+   */
+  ['dawnshore', 'chest_shore_lostnet', "Torv's Lost Crate", 130, 415, 'loot_dawnshore_gear'],
 ];
 
 const CAMPFIRES = [

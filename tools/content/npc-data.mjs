@@ -174,7 +174,10 @@ const PEOPLE = [
     'npc_teague',
     'Teague',
     'the forester',
-    'quest_giver',
+    // Flavour, not a quest giver: Hesta already owns the logging story and its
+    // four-part chain, and a second forester with the same complaint and no
+    // work to hand out is a `F` that opens nothing.
+    'villager',
     'mosshollow',
     look('m', 2, 'ranger', 1, 'buzzed', 1, true),
     null,
