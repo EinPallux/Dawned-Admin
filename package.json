@@ -28,7 +28,8 @@
     "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test",
     "world:bestiary": "tsx tools/content/author-bestiary.mjs",
     "world:nodes": "tsx tools/content/author-nodes.mjs",
-    "world:places": "tsx tools/content/author-places.mjs"
+    "world:places": "tsx tools/content/author-places.mjs",
+    "world:folk": "tsx tools/content/author-folk.mjs"
   },
   "dependencies": {
     "@dawned/shared": "file:../Dawned/packages/shared",
