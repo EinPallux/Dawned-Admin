@@ -19,6 +19,21 @@ versions track the game's release trains (0.1.0 = tooling that shipped Dawned 0.
   not the smokes' `zz_admin_smoke`), banned when the run ends. The random password is the part
   that holds: a crash can skip the ban, and what survives is then an account nobody can log into.
 
+### Fixed — publishing an unchanged set is success, in one place (2026-08-06, game P12-H)
+
+- `tools/content/publish.mjs` treats the publish rail's `"nothing to publish"` refusal as success.
+  A draft identical to what is live prunes itself on save, so an empty diff is the NORMAL state of
+  a re-run — and `deploy/WORLD.sh --from N` makes a second pass over an already-published step the
+  ordinary case rather than an edge one. `author-items.mjs` failed the owner's world deploy at
+  step 4 with `publish refused: ["nothing to publish"]` over a catalogue that was already exactly
+  right.
+- Wired into `author-items.mjs`, `author-kits.mjs` and `author-progression.mjs`, which all lacked
+  the guard. `author-nodes.mjs` and `author-quests.mjs` carry equivalent local copies (they were
+  written after the P10-E lesson) and should adopt the module next time they are touched — three
+  copies of one rule is how the typed loot-stub list went stale.
+- Verified against the running panel: first run publishes 152 rows, second run reports
+  `already live, nothing to publish` and exits 0.
+
 ### Fixed — the bestiary stubs every loot table it names, not seven of them (2026-08-06, game P12-H)
 
 - `world:bestiary` publishes a `nothing`-only stub for each loot table its enemies point at, because

@@ -13,6 +13,7 @@
  */
 
 import { openAdminSession } from './admin-session.mjs';
+import { publishRail } from './publish.mjs';
 import { defaultXpCurveEntries } from '@dawned/shared';
 import { SKILL_NODE_DEFS } from './progression-data.mjs';
 
@@ -59,21 +60,7 @@ const main = async () => {
   const pending = await diff.json();
   ok(`publish diff: ${pending.curve.length} curve rows + ${pending.nodes.length} nodes pending`);
 
-  const publish = await fetch(`${BASE_URL}/api/publish/progression`, {
-    method: 'POST',
-    headers,
-    body: '{}',
-  });
-  const result = await publish.json();
-  if (!publish.ok || !result.ok) {
-    fail(`publish refused: ${JSON.stringify(result.problems ?? result)}`);
-  }
-  ok(`published ${result.published} progression rows`);
-  console.log(
-    result.reload.ok
-      ? `✅ game hot-reloaded: ${result.reload.note}`
-      : `⚠️  game not reloaded (${result.reload.note})`,
-  );
+  await publishRail(BASE_URL, headers, 'progression', 'progression rows');
   console.log('\n🌳 The XP curve and all four skill trees are live content.\n');
 };
 
