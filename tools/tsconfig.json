@@ -1,0 +1,16 @@
+{
+  // The content tools are mostly .mjs scripts that talk to the running API, but
+  // `world-preview.ts` runs the real terrain synthesis in memory, so it needs a
+  // project to be typechecked and linted in like everything else.
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "..",
+    "outDir": "../dist/tools",
+    "moduleResolution": "NodeNext",
+    "module": "NodeNext",
+    "types": ["node"],
+    "allowJs": true,
+    "checkJs": false
+  },
+  "include": ["./**/*.ts", "../src/shared-ext/**/*.ts"]
+}

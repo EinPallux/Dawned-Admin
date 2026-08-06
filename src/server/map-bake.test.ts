@@ -22,9 +22,11 @@ import {
   bakeDraft,
   validateDraft,
   isReachable,
+  orderZones,
   reachableFrom,
   type DraftBundle,
 } from './map-bake.js';
+import { layerSchemas } from './map-draft.js';
 import type { DraftChunk, DraftObject } from './map-draft.js';
 
 /** A flat, enabled chunk at `height`. */
@@ -90,6 +92,7 @@ const bundle = (over: Partial<DraftBundle> = {}): DraftBundle => ({
   knownEnemyIds: new Set(['enemy_shore_glub']),
   knownLootTableIds: new Set(['loot_weald_gear']),
   knownNodeIds: new Set(['node_woodcutting_birch']),
+  knownNpcIds: new Set(['npc_marla']),
   knownModelRefs: new Set(['props_chest_a', 'nature_rock_a']),
   ...over,
 });
@@ -207,6 +210,53 @@ describe('placements', () => {
   });
 });
 
+describe('resource nodes belong to a place', () => {
+  // Two chunks side by side, each its own zone: a cluster authored for one and
+  // scattered across the border is the shape of the game P12-E bug, where 39 of
+  // 322 land nodes stood one zone over — a T5 vein in the T4 savanna, and 4 of
+  // the 12 Dawnpetal outside the Grove that exists for them.
+  const here = centreOf(4, 4);
+  const there = centreOf(5, 4);
+  const twoZones = {
+    chunks: [chunk(4, 4), chunk(5, 4)],
+    objects: [zoneOver(4, 4, 'zone_home'), zoneOver(5, 4, 'zone_next')],
+  };
+  const birch = (id: string, at: { x: number; z: number }) =>
+    object('node', { id, nodeId: 'node_woodcutting_birch', x: at.x, z: at.z });
+
+  it('says nothing when every placement of a node stands in one zone', () => {
+    const report = validateDraft(
+      bundle({
+        ...twoZones,
+        objects: [
+          ...twoZones.objects,
+          birch('node_a', here),
+          birch('node_b', { x: here.x + 4, z: here.z }),
+        ],
+      }),
+    );
+    expect(report.warnings.join(' ')).not.toContain('stand outside');
+  });
+
+  it('warns — without blocking — when some of them stray into another zone', () => {
+    const report = validateDraft(
+      bundle({
+        ...twoZones,
+        objects: [
+          ...twoZones.objects,
+          birch('node_a', here),
+          birch('node_b', { x: here.x + 4, z: here.z }),
+          birch('node_c', there),
+        ],
+      }),
+    );
+    expect(report.problems).toEqual([]);
+    const warning = report.warnings.find((line) => line.includes('node_woodcutting_birch'));
+    expect(warning).toContain('1 of 3 placements stand outside zone_home');
+    expect(warning).toContain('1 in zone_next');
+  });
+});
+
 describe('interactables', () => {
   const centre = centreOf(4, 4);
   const chest = (over: Record<string, unknown> = {}) =>
@@ -238,6 +288,76 @@ describe('interactables', () => {
       bundle({ objects: [zoneOver(4, 4), chest({ lootTableId: null })] }),
     );
     expect(report.problems.join(' ')).toContain('needs a lootTableId');
+  });
+});
+
+/**
+ * The draft store and the bake must parse a placement with the SAME schema.
+ *
+ * A2 shipped its own guess at an NPC row (`name` + `modelRef` + a walk routine)
+ * months before P11 defined the real one in `@dawned/shared` (`npcId`, and a
+ * composed appearance instead of a mesh). Each half then validated with the
+ * schema it had, so the editor refused — with a 500 — exactly the row the bake
+ * was written to emit. Nothing typechecked it, because both were real schemas.
+ *
+ * This asserts the property rather than the shapes: a def the BAKE accepts must
+ * survive the DRAFT store, for every layer. It fails the moment either side
+ * grows a field the other does not know about.
+ */
+describe('draft and bake agree on every layer schema', () => {
+  const centre = centreOf(4, 4);
+  const samples: Record<string, Record<string, unknown>> = {
+    npc: { id: 'npc_marla_gate', npcId: 'npc_marla', x: centre.x, z: centre.z, rotation: 0 },
+    node: { id: 'node_birch_0', nodeId: 'node_woodcutting_birch', x: centre.x, z: centre.z },
+    poi: {
+      id: 'poi_gullspit',
+      name: 'Gullspit',
+      kind: 'vista',
+      x: centre.x,
+      z: centre.z,
+      radius: 12,
+    },
+    interactable: {
+      id: 'shrine_haven',
+      kind: 'shrine',
+      name: 'Dawnhaven Shrine',
+      x: centre.x,
+      z: centre.z,
+      modelRef: 'props_chest_a',
+    },
+  };
+
+  for (const [layer, def] of Object.entries(samples)) {
+    it(`accepts a baked ${layer} row in the draft store`, () => {
+      const parsed = layerSchemas[layer as keyof typeof layerSchemas].safeParse(def);
+      expect(parsed.success ? [] : parsed.error.issues.map((i) => i.message)).toEqual([]);
+    });
+  }
+});
+
+describe('npc placements', () => {
+  const centre = centreOf(4, 4);
+  const villager = (over: Record<string, unknown> = {}) =>
+    object('npc', {
+      id: 'npc_marla_gate',
+      npcId: 'npc_marla',
+      x: centre.x,
+      z: centre.z,
+      yOffset: 0,
+      rotation: 0,
+      ...over,
+    });
+
+  it('accepts a placement whose definition is published', () => {
+    const report = validateDraft(bundle({ objects: [zoneOver(4, 4), villager()] }));
+    expect(report.problems).toEqual([]);
+  });
+
+  it('blocks a placement pointing at an NPC nobody published', () => {
+    const report = validateDraft(
+      bundle({ objects: [zoneOver(4, 4), villager({ npcId: 'npc_imaginary' })] }),
+    );
+    expect(report.problems.join(' ')).toContain('is not a published NPC');
   });
 });
 
@@ -304,8 +424,11 @@ describe('reachability', () => {
       bundle({
         chunks: [chunk(4, 4), chunk(8, 8)],
         objects: [
-          zoneOver(4, 4),
-          zoneOver(8, 8, 'zone_far'),
+          // The spawn goes to the STARTER settlement — the lowest level band —
+          // so this names which island that is instead of leaving it to the
+          // order the two zones happen to arrive in.
+          zoneOver(4, 4, 'zone_near', { levelMin: 1, levelMax: 5 }),
+          zoneOver(8, 8, 'zone_far', { levelMin: 20, levelMax: 25 }),
           object('poi', {
             id: 'poi_far',
             name: 'Far Vista',
@@ -325,6 +448,61 @@ describe('reachability', () => {
     );
     expect(report.problems.join(' ')).toContain('poi_far cannot be walked to');
     expect(report.problems.join(' ')).not.toContain('poi_near');
+  });
+
+  it('walks through a portal — it is a way to get somewhere', () => {
+    // WORLD.md §3.6: the Elder Grove is an islet with no causeway, reached by a
+    // long swim or "a one-way ancient portal in Ashcrag". A fill that only walks
+    // the walkgrid refuses every POI, chest and camp on it — the validator
+    // rejecting exactly the design the world doc specifies.
+    const grid = Walkgrid.empty(WalkClass.Blocked);
+    for (let i = 0; i < 10; i++) grid.setClassAtCell(100 + i, 100, WalkClass.Walkable);
+    // A second, entirely disconnected patch 200 m away.
+    for (let i = 0; i < 10; i++) grid.setClassAtCell(300 + i, 300, WalkClass.Walkable);
+    const start = { x: WORLD_ORIGIN_M + 100.5, z: WORLD_ORIGIN_M + 100.5 };
+    const islet = { x: WORLD_ORIGIN_M + 303, z: WORLD_ORIGIN_M + 300 };
+
+    const withoutPortal = reachableFrom(grid, start.x, start.z);
+    expect(isReachable(withoutPortal, islet.x, islet.z)).toBe(false);
+
+    const withPortal = reachableFrom(grid, start.x, start.z, [
+      { x: WORLD_ORIGIN_M + 105, z: WORLD_ORIGIN_M + 100, destX: islet.x, destZ: islet.z },
+    ]);
+    expect(isReachable(withPortal, islet.x, islet.z)).toBe(true);
+  });
+
+  it('ignores a portal whose own mouth cannot be reached', () => {
+    // Otherwise a portal placed inside the sealed area would declare itself the
+    // way in, and the check would pass for content nobody can get to at all.
+    const grid = Walkgrid.empty(WalkClass.Blocked);
+    for (let i = 0; i < 10; i++) grid.setClassAtCell(100 + i, 100, WalkClass.Walkable);
+    for (let i = 0; i < 10; i++) grid.setClassAtCell(300 + i, 300, WalkClass.Walkable);
+    const start = { x: WORLD_ORIGIN_M + 100.5, z: WORLD_ORIGIN_M + 100.5 };
+    const seen = reachableFrom(grid, start.x, start.z, [
+      // Mouth on the FAR patch, destination further out still.
+      {
+        x: WORLD_ORIGIN_M + 305,
+        z: WORLD_ORIGIN_M + 300,
+        destX: WORLD_ORIGIN_M + 500,
+        destZ: WORLD_ORIGIN_M + 500,
+      },
+    ]);
+    expect(isReachable(seen, WORLD_ORIGIN_M + 500, WORLD_ORIGIN_M + 500)).toBe(false);
+  });
+
+  it('chains portals to a fixpoint', () => {
+    const grid = Walkgrid.empty(WalkClass.Blocked);
+    for (const base of [100, 300, 500]) {
+      for (let i = 0; i < 10; i++) grid.setClassAtCell(base + i, base, WalkClass.Walkable);
+    }
+    const at = (n: number) => ({ x: WORLD_ORIGIN_M + n + 3, z: WORLD_ORIGIN_M + n });
+    // Declared out of order on purpose: the second hop is listed FIRST, so a
+    // single pass over the list would miss it.
+    const seen = reachableFrom(grid, WORLD_ORIGIN_M + 100.5, WORLD_ORIGIN_M + 100.5, [
+      { ...at(300), destX: at(500).x, destZ: at(500).z },
+      { ...at(100), destX: at(300).x, destZ: at(300).z },
+    ]);
+    expect(isReachable(seen, at(500).x, at(500).z)).toBe(true);
   });
 });
 
@@ -411,11 +589,33 @@ describe('bakeDraft', () => {
       const placements = placementsFileSchema.parse(
         JSON.parse(await readFile(path.join(dir, 'test-bake', 'placements.json'), 'utf8')),
       );
-      return { result, placements };
+      const meta = JSON.parse(await readFile(path.join(dir, 'test-bake', 'meta.json'), 'utf8')) as {
+        spawn: { x: number; z: number };
+      };
+      return { result, placements, meta };
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
   };
+
+  it('spawns new players in the STARTER settlement, not whichever came first', async () => {
+    // Five zones carry a settlement now. The spawn used to be
+    // `zones.find(z => z.settlement !== null)` over a list in Postgres's
+    // physical row order, so a new character could have woken up in the
+    // level 24–30 mining camp. The rule is the lowest level band.
+    const starter = centreOf(4, 4);
+    const endgame = centreOf(8, 8);
+    const { meta } = await bakeInto({
+      chunks: [chunk(4, 4), chunk(8, 8)],
+      objects: [
+        zoneOver(8, 8, 'zone_ashcrag', { levelMin: 24, levelMax: 30, settlement: 'Rustpick' }),
+        zoneOver(4, 4, 'zone_dawnshore', { levelMin: 1, levelMax: 6, settlement: 'Dawnhaven' }),
+      ],
+    });
+    expect(Math.hypot(meta.spawn.x - starter.x, meta.spawn.z - starter.z)).toBeLessThan(
+      Math.hypot(meta.spawn.x - endgame.x, meta.spawn.z - endgame.z),
+    );
+  });
 
   it('writes a placements file the game can read', async () => {
     const { result, placements } = await bakeInto();
@@ -457,6 +657,31 @@ describe('bakeDraft', () => {
     expect(result.scatterInstances).toBeGreaterThan(0);
   });
 
+  /**
+   * The same class of bug the scatter layer taught, found the same way: the
+   * report COUNTED npcs and the placements file never carried them, so every
+   * villager the editor placed vanished at publish with nothing on screen to
+   * say so. A count is not evidence that a row was written.
+   */
+  it('carries npc placements into the baked placements file', async () => {
+    const centre = centreOf(4, 4);
+    const { placements } = await bakeInto({
+      objects: [
+        zoneOver(4, 4),
+        object('npc', {
+          id: 'npc_marla_gate',
+          npcId: 'npc_marla',
+          x: centre.x,
+          z: centre.z,
+          yOffset: 0,
+          rotation: 2.4,
+        }),
+      ],
+    });
+    expect(placements.npcs).toHaveLength(1);
+    expect(placements.npcs[0]?.npcId).toBe('npc_marla');
+  });
+
   it('leaves no staging directory behind when the bake throws', async () => {
     const dir = await mkdtemp(path.join(tmpdir(), 'dawned-bake-'));
     try {
@@ -475,5 +700,53 @@ describe('bakeDraft', () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('zone priority', () => {
+  const ring = (half: number, id: string) => ({
+    id,
+    polygon: [
+      [-half, -half],
+      [half, -half],
+      [half, half],
+      [-half, half],
+    ] as [number, number][],
+  });
+
+  it('puts the smallest zone first, so a containing zone cannot shadow it', () => {
+    // The Dawnsea covers the whole map and every land zone sits inside it.
+    // `zoneAt` takes the FIRST match, so if the sea came first the whole world
+    // would report as ocean.
+    const sea = ring(1100, 'dawnsea');
+    const isle = ring(400, 'dawnshore');
+    const islet = ring(120, 'elder_grove');
+    expect(orderZones([sea, isle, islet]).map((z) => z.id)).toEqual([
+      'elder_grove',
+      'dawnshore',
+      'dawnsea',
+    ]);
+    // And it does not depend on the order they arrive in — which is exactly
+    // the bug: `listObjects` returns Postgres's physical row order.
+    expect(orderZones([islet, sea, isle]).map((z) => z.id)).toEqual([
+      'elder_grove',
+      'dawnshore',
+      'dawnsea',
+    ]);
+  });
+
+  it('is total — equal areas still get a stable order', () => {
+    const a = { ...ring(400, 'b_zone') };
+    const b = { ...ring(400, 'a_zone') };
+    expect(orderZones([a, b]).map((z) => z.id)).toEqual(['a_zone', 'b_zone']);
+    expect(orderZones([b, a]).map((z) => z.id)).toEqual(['a_zone', 'b_zone']);
+  });
+
+  it('measures area regardless of winding', () => {
+    const cw = ring(100, 'cw');
+    const ccw = { id: 'ccw', polygon: [...cw.polygon].reverse() };
+    // A reversed ring is the same region; a signed area would call one of them
+    // negative and sort it first.
+    expect(orderZones([cw, ccw]).map((z) => z.id)).toEqual(['ccw', 'cw']);
   });
 });

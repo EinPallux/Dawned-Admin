@@ -92,10 +92,10 @@ so an identical draft could never prune. 25 tests green. The whole P8 catalogue 
 live through this surface — 62 items, 5 loot tables, 5 Dawnhaven vendors and the shore/
 weald enemy loot bindings (`tools/content/author-items.mjs`, numbers derived from the
 shared budget formulas) — and the game froze the published result into its seed
-migration 0012. **Current: game P0–P10 are all closed and owner-accepted (P9 + P10 on
-2026-08-05, on their measured DoDs — the game is on protocol v13). P11 — Quests, POIs &
-Interactables is next, which is this panel's A4 (quest & dialogue editor) sync point — the
-next piece of work in this repo.** Phases close on the measured DoD, not on a playtest; all
+migration 0012. **Current: game P0–P11 are all closed on their measured DoDs (P9 + P10 on
+2026-08-05 and owner-accepted; P11 — Quests, POIs & Interactables measured its DoD on
+2026-08-06), and this panel's A4 sync point — the quest & dialogue editor — is BUILT and
+carried the whole P11 pilot set.** Phases close on the measured DoD, not on a playtest; all
 feel/number tuning is one deliberate pass at the end of the project.
 **A1-d — the Enemies editor is live** (2026-08-04, alongside game P9): Content → Enemies
 with bestiary + spawners on one publish rail (they reference each other), the level-banded
@@ -314,6 +314,274 @@ end: `map-editor.mjs` (import → sculpt/undo/redo → paint → overlays → au
 place/inspect/delete → spawn budget + rings → shrines and the travel graph →
 drag/insert/remove a zone corner → validate → clean up after itself) and `map-scenario.mjs`.
 
+**A4 — the quest & dialogue editor is live** (2026-08-05, alongside game P11): Content →
+Quests edits `content_quests` and `content_npcs` on ONE publish rail, because they reference
+each other and shipping them apart guarantees a window where a live quest points at an NPC
+that is not there yet — the same argument enemies and spawners ship on. The validation worth
+naming is the GAME's `validateQuestFlow`, not a copy: a quest this page calls valid and the
+server refuses to load would land at the next server BOOT rather than at the publish button.
+On top of it, the cross-checks a single row cannot make (every NPC, item, enemy and
+prerequisite resolves in the would-be-published set) and four advisory warnings that never
+block: a quest that pays nothing, a chain link nothing unlocks, a giver no quest names, and a
+`zoneId` no zone on the map carries. The **chain graph is built from `prerequisites`, not from
+`chainId`** — the label groups the journal, the prerequisites are what the game gates on, and
+drawing the label would draw a graph that disagrees with the game, which is the same mistake
+the TTK simulator avoids by running `selectableEnemyAbilities`. Rewards ƒ-suggest off the
+shared formulas; the grant-to-GM hook proxies to the game's `/ops/quest` (rule 3).
+`node tools/smoke/quest-editor.mjs` drives it in a browser and cleans up its probe rows in a
+`finally`. **219 tests green** (225 after the hint cross-check below).
+**Game P11-C ran the whole pilot set through this surface** (`tools/content/author-quests.mjs`:
+4 NPCs, 8 quests, then 4 NPC / 7 interactable / 6 POI placements and a map publish the game
+hot-swapped onto), and that run found the bug that mattered: **the map editor and the game
+disagreed about what an NPC placement IS.** A2 shipped a local guess at the row — `name`,
+`modelRef`, a walk `routine` — months before P11 defined the real one in `@dawned/shared`
+(`npcId` + a composed appearance, so no mesh and no patrol state). The draft store and the bake
+then each validated with the schema they had, and the editor refused, with a 500, exactly the
+row the bake was written to emit. Both were real zod schemas, so nothing typechecked; the
+file's own comment already forbade it. `map-bake.test.ts` now asserts the PROPERTY — a def the
+bake accepts must survive the draft store, for every layer — rather than re-checking shapes.
+Two more from the same run: the bake **counted** NPCs and never wrote them (the scatter lesson
+again — a count is not evidence a row was written), and an NPC placement whose definition is
+not published now BLOCKS publish, like a node's.
+**Game P11-D (the client) found one thing that is this panel's business.** All four pilot NPCs
+were authored here with `idleClip: 'Idle'`, and the UAL library's standing-still clip is
+`Idle_Loop` — a composed rig plays NOTHING for a name it does not have, so every villager stood
+in a T-pose until a screenshot caught it. Re-authored and re-published (the game shipped the
+repair as migration 0020 and moved its schema default). Nothing here changed, but it is the
+clearest case yet for a **clip-name check on the NPC form**: publish already refuses a model that
+is not in the baked manifest, and an authored clip that names nothing is the same class of silent
+mistake. Worth doing next time Content → Quests is touched.
+
+**Two script rules this run reinforced.** A content script must be safe to re-run ("nothing to
+publish" is success). And **layer ownership decides whether you may clear**: the `npc` layer is
+the script's alone, so it clears first; `interactable` and `poi` are SHARED with hand placement
+in the editor, so clearing them would delete the owner's shrines — those upsert by id and the
+script prints exactly which ids it owns.
+
+**Game P11-E closed the phase (2026-08-06) and it is the run that found this page's real gap:
+a hint circle nothing had ever compared to the world.** The game's DoD run plays the pilot chain
+with only in-game affordances, so it walks to the circle the map draws — and four of the pilot's
+five kill hints sat **85–170 m outside their only spawner**, while both gather steps had no
+circle at all. Nothing was wrong with either row: the circle is typed on Content → Quests and the
+spawner is placed in the map editor, two pages that had never met. That is exactly the class of
+mistake a cross-check exists for, so publish now resolves each step's REAL targets — spawners for
+a kill, resource-node placements for a gather, NPC/interactable placements for the rest — and
+warns with the distance quoted (`questHintCoverage` went into `@dawned/shared` rather than being
+copied here, for the same reason `fastTravelCost` did: the game's map draws the same circle).
+It **warns rather than blocks**, because §1 rule 4 says the map hints _roughly_ where and a
+deliberately loose circle is a design choice; a circle 170 m off is not. Re-authored and
+re-published through this surface, with two gather hints added and Hesta's prose re-pointed at
+the region the mossbloom actually grows in.
+**One more content rule came out of it, and it belongs on this page too: nothing a quest step
+needs may be one-shot.** The crate and the marked stumps were authored `respawnMs: 0`, so a
+player who opened the crate out of ordinary curiosity before Torv mentioned it could never take
+"The Lost Crate" at all. Spent state is per-character, so a respawn costs nothing; both are
+300 000 ms now. Worth a form-level nudge next time Content → Quests is touched — an interactable
+a quest STEP names with `respawnMs: 0` is a soft-lock the JSON does not look like.
+**225 tests green here** (the hint cross-check added 6 of them); the game side
+finished at 642.
+
+**A2 grew the tool P12 needed: whole-world generation (2026-08-06).** The map editor's island
+button has been there since A2-d and it cannot build the Dawnlands — it generates into the
+RESIDENT region, capped at 13×13 chunks, and the world is 32×32. MAP_EDITOR §2.1 has always said
+the mask synth is what seeds the base world for game P12; this is the half that can do it.
+`GET /api/map/generate-stream` is admin-only, lock-held, checkpointed FIRST and streamed, and it
+rewrites terrain and ONLY terrain — placed objects re-sit on the new heights, which is what §2.1's
+"non-destructive to placed props" means. Two things the per-chunk generator could not do: masks
+COMBINE rather than overwrite, so two overlapping isles make an isthmus instead of the second
+erasing the first; and `carve` masks SUBTRACT, so a strait can sever an isthmus the masks just
+merged. That pairing is what lets a world be 55–60 % land AND have bridges that gate the path.
+Erosion runs over ONE 2049² height field, because the per-chunk pass must skip the border rows
+adjacent chunks SHARE and that leaves an un-eroded lattice every 64 m.
+**A splat rule names a `zoneId` rather than carrying its own ring**, resolved server-side against
+the draft's zone layer: a copied polygon goes stale the first time somebody drags a corner, leaving
+the paint and the region describing different ground. (It is also the only thing that fits — an
+SSE endpoint takes its plan in a URL and six rings of 28 corners is 15 kB.)
+**`pnpm world:preview` is the piece that made the layout tractable**, and it earned its keep on
+the first run. Its flood fill found that **three of five straits severed nothing**: the isles
+joined around the ends of the cuts and one carve had been typed at nearly a right angle to where
+it belonged — while a depth probe at each channel's own centre reported "open water" for all five,
+which was true and completely beside the point. Straits derive their centre, angle and length from
+the two isles they separate now. The preview also caught islets drowned inside their own channel
+and land standing in no zone (which blocks publish), each before a chunk was written.
+**`pnpm world:author` ran it for real:** 1024 chunks written, 766 carrying land, **57.6 % coverage,
+0 unclaimed splat texels** — every figure identical to the preview's offline numbers, which is the
+proof both run one copy of the maths. It stops short of publishing on purpose: the new archipelago
+puts open water where the dev island was, so validation refuses every game-side P8–P11 placement as
+standing on a disabled chunk. Answering that is the game's P12-B onward. **248 tests green.**
+
+**Game P12-B settled the world through this panel (2026-08-06)** — `pnpm world:settle`: 40
+buildings across five settlements, nine shrines, 35 plank sections on the causeways, and a prune
+of the 46 P8–P11 rows the new sea drowned. **The draft validates.** Two new mask kinds went in
+with it: `causeway` (a bridge has to BE ground — the walkgrid only subtracts) and `plateau`
+(levelled, smoothstepped ground, because a house on noise-generated terrain stands on a slope).
+**Two of the three bugs it found were this panel's, and both had been latent since A2.**
+`listObjects` had **no ORDER BY**, so it returned Postgres's physical row order — which changes
+whenever a row is updated. Nothing depended on it while no two zones overlapped; game P12 added
+the Dawnsea, whose ring covers the whole map, and `zoneAt` takes the FIRST match, so an unchanged
+draft could have baked Dawnshore as ocean one publish and not the next. Objects order by id now
+(which also makes two publishes of one draft produce the same bytes, so a diff is readable), and
+`bakeDraft` sorts zones by polygon area ascending — the smaller, more specific zone wins, as a
+property of the data. Ordering them then broke a reachability test, which was the real find:
+`findSpawn` took `zones.find(z => z.settlement !== null)`, fine with one settlement and a coin
+flip with five, so **a new character could have spawned in the level 24–30 mining camp**. The
+starter is the lowest level band now, tested through the bake's own `meta.json`.
+The third was in the content script and is a lesson about coupling: it pruned drowned placements
+by matching `validateDraft`'s prose, and props use a DIFFERENT sentence from nodes and spawners
+("stands on a disabled chunk (it would fall into the sea)" vs "sits on"). It reported success
+while 37 rows sat in the sea. It asks the chunks whether they are enabled now.
+`pnpm world:preview` grew the check that matters for settlements — the ground under every
+building — and it found Dawnhaven's harbour on a 37° slope, Sunwatch's farms on 44°, and a shrine
+in 8 m of ocean, all before a row was written. **259 tests green.**
+
+**Game P12-C ran the whole bestiary through this panel (2026-08-06)** — `pnpm world:bestiary`:
+50 enemies, 7 zone loot-table stubs and **124 camps**, published on the Enemies rail AND written
+into the map's `spawner` layer, because Q23 makes the MAP the owner of where a camp stands and a
+map publish delete-then-inserts that whole published set. Every P4–P9 camp was re-placed: they
+stood on the dev island, which the Dawnlands put under open water.
+**Two pieces of tooling landed with it, and the node/POI/NPC passes reuse both.**
+`tools/content/world-sample.ts` holds ONE in-memory synthesis of the world (the same `synthWorld`
+
+- `erodeField` the generate endpoint runs) so every content script asks the same ground "is there
+  land here, how steep, which landmass, which zone". `tools/content/placement.ts` turns a WISH —
+  zone, bearing from that isle's heart, distance — into a coordinate by spiralling outward until
+  every constraint holds, and it reports WHICH constraint each rejected candidate failed. It is
+  **capped at 120 m on purpose**: an unbounded search always succeeds and quietly moves a camp a
+  third of an isle away, which turns an authored difficulty gradient into scatter and reads as
+  success. Two wishes hit that cap and were fixed rather than absorbed.
+  **The bug that mattered is this panel's, and it had been live since A1-d: the Enemies page's
+  prune-on-match compared the RAW jsonb column.** Postgres normalises key order, so an identical
+  draft could never prune — every re-run of a content script republished the entire bestiary and
+  showed 174 "changes" in a diff review whose only job is to say what changed. The A1-c fix landed
+  on the item and progression editors and this one kept the COMMENT without the code. Parsed against
+  parsed now; a third run of `world:bestiary` reports "50 pruned, nothing to publish", which is what
+  "safe to re-run" is supposed to look like.
+  **A second one was found by the GAME rather than here**: `world:author` wrote its seven zones by
+  id and never cleared the layer, so `ashen_reach` — seeded from the dev island by `import-live` —
+  survived a whole world regeneration and, being a smaller ring, WON inside the savanna and the
+  canyons. Nine camps reported a zone WORLD.md does not have. The game's new `/ops/camps` counts what
+  the world actually seeded per zone; that is the line that showed it, and it is the same shape of
+  evidence as `/ops/respawnnodes` and `/ops/worldobjects`. After the fix the game reports **124
+  spawners, 400 enemies alive, 0 unresolved refs, 0 camps that produced nothing**, per zone identical
+  to this repo's offline placement.
+  **One shared-schema change to pull in:** `enemyDefSchema` gained `tint` (`#rrggbb`, nullable) —
+  the bestiary reuses models across bands and a boss wearing its own minions' mesh is not a boss.
+  The schema-driven form picks it up for free after a rebuild; a colour swatch instead of a text
+  field is worth doing next time the Enemies page is touched, and so is the fact that its TTK sim
+  names COMBAT.md §12's 60–120 s window for WORLD bosses too, where §12 says "zone boss".
+  **259 tests green here.**
+
+**Game P12-D ran the whole item catalogue through this panel (2026-08-06)** —
+`node tools/content/author-items.mjs` now owns T1–T2 _and_ the T3–T5 deep set together: **182 item
+rows, 21 loot tables and 16 vendors** on the Items page's one publish rail, ending at 223 published
+items (the other 41 are P10's gathering materials, which `author-nodes.mjs` owns). It is one script
+because the vendors are the same rows in both files' eyes — the P8 shops were anchored on the dev
+island, so every one of them had to move onto a building the map publish actually placed, and four
+settlements gained their own.
+`item-data-deep.mjs` authors IDENTITY only — name, slot, ilvl, rarity, attribute weights, one line
+of flavour — and every number comes out of the shared §2 formulas, which is the same contract the
+Items page's budget meter previews with. Armour ships as authored SETS rather than per-slot rows.
+Loot nests through per-tier pools so a zone names its gear once, and each boss has its own table
+with **no `nothing` entry at all**, which is what makes "guaranteed Rare+" a property of the data.
+**The bug that mattered is content ownership, and it is this repo's:** `item_material_dawnpetal`
+was authored in BOTH `item-data.mjs` and `node-data.mjs` at different ilvls, so whichever content
+script ran last won. Republishing the item catalogue silently reverted P10-E's re-tiering of
+Dawnpetal from a Dawnshore common to the Elder Grove's T5 rare — and put a "legendary" bloom back
+in a level-3 mob's loot table. Caught by the GAME's gathering-ladder test, not by anything here.
+A content script that republishes rows it does not own is the same class of mistake as a placement
+pass that clears a layer it shares.
+**One shared-schema thing to know:** `equipmentBonus` now returns `pct` and `killGold` as well as
+`stats`/`weapon` — P8's item effects were folded by a server helper nobody called, so every Epic
+and Legendary effect in the game was decoration. They are wired now, and because the fold is in
+shared, any character-sheet surface this panel grows gets the same answer the server fights with.
+**259 tests green here.**
+
+**Game P12-E planted the gathering catalogue through this panel (2026-08-06)** — `pnpm world:nodes`:
+the 21 definitions re-authored and **362 placements** written into the map's `node` layer across all
+six zones, up from 65 on the dev island. The layout lives in `node-clusters.mjs` as **73 wishes**
+(zone, bearing, distance, count, spread) rather than 362 coordinates, resolved by the same
+`placeAll` the camps use, and the per-member ground check reads the DRAFT CHUNKS with a 6-attempt
+retry that shrinks toward the centre — the retry is what makes a shoal land 8 of 8 instead of 3 of 8.
+The game reports **362 nodes, 0 orphans**.
+**The bug that mattered is this panel's tooling, and it is the sharpest example yet of a check that
+stops one level too early.** `placeAll` validates the cluster CENTRE's zone. The members scatter up
+to `spread` metres off that centre and were only ever asked about the GROUND — so **39 of 322 land
+nodes stood in a zone they were never authored for**: 7 ashwood, 5 dawnstone and 5 duskthorn (the
+canyons' T5 band) in the T4 savanna where nothing gates a player from them, and 4 of the 12 Dawnpetal
+in Emberwood — which is exactly the promise game P12-D had just repaired in the DATA, broken again by
+geometry a day later. Nothing was wrong with any single row. The member loop asks the DRAFT's zone
+layer now (not the offline synthesis: the owner can drag a corner, and then the copy is stale),
+ordered exactly as `bakeDraft` orders it, and the retry that already existed absorbed every stray at
+no cost — 362 placed, 0 dropped, per zone 70/70/70/70/70 + 12.
+**It became a publish cross-check, for the same reason `questHintCoverage` did:** the script fix
+protects the script, and the owner places nodes by hand. Publish now warns when one node id's
+placements split across zones, naming the split. A node definition carries a tier and no zone, so
+the panel checks the data against ITSELF rather than inventing a design mapping it would then own.
+Warns, never blocks — two regions can be deliberate, 5 of 19 across a line is not. +2 tests.
+**Two script lessons, both general.** A run must report **where its output STANDS**, not only how
+much of it there is: the per-definition counts were perfect through every broken run, because a
+count cannot see a border. And the offline synthesis is the right source for a wish and the wrong
+source for a verdict — the draft is what the bake reads.
+**One thing that was not this repo's but was found here:** `WORLD_GEN_PLAN.waterLevel` was `null`,
+so every generated chunk declared no water. The game draws a water surface only where a chunk
+declares one, so 42 % of the map was an invisible hole and **no fishing node could be authored at
+all**, because "submerged" means ground below its own chunk's water. Two phases passed without it
+because nothing had needed water to EXIST. **261 tests green here.**
+
+**Game P12-F peopled the world through this panel (2026-08-06)** — `pnpm world:places` and
+`pnpm world:folk`: 45 POIs, 47 interactables, 68 settlement dressing props and 41 NPC placements,
+with 37 NPC definitions on the Quests rail. The game reports **41 NPCs, 61 interactables, 46 POIs,
+0 orphans**. Both scripts resolve WISHES through the same `placeAll` the camps and gathering
+clusters use, and both report **where their output STANDS** (zone by zone, resolved the way
+`bakeDraft` resolves it) rather than only how much of it there is — P12-E's lesson, since a count
+cannot see a border.
+**A vendor NPC's position is not a free choice.** A vendor row carries an `anchor` whose radius is
+the proximity lease the GAME checks before it will open a trade, and the schema's own comment says
+that anchor exists "until P12 places the real NPC". So `world:folk` reads the published anchors and
+stands each shopkeeper on theirs. Put the body anywhere else and `F` offers a trade the server then
+refuses — which looks like it works, which is the worst kind of wrong.
+**The bug that mattered is this panel's, and it is the clearest case yet of a check modelling the
+wrong thing.** Publish refused all five Elder Grove rows as "cannot be walked to from the spawn".
+That was RIGHT — the Grove has no causeway and the ocean around it is disabled chunks — but the
+fix is not to soften the check. `reachableFrom` only walked the walkgrid, and **a portal is a way
+to GET somewhere; that is the whole of what it is**. So the fill was wrong about everything behind
+any portal, and would have refused exactly what WORLD.md §3.6 specifies ("a one-way ancient portal
+in Ashcrag"). It consumes portals as directed edges now, to a fixpoint so they can chain, and only
+once the portal's own mouth is reachable — otherwise a portal sealed inside the far side would
+declare itself the way in. +3 tests. (The content was also authored backwards: the arch had been
+placed in the Grove pointing out. It stands in Ashcrag now.)
+**Two script rules re-confirmed.** Layer ownership still decides clearing: `npc` is the script's
+alone so `world:folk` clears it, while `poi`, `interactable` and `prop` are shared with hand
+placement and are upserted by id with the owned ids printed. And the publish cross-checks earn
+their keep — the run caught a `vendor`-role NPC with no `vendorId` (her `F` would have opened
+nothing) and warns, correctly, that eleven new quest givers are named by no quest yet.
+**264 tests green here.**
+**Game P12-F's quest set closed it (2026-08-06)** — `pnpm world:quests`: 20 new quests published on
+the Quests rail, taking the game to **28 in 5 chains**, and P11's eight pilot quests repaired in
+the same pass. The script's point is the **hint resolver**. A step declares WHAT it points at
+(`{ enemy: … }`, `{ node: … }`, `{ object: … }`, `{ npc: … }`, `{ poi: … }`) and the run resolves
+that against the live map draft — the rows the bake reads — then circles the DENSEST cluster of
+matches. `questHintCoverage` at publish is a backstop; deriving the circle is the fix, because a
+hint built from the thing it points at cannot point at nothing.
+**Clustering, not encircling, is what makes it a hint.** The first version drew one circle around
+every match and produced a **327 m** ring when two camps sat on opposite sides of an isle. Matches
+outside the chosen cluster are reported now, and a derived radius over 260 m fails the run.
+**The repair pass is the finding.** Five of P11's eight quests pointed **420–815 m** from their
+targets — the same failure P11-E documented, arriving by a different road: they were authored
+against the dev island and P12 moved every spawner, node and villager under them. They go through
+the same resolver rather than being re-typed. One was worse than a bad circle: `quest_shore_lost_
+crate` names a crate that P12-B pruned as drowned, so a live quest referenced a placement that did
+not exist — re-placed via `world:places`. The Weald chain's four `zoneId` labels moved to
+`verdant_weald`, which is exactly the edit P11-C wrote down as owed.
+**One thing measured here and NOT fixed (game USER_QUESTIONS Q32):** `bakeDraft`'s
+`orderZones` sorts by polygon area ascending — P12-B's fix for `zoneAt` non-determinism — and that
+is right for containment (the Dawnsea must always lose) and arbitrary for two peer zones that
+overlap at the edges. Dawnshore's ring is 6 % larger than the Weald's where they meet, and that
+overlap contains **Dawnhaven**: the starter town resolves to the level 6–12 zone. Three fixes
+measured; nearest-centroid alone is wrong (it drags 572 of 3 100 land samples into the Dawnsea).
+Recorded rather than patched, because it re-points ambience, discovery and journal headings for the
+whole world at once.
+
 ### Running it locally
 
 ```bash
@@ -322,4 +590,11 @@ pnpm check                          # needs the game repo's migrated local Postg
 node tools/smoke/map-editor.mjs     # the editor's tools, in a real browser
 node tools/smoke/map-scenario.mjs   # MAP_EDITOR §7 — needs the GAME server on :8081,
                                     # and PUBLISHES a map (it leaves the islet live)
+node tools/smoke/quest-editor.mjs   # the quest editor, in a real browser (cleans up after itself)
+node tools/content/author-quests.mjs  # re-author + re-place the P11 pilot set (PUBLISHES a map)
+pnpm world:bestiary                 # 50 enemies + 124 camps (PUBLISHES content, writes the map layer)
+pnpm world:nodes                    # 21 node definitions + 362 placements (PUBLISHES content + a map)
+pnpm world:places                   # 45 POIs + 47 interactables + 68 town props (PUBLISHES a map)
+pnpm world:folk                     # 37 NPC defs + 41 placements (PUBLISHES content + a map)
+pnpm world:quests                   # 20 quests + repairs P11's 8 (PUBLISHES content)
 ```

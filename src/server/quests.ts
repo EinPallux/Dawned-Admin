@@ -1,0 +1,841 @@
+/**
+ * Quest + NPC content editing (A4, alongside game P11) — draft CRUD, diff,
+ * publish, flow validation, the chain graph and the journal preview.
+ *
+ * Same contract as every other content module here: editors write DRAFTS,
+ * publish validates through the SHARED schema the game boots with, cross-checks
+ * the would-be published set, copies in one transaction and hot-reloads the
+ * game. Nothing on this surface can touch a published row directly.
+ *
+ * Quests and NPCs share ONE publish rail because they reference each other —
+ * a quest names its giver, an NPC exists to be talked to — and publishing them
+ * separately would guarantee a window where a live quest points at an NPC that
+ * is not there yet. Enemies and spawners ship together for the same reason.
+ *
+ * The validation worth naming is `validateQuestFlow`, which is the GAME's
+ * function, not a copy. A quest the panel calls valid and the server refuses to
+ * load would be the worst possible split, because the failure would land at the
+ * next server boot rather than at the publish button.
+ */
+
+import { and, eq, inArray } from 'drizzle-orm';
+import {
+  contentEnemies,
+  contentItems,
+  contentNpcs,
+  contentQuests,
+  contentResourceNodes,
+  mapDraftObjects,
+} from '@dawned/shared/schema';
+import {
+  enemyDefSchema,
+  itemDefSchema,
+  npcDefSchema,
+  questDefSchema,
+  questHintCoverage,
+  questItemRefs,
+  questNpcRefs,
+  questTurnInNpc,
+  resourceNodeDefSchema,
+  stepTarget,
+  suggestedQuestGold,
+  suggestedQuestXp,
+  validateNpc,
+  validateQuestFlow,
+  xpToNextDefault,
+  type NpcDef,
+  type QuestDef,
+} from '@dawned/shared';
+import type { Config } from './config.js';
+import { reloadGameContent } from './publish-support.js';
+import type { Db } from './db.js';
+
+interface RowSets<T> {
+  drafts: Map<string, T>;
+  published: Map<string, T>;
+  problems: string[];
+}
+
+const emptySets = <T>(): RowSets<T> => ({
+  drafts: new Map(),
+  published: new Map(),
+  problems: [],
+});
+
+const loadQuestRows = async (db: Db): Promise<RowSets<QuestDef>> => {
+  const rows = await db.select().from(contentQuests);
+  const sets = emptySets<QuestDef>();
+  for (const row of rows) {
+    const parsed = questDefSchema.safeParse(row.def);
+    if (!parsed.success) {
+      if (row.status === 'draft') {
+        const issue = parsed.error.issues[0];
+        sets.problems.push(
+          `${row.id}: ${issue ? `${issue.path.join('.')}: ${issue.message}` : 'invalid'}`,
+        );
+      }
+      continue;
+    }
+    (row.status === 'draft' ? sets.drafts : sets.published).set(row.id, parsed.data);
+  }
+  return sets;
+};
+
+const loadNpcRows = async (db: Db): Promise<RowSets<NpcDef>> => {
+  const rows = await db.select().from(contentNpcs);
+  const sets = emptySets<NpcDef>();
+  for (const row of rows) {
+    const parsed = npcDefSchema.safeParse(row.def);
+    if (!parsed.success) {
+      if (row.status === 'draft') {
+        const issue = parsed.error.issues[0];
+        sets.problems.push(
+          `${row.id}: ${issue ? `${issue.path.join('.')}: ${issue.message}` : 'invalid'}`,
+        );
+      }
+      continue;
+    }
+    (row.status === 'draft' ? sets.drafts : sets.published).set(row.id, parsed.data);
+  }
+  return sets;
+};
+
+/** Draft overlaid on published — what a publish WOULD make live. */
+const overlay = <T>(sets: RowSets<T>): Map<string, T> => {
+  const next = new Map(sets.published);
+  for (const [id, def] of sets.drafts) next.set(id, def);
+  return next;
+};
+
+// ---------------------------------------------------------------------------
+// Listing
+// ---------------------------------------------------------------------------
+
+export interface QuestListEntry {
+  id: string;
+  name: string;
+  zoneId: string;
+  suggestedLevel: number;
+  chainId: string;
+  steps: number;
+  giverKind: string;
+  hasDraft: boolean;
+  hasPublished: boolean;
+  /** Flow problems on THIS row — shown as a red dot in the list. */
+  problems: string[];
+  def: QuestDef;
+}
+
+export const listQuests = async (db: Db): Promise<QuestListEntry[]> => {
+  const sets = await loadQuestRows(db);
+  // The NPC set too, so the list's problem dot can catch the single most
+  // likely authoring mistake — a typo in the giver's id. `validateQuestFlow`
+  // alone is ROW-LOCAL and cannot see it, which meant a quest publish would
+  // refuse looked perfectly healthy in the list until you pressed the button.
+  const npcSets = await loadNpcRows(db);
+  const knownNpcs = overlay(npcSets);
+  const knownQuests = overlay(sets);
+  const out: QuestListEntry[] = [];
+  for (const [id, def] of knownQuests) {
+    const problems = validateQuestFlow(def);
+    for (const npcId of questNpcRefs(def)) {
+      if (!knownNpcs.has(npcId)) problems.push(`unknown npc "${npcId}"`);
+    }
+    for (const questId of def.prerequisites.questIds) {
+      if (!knownQuests.has(questId)) problems.push(`unknown prerequisite "${questId}"`);
+    }
+    out.push({
+      id,
+      name: def.name,
+      zoneId: def.zoneId,
+      suggestedLevel: def.suggestedLevel,
+      chainId: def.chainId,
+      steps: def.steps.length,
+      giverKind: def.giver.kind,
+      hasDraft: sets.drafts.has(id),
+      hasPublished: sets.published.has(id),
+      problems,
+      def,
+    });
+  }
+  // Zone, then level, then name — the order the owner builds a zone in.
+  out.sort(
+    (a, b) =>
+      a.zoneId.localeCompare(b.zoneId) ||
+      a.suggestedLevel - b.suggestedLevel ||
+      a.name.localeCompare(b.name),
+  );
+  return out;
+};
+
+export interface NpcListEntry {
+  id: string;
+  name: string;
+  title: string;
+  role: string;
+  hasDraft: boolean;
+  hasPublished: boolean;
+  problems: string[];
+  def: NpcDef;
+}
+
+export const listNpcs = async (db: Db): Promise<NpcListEntry[]> => {
+  const sets = await loadNpcRows(db);
+  const out: NpcListEntry[] = [];
+  for (const [id, def] of overlay(sets)) {
+    out.push({
+      id,
+      name: def.name,
+      title: def.title,
+      role: def.role,
+      hasDraft: sets.drafts.has(id),
+      hasPublished: sets.published.has(id),
+      problems: validateNpc(def),
+      def,
+    });
+  }
+  out.sort((a, b) => a.role.localeCompare(b.role) || a.name.localeCompare(b.name));
+  return out;
+};
+
+// ---------------------------------------------------------------------------
+// Draft writes
+// ---------------------------------------------------------------------------
+
+/**
+ * Save a draft, pruning it when it matches what is already published.
+ *
+ * The prune compares PARSED defs rather than the raw jsonb column: Postgres
+ * normalises key order, so a byte comparison can never prune an identical
+ * draft (A1-c found that the hard way).
+ */
+export const saveQuestDraft = async (
+  db: Db,
+  def: QuestDef,
+  updatedBy: number,
+): Promise<{ pruned: boolean }> => {
+  const published = await db
+    .select()
+    .from(contentQuests)
+    .where(and(eq(contentQuests.id, def.id), eq(contentQuests.status, 'published')))
+    .limit(1);
+  const live = published[0] ? questDefSchema.safeParse(published[0].def) : null;
+  if (live?.success && JSON.stringify(live.data) === JSON.stringify(def)) {
+    await db
+      .delete(contentQuests)
+      .where(and(eq(contentQuests.id, def.id), eq(contentQuests.status, 'draft')));
+    return { pruned: true };
+  }
+  await db
+    .insert(contentQuests)
+    .values({ id: def.id, status: 'draft', def, updatedBy })
+    .onConflictDoUpdate({
+      target: [contentQuests.id, contentQuests.status],
+      set: { def, updatedBy, updatedAt: new Date() },
+    });
+  return { pruned: false };
+};
+
+export const saveNpcDraft = async (
+  db: Db,
+  def: NpcDef,
+  updatedBy: number,
+): Promise<{ pruned: boolean }> => {
+  const published = await db
+    .select()
+    .from(contentNpcs)
+    .where(and(eq(contentNpcs.id, def.id), eq(contentNpcs.status, 'published')))
+    .limit(1);
+  const live = published[0] ? npcDefSchema.safeParse(published[0].def) : null;
+  if (live?.success && JSON.stringify(live.data) === JSON.stringify(def)) {
+    await db
+      .delete(contentNpcs)
+      .where(and(eq(contentNpcs.id, def.id), eq(contentNpcs.status, 'draft')));
+    return { pruned: true };
+  }
+  await db
+    .insert(contentNpcs)
+    .values({ id: def.id, status: 'draft', def, updatedBy })
+    .onConflictDoUpdate({
+      target: [contentNpcs.id, contentNpcs.status],
+      set: { def, updatedBy, updatedAt: new Date() },
+    });
+  return { pruned: false };
+};
+
+export const discardQuestDraft = async (db: Db, id: string): Promise<boolean> => {
+  const result = await db
+    .delete(contentQuests)
+    .where(and(eq(contentQuests.id, id), eq(contentQuests.status, 'draft')))
+    .returning({ id: contentQuests.id });
+  return result.length > 0;
+};
+
+export const discardNpcDraft = async (db: Db, id: string): Promise<boolean> => {
+  const result = await db
+    .delete(contentNpcs)
+    .where(and(eq(contentNpcs.id, id), eq(contentNpcs.status, 'draft')))
+    .returning({ id: contentNpcs.id });
+  return result.length > 0;
+};
+
+// ---------------------------------------------------------------------------
+// Diff + publish
+// ---------------------------------------------------------------------------
+
+export interface QuestDiff {
+  quests: { added: string[]; changed: string[]; unchanged: string[] };
+  npcs: { added: string[]; changed: string[]; unchanged: string[] };
+}
+
+const diffSet = <T>(
+  sets: RowSets<T>,
+): { added: string[]; changed: string[]; unchanged: string[] } => {
+  const diff = { added: [] as string[], changed: [] as string[], unchanged: [] as string[] };
+  for (const [id, def] of sets.drafts) {
+    const live = sets.published.get(id);
+    if (!live) diff.added.push(id);
+    else if (JSON.stringify(live) !== JSON.stringify(def)) diff.changed.push(id);
+    else diff.unchanged.push(id);
+  }
+  return diff;
+};
+
+export const diffQuests = async (db: Db): Promise<QuestDiff> => ({
+  quests: diffSet(await loadQuestRows(db)),
+  npcs: diffSet(await loadNpcRows(db)),
+});
+
+/**
+ * Everything a hint circle could legitimately be pointing at, resolved from the
+ * placements that actually exist. Assembled by `loadHintWorld`; a plain object
+ * so the cross-checks stay drivable without a database.
+ */
+export interface QuestHintWorld {
+  /** Spawn points per enemy id, from the published spawner rows. */
+  spawns: ReadonlyMap<string, readonly { x: number; z: number }[]>;
+  /** Interactables — matched by id AND by `name`, which is what an objectTag is. */
+  objects: readonly { id: string; name: string; x: number; z: number }[];
+  /** Resource-node placements, already resolved to the items they hand over. */
+  nodes: readonly { itemIds: readonly string[]; x: number; z: number }[];
+  /** NPC placements per npcId. */
+  npcs: ReadonlyMap<string, readonly { x: number; z: number }[]>;
+}
+
+const EMPTY_HINT_WORLD: QuestHintWorld = {
+  spawns: new Map(),
+  objects: [],
+  nodes: [],
+  npcs: new Map(),
+};
+
+/**
+ * Where the thing a step is about actually STANDS.
+ *
+ * A hint circle is the only pointer the world map gives for a kill, collect,
+ * interact or deliver step. It is typed by hand on this page while the thing it
+ * points at is placed somewhere else entirely — spawners on the enemies page,
+ * props and nodes and villagers on the map — so nothing has ever compared the
+ * two, and the P11 pilot set shipped with four kill circles 85–170 m from their
+ * only spawner. You could open the map, walk to the ring and find bare ground.
+ *
+ * Returning `[]` (nothing placed) is deliberately different from returning a
+ * far-away point: the first is "not built yet", the second is "wrong".
+ */
+export const stepHintTargets = (
+  step: QuestDef['steps'][number],
+  world: QuestHintWorld,
+): { x: number; z: number }[] => {
+  switch (step.type) {
+    case 'kill': {
+      if (step.enemyId) return [...(world.spawns.get(step.enemyId) ?? [])];
+      // A tag step wants every spawner that rolls anything carrying the tag,
+      // which the spawner rows cannot answer alone — leave it uncheckable
+      // rather than guess and warn about a circle that is fine.
+      return [];
+    }
+    case 'interact':
+      return world.objects
+        .filter(
+          (object) =>
+            (step.objectId && object.id === step.objectId) ||
+            (step.objectTag && object.name === step.objectTag),
+        )
+        .map((object) => ({ x: object.x, z: object.z }));
+    case 'collect':
+      // Only a GATHER step: "any" or "loot" can come from anywhere, so a circle
+      // on one is a route marker rather than a claim about a location.
+      return step.source === 'gather'
+        ? world.nodes
+            .filter((node) => node.itemIds.includes(step.itemId))
+            .map((node) => ({ x: node.x, z: node.z }))
+        : [];
+    case 'deliver':
+    case 'talk':
+      return [...(world.npcs.get(step.npcId) ?? [])];
+    default:
+      // `explore` defines its own place, and `discover`/`escort` have no
+      // placement to resolve against.
+      return [];
+  }
+};
+
+/**
+ * The cross-checks, factored out so tests can drive them without a database.
+ *
+ * Fatal (publish refuses):
+ *  - the game's own `validateQuestFlow` — an unfinishable quest is worse than a
+ *    missing one, because a player carries it in their journal forever.
+ *  - every NPC a quest names is in the would-be-published NPC set.
+ *  - every item a quest collects, delivers or rewards is a published item.
+ *  - every enemy a KILL step names exists.
+ *  - a chain prerequisite points at a quest that will be live.
+ *
+ * Advisory (publish proceeds and says so):
+ *  - a quest with no rewards at all (QUESTS_POI §1.5 wants gold + XP always).
+ *  - a chain link nothing unlocks — usually a `prerequisites` typo.
+ *  - an NPC nobody talks to.
+ *  - a `zoneId` no zone on the map carries. Advisory rather than fatal because
+ *    quests and the map publish on separate rails and a zone can legitimately
+ *    be sculpted after the quest that names it — but the journal GROUPS by this
+ *    id, so a typo silently files a quest under a heading nothing else uses.
+ *  - a HINT CIRCLE that contains none of the thing its step is about. See
+ *    `stepHintTargets` for why this is the check that most needed writing.
+ */
+export const crossCheckQuests = (
+  quests: ReadonlyMap<string, QuestDef>,
+  npcs: ReadonlyMap<string, NpcDef>,
+  itemIds: ReadonlySet<string>,
+  enemyIds: ReadonlySet<string>,
+  zoneIds: ReadonlySet<string> = new Set(),
+  world: QuestHintWorld = EMPTY_HINT_WORLD,
+): { problems: string[]; warnings: string[] } => {
+  const problems: string[] = [];
+  const warnings: string[] = [];
+
+  for (const def of quests.values()) {
+    problems.push(...validateQuestFlow(def));
+    for (const npcId of questNpcRefs(def)) {
+      if (!npcs.has(npcId)) {
+        problems.push(`${def.id}: names npc "${npcId}", which is not published`);
+      }
+    }
+    for (const itemId of questItemRefs(def)) {
+      if (itemIds.size > 0 && !itemIds.has(itemId)) {
+        problems.push(`${def.id}: references item "${itemId}", which is not a published item`);
+      }
+    }
+    for (const [index, step] of def.steps.entries()) {
+      if (
+        step.type === 'kill' &&
+        step.enemyId &&
+        enemyIds.size > 0 &&
+        !enemyIds.has(step.enemyId)
+      ) {
+        problems.push(`${def.id}: kills "${step.enemyId}", which is not a published enemy`);
+      }
+      const hint = 'hint' in step ? step.hint : null;
+      if (!hint) continue;
+      const coverage = questHintCoverage(hint, stepHintTargets(step, world));
+      // `null` means nothing is placed to compare against — the map draft may
+      // simply not be loaded (tests, a fresh checkout). Silence beats a warning
+      // that fires for everyone the first time they open the page.
+      if (!coverage || coverage.covered) continue;
+      warnings.push(
+        `${def.id} step ${index + 1} (${step.type}): the hint circle at ` +
+          `(${hint.x}, ${hint.z}) r${hint.radius} contains none of what the step is about — ` +
+          `the nearest is ${Math.round(coverage.nearestM)} m away, ` +
+          `${Math.round(coverage.shortfallM)} m outside the ring`,
+      );
+    }
+    for (const questId of def.prerequisites.questIds) {
+      if (!quests.has(questId)) {
+        problems.push(`${def.id}: requires "${questId}", which is not published`);
+      }
+    }
+    if (def.rewards.xp === 0 && def.rewards.gold === 0 && def.rewards.items.length === 0) {
+      warnings.push(`${def.id}: pays nothing — QUESTS_POI §1.5 wants gold + XP on every quest`);
+    }
+    if (zoneIds.size > 0 && !zoneIds.has(def.zoneId)) {
+      warnings.push(
+        `${def.id}: zone "${def.zoneId}" is not a zone on the map — the journal will group it alone`,
+      );
+    }
+    if (def.chainId && def.prerequisites.questIds.length === 0) {
+      const isFirst = [...quests.values()].some((other) =>
+        other.prerequisites.questIds.includes(def.id),
+      );
+      if (!isFirst) {
+        warnings.push(
+          `${def.id}: has a chainId but nothing links to or from it — check prerequisites`,
+        );
+      }
+    }
+  }
+
+  for (const npc of npcs.values()) {
+    problems.push(...validateNpc(npc).filter((line) => !line.includes('will never speak')));
+    warnings.push(...validateNpc(npc).filter((line) => line.includes('will never speak')));
+    // No model gate: an NPC wears the composed PLAYER appearance (body +
+    // outfit + hair), whose pieces are guaranteed baked because the character
+    // creator draws from the same set. The zod enum is the whole check.
+    const talkedTo = [...quests.values()].some((quest) => questNpcRefs(quest).includes(npc.id));
+    if (!talkedTo && npc.role === 'quest_giver') {
+      warnings.push(`${npc.id}: a quest giver no quest names`);
+    }
+  }
+
+  return { problems, warnings };
+};
+
+export interface QuestPublishResult {
+  ok: boolean;
+  publishedQuests: number;
+  publishedNpcs: number;
+  problems: string[];
+  warnings: string[];
+  reload: { ok: boolean; note: string };
+}
+
+const publishedIds = async (
+  db: Db,
+  table: typeof contentItems | typeof contentEnemies,
+  parse: (raw: unknown) => { success: boolean; data?: { id: string } },
+): Promise<Set<string>> => {
+  const rows = await db.select().from(table).where(eq(table.status, 'published'));
+  const ids = new Set<string>();
+  for (const row of rows) {
+    const parsed = parse(row.def);
+    if (parsed.success && parsed.data) ids.add(parsed.data.id);
+  }
+  return ids;
+};
+
+/**
+ * Zone ids the map draft carries, for the advisory `zoneId` check.
+ *
+ * The DRAFT rather than a published bake: the editor's zone layer is what the
+ * next map publish will ship, and an author who has just traced a zone and not
+ * published it yet should not be told their brand-new quest is filed nowhere.
+ * Read straight off the layer — no schema parse, because a malformed zone is
+ * the map publish's problem to report, not this one's.
+ */
+const mapZoneIds = async (db: Db): Promise<Set<string>> => {
+  const rows = await db
+    .select({ def: mapDraftObjects.def })
+    .from(mapDraftObjects)
+    .where(eq(mapDraftObjects.layer, 'zone'));
+  const ids = new Set<string>();
+  for (const row of rows) {
+    const id = (row.def as { id?: unknown }).id;
+    if (typeof id === 'string') ids.add(id);
+  }
+  return ids;
+};
+
+/**
+ * Assemble `QuestHintWorld` from the map draft plus the published spawners.
+ *
+ * The DRAFT for placements, for the same reason `mapZoneIds` reads it: the
+ * editor's layers are what the next map publish will ship, and an author who
+ * has just moved a camp should be checked against where they moved it. Spawners
+ * come from the published `content_spawners` rows, which the map publish
+ * mirrors — the same set the game rolls from.
+ *
+ * Everything is best-effort: a row that will not parse is the map publish's
+ * problem to report, and losing one placement here can only weaken an advisory.
+ */
+const loadHintWorld = async (db: Db): Promise<QuestHintWorld> => {
+  const rows = await db
+    .select({ layer: mapDraftObjects.layer, def: mapDraftObjects.def })
+    .from(mapDraftObjects)
+    .where(inArray(mapDraftObjects.layer, ['spawner', 'node', 'npc', 'interactable']));
+
+  // nodeId → the items that node can hand over, so a `collect` step resolves to
+  // the patches that actually grow the thing rather than to every node.
+  const nodeItems = new Map<string, string[]>();
+  const nodeRows = await db.select().from(contentResourceNodes);
+  for (const row of nodeRows) {
+    const parsed = resourceNodeDefSchema.safeParse(row.def);
+    if (!parsed.success) continue;
+    nodeItems.set(parsed.data.id, [
+      ...parsed.data.yields.map((entry) => entry.itemId),
+      ...parsed.data.procs.map((entry) => entry.itemId),
+    ]);
+  }
+
+  const spawns = new Map<string, { x: number; z: number }[]>();
+  const npcs = new Map<string, { x: number; z: number }[]>();
+  const objects: { id: string; name: string; x: number; z: number }[] = [];
+  const nodes: { itemIds: readonly string[]; x: number; z: number }[] = [];
+
+  for (const row of rows) {
+    const def = row.def as Record<string, unknown>;
+    const x = typeof def.x === 'number' ? def.x : null;
+    const z = typeof def.z === 'number' ? def.z : null;
+    if (x === null || z === null) continue;
+    switch (row.layer) {
+      case 'spawner': {
+        const entries = Array.isArray(def.entries) ? def.entries : [];
+        for (const entry of entries) {
+          const enemyId = (entry as { enemyId?: unknown }).enemyId;
+          if (typeof enemyId !== 'string') continue;
+          spawns.set(enemyId, [...(spawns.get(enemyId) ?? []), { x, z }]);
+        }
+        break;
+      }
+      case 'npc': {
+        const npcId = def.npcId;
+        if (typeof npcId !== 'string') break;
+        npcs.set(npcId, [...(npcs.get(npcId) ?? []), { x, z }]);
+        break;
+      }
+      case 'interactable': {
+        const id = def.id;
+        const name = def.name;
+        if (typeof id !== 'string') break;
+        objects.push({ id, name: typeof name === 'string' ? name : '', x, z });
+        break;
+      }
+      case 'node': {
+        const nodeId = def.nodeId;
+        if (typeof nodeId !== 'string') break;
+        nodes.push({ itemIds: nodeItems.get(nodeId) ?? [], x, z });
+        break;
+      }
+      default:
+        break;
+    }
+  }
+  return { spawns, objects, nodes, npcs };
+};
+
+export const publishQuests = async (db: Db, config: Config): Promise<QuestPublishResult> => {
+  const questSets = await loadQuestRows(db);
+  const npcSets = await loadNpcRows(db);
+  const parseProblems = [...questSets.problems, ...npcSets.problems];
+  if (parseProblems.length > 0) {
+    return {
+      ok: false,
+      publishedQuests: 0,
+      publishedNpcs: 0,
+      problems: parseProblems,
+      warnings: [],
+      reload: { ok: false, note: 'not attempted' },
+    };
+  }
+  if (questSets.drafts.size === 0 && npcSets.drafts.size === 0) {
+    return {
+      ok: false,
+      publishedQuests: 0,
+      publishedNpcs: 0,
+      problems: ['nothing to publish — no quest or NPC drafts'],
+      warnings: [],
+      reload: { ok: false, note: 'not attempted' },
+    };
+  }
+
+  const itemIds = await publishedIds(db, contentItems, (raw) => itemDefSchema.safeParse(raw));
+  const enemyIds = await publishedIds(db, contentEnemies, (raw) => enemyDefSchema.safeParse(raw));
+  const zoneIds = await mapZoneIds(db);
+  const checked = crossCheckQuests(
+    overlay(questSets),
+    overlay(npcSets),
+    itemIds,
+    enemyIds,
+    zoneIds,
+    await loadHintWorld(db),
+  );
+  if (checked.problems.length > 0) {
+    return {
+      ok: false,
+      publishedQuests: 0,
+      publishedNpcs: 0,
+      problems: checked.problems,
+      warnings: checked.warnings,
+      reload: { ok: false, note: 'not attempted' },
+    };
+  }
+
+  await db.transaction(async (tx) => {
+    // NPCs first: a quest that lands before its giver would be live and
+    // unopenable for the width of the transaction. Same order spawners take
+    // behind the bestiary.
+    for (const [id, def] of npcSets.drafts) {
+      await tx
+        .insert(contentNpcs)
+        .values({ id, status: 'published', def })
+        .onConflictDoUpdate({
+          target: [contentNpcs.id, contentNpcs.status],
+          set: { def, updatedAt: new Date() },
+        });
+      await tx
+        .delete(contentNpcs)
+        .where(and(eq(contentNpcs.id, id), eq(contentNpcs.status, 'draft')));
+    }
+    for (const [id, def] of questSets.drafts) {
+      await tx
+        .insert(contentQuests)
+        .values({ id, status: 'published', def })
+        .onConflictDoUpdate({
+          target: [contentQuests.id, contentQuests.status],
+          set: { def, updatedAt: new Date() },
+        });
+      await tx
+        .delete(contentQuests)
+        .where(and(eq(contentQuests.id, id), eq(contentQuests.status, 'draft')));
+    }
+  });
+
+  const reload = await reloadGameContent(config);
+  return {
+    ok: true,
+    publishedQuests: questSets.drafts.size,
+    publishedNpcs: npcSets.drafts.size,
+    problems: [],
+    warnings: checked.warnings,
+    reload,
+  };
+};
+
+// ---------------------------------------------------------------------------
+// Previews (the page's point)
+// ---------------------------------------------------------------------------
+
+/** One node of the chain graph the editor draws. */
+export interface ChainNode {
+  questId: string;
+  name: string;
+  suggestedLevel: number;
+  /** Quests that must be turned in first. */
+  requires: string[];
+  /** Quests this one unlocks. */
+  unlocks: string[];
+}
+
+/**
+ * The chain graph: what unlocks what.
+ *
+ * Built from `prerequisites`, NOT from `chainId` — the chain id is a label for
+ * the journal's grouping, and the ORDER is the prerequisites. Reading the label
+ * instead would draw a graph that disagrees with the gate the game enforces.
+ */
+export const chainGraph = (quests: ReadonlyMap<string, QuestDef>, chainId: string): ChainNode[] => {
+  const members = [...quests.values()].filter(
+    (quest) => quest.chainId === chainId || chainId === '',
+  );
+  return members.map((quest) => ({
+    questId: quest.id,
+    name: quest.name,
+    suggestedLevel: quest.suggestedLevel,
+    requires: quest.prerequisites.questIds,
+    unlocks: members
+      .filter((other) => other.prerequisites.questIds.includes(quest.id))
+      .map((other) => other.id),
+  }));
+};
+
+export interface QuestPreview {
+  questId: string;
+  /** The journal entry as the player will read it. */
+  journal: { name: string; zoneId: string; level: number; prose: string };
+  /** Tracker lines with their counters, as the HUD renders them. */
+  tracker: { text: string; need: number; type: string; hint: boolean; clue: string }[];
+  /** Rewards, with the ƒ-suggested values beside what is authored. */
+  rewards: {
+    xp: number;
+    gold: number;
+    suggestedXp: number;
+    suggestedGold: number;
+    items: { itemId: string; name: string; qty: number }[];
+    choices: { classId: string; itemId: string; name: string }[];
+    title: string;
+  };
+  /** Who gives it and who closes it, resolved to display names. */
+  flow: { giver: string; turnIn: string; gates: string[] };
+  /** Everything wrong with it, from the GAME's own validator. */
+  problems: string[];
+}
+
+/**
+ * Render one quest the way the player will meet it.
+ *
+ * The preview runs against the EDITOR BUFFER the caller passes in, not the
+ * saved row — a preview of the last save lies for exactly one save, which is
+ * how a reward gets doubled (the Professions editor learned this at A1-e).
+ */
+export const previewQuest = (
+  def: QuestDef,
+  npcs: ReadonlyMap<string, NpcDef>,
+  items: ReadonlyMap<string, { name: string }>,
+): QuestPreview => {
+  const nameOf = (npcId: string | null): string =>
+    npcId ? (npcs.get(npcId)?.name ?? `${npcId} (missing)`) : '—';
+  const giver =
+    def.giver.kind === 'npc'
+      ? nameOf(def.giver.npcId)
+      : def.giver.kind === 'board'
+        ? `Board: ${def.giver.boardId}`
+        : def.giver.kind === 'item'
+          ? `Item: ${items.get(def.giver.itemId)?.name ?? def.giver.itemId}`
+          : `Object: ${def.giver.objectId}`;
+  const gates: string[] = [];
+  if (def.prerequisites.level > 1) gates.push(`level ${def.prerequisites.level}`);
+  for (const questId of def.prerequisites.questIds) gates.push(`after ${questId}`);
+  for (const discoveryId of def.prerequisites.discoveryIds) gates.push(`found ${discoveryId}`);
+
+  return {
+    questId: def.id,
+    journal: {
+      name: def.name,
+      zoneId: def.zoneId,
+      level: def.suggestedLevel,
+      prose: def.journalText,
+    },
+    tracker: def.steps.map((step) => ({
+      text: step.trackerText,
+      need: stepTarget(step),
+      type: step.type,
+      hint: step.hint !== null,
+      clue: step.type === 'explore' ? step.clueText : '',
+    })),
+    rewards: {
+      xp: def.rewards.xp,
+      gold: def.rewards.gold,
+      suggestedXp: suggestedQuestXp(def.suggestedLevel, def.steps.length, xpToNextDefault),
+      suggestedGold: suggestedQuestGold(def.suggestedLevel, def.steps.length),
+      items: def.rewards.items.map((entry) => ({
+        itemId: entry.itemId,
+        name: items.get(entry.itemId)?.name ?? entry.itemId,
+        qty: entry.qty,
+      })),
+      choices: def.rewards.choices.map((choice) => ({
+        classId: choice.classId,
+        itemId: choice.itemId,
+        name: items.get(choice.itemId)?.name ?? choice.itemId,
+      })),
+      title: def.rewards.title,
+    },
+    flow: { giver, turnIn: nameOf(questTurnInNpc(def)), gates },
+    problems: validateQuestFlow(def),
+  };
+};
+
+/** Everything the preview endpoint needs, loaded once. */
+export const previewContext = async (
+  db: Db,
+): Promise<{
+  npcs: Map<string, NpcDef>;
+  items: Map<string, { name: string }>;
+  quests: Map<string, QuestDef>;
+}> => {
+  const npcSets = await loadNpcRows(db);
+  const questSets = await loadQuestRows(db);
+  const itemRows = await db.select().from(contentItems).where(eq(contentItems.status, 'published'));
+  const items = new Map<string, { name: string }>();
+  for (const row of itemRows) {
+    const parsed = itemDefSchema.safeParse(row.def);
+    if (parsed.success) items.set(parsed.data.id, { name: parsed.data.name });
+  }
+  return { npcs: overlay(npcSets), items, quests: overlay(questSets) };
+};

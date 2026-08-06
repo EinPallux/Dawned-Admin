@@ -20,6 +20,17 @@
 import pg from 'pg';
 import argon2 from 'argon2';
 import { ENEMY_LOOT, ITEM_DEFS, LOOT_TABLE_DEFS, VENDOR_DEFS } from './item-data.mjs';
+import { DEEP_ITEM_DEFS, DEEP_LOOT_TABLES, DEEP_VENDOR_DEFS } from './item-data-deep.mjs';
+
+// One script owns the WHOLE catalogue: T1–T2 shipped with P8, T3–T5 with
+// P12-D, and the vendors are the same rows in both files' eyes — the P8 shops
+// were anchored on the dev island and every one of them had to move.
+const ALL_ITEMS = [...ITEM_DEFS, ...DEEP_ITEM_DEFS];
+const ALL_TABLES = [...LOOT_TABLE_DEFS, ...DEEP_LOOT_TABLES];
+const ALL_VENDORS = [
+  ...VENDOR_DEFS.filter((v) => !DEEP_VENDOR_DEFS.some((d) => d.id === v.id)),
+  ...DEEP_VENDOR_DEFS,
+];
 
 const BASE_URL = process.argv[2] ?? 'http://localhost:8082';
 const ACCOUNT = 'zz_admin_smoke';
@@ -92,14 +103,14 @@ const main = async () => {
     if (!response.ok) fail(`${path} draft ${def.id} rejected: ${await response.text()}`);
   };
 
-  for (const def of ITEM_DEFS) await put('items', def);
-  ok(`${ITEM_DEFS.length} items saved as drafts (validated by the shared schema)`);
+  for (const def of ALL_ITEMS) await put('items', def);
+  ok(`${ALL_ITEMS.length} items saved as drafts (validated by the shared schema)`);
 
-  for (const def of LOOT_TABLE_DEFS) await put('loot-tables', def);
-  ok(`${LOOT_TABLE_DEFS.length} loot tables saved as drafts`);
+  for (const def of ALL_TABLES) await put('loot-tables', def);
+  ok(`${ALL_TABLES.length} loot tables saved as drafts`);
 
-  for (const def of VENDOR_DEFS) await put('vendors', def);
-  ok(`${VENDOR_DEFS.length} vendors saved as drafts`);
+  for (const def of ALL_VENDORS) await put('vendors', def);
+  ok(`${ALL_VENDORS.length} vendors saved as drafts`);
 
   const diff = await fetch(`${BASE_URL}/api/publish/items/diff`, { headers });
   const pending = await diff.json();

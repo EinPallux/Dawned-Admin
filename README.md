@@ -5,14 +5,28 @@ developers and admins edit _everything_ about the game through a friendly UI: th
 (a full 3D map editor), every database-driven piece of content (items, enemies, abilities, loot,
 quests, vendors, zones, curves), and the live server (players, bans, broadcasts, metrics).
 
-> **Status (2026-08-05): A0 closed, A1 in progress, A2 and A3 built** — the panel shell, auth
+> **Status (2026-08-06): A0 closed, A1 in progress, A2, A3 and A4 built** — the panel shell, auth
 > against game accounts (gm/admin), the live dashboard and schema-driven World Settings shipped in
 > A0; A1 has the publish pipeline plus the **Abilities**, **Progression** (XP curve + skill trees),
 > **Items / Loot / Vendors**, **Enemies** (bestiary + spawners + a time-to-kill simulator) and
 > **Professions** (resource nodes with a gathering preview that rolls through the game's own
 > roller) editors live, and every ability, node and item the game runs was authored through them.
-> Remaining A1 editors (zones, NPCs…) land with the game phases that consume them — next up is
-> **A4** (quests & dialogue), since the game closed P10 on 2026-08-05 and moves to P11. **The Map
+> Remaining A1 editors (zones…) land with the game phases that consume them. **A4 — the quest &
+> dialogue editor — is live**: quests and NPCs on one publish rail, validated by the game's own
+> `validateQuestFlow`, with a journal preview, a chain graph built from prerequisites, ƒ-suggested
+> rewards and a grant-to-GM test hook. The game's whole P11 pilot set was authored through it —
+> 4 NPCs, 8 quests, and the placements that put them in the world — and publish now also checks
+> that a step's **hint circle actually contains the thing it points at**, quoting the distance
+> when it does not (four of the pilot's kill hints were 85–170 m off their only spawner: the
+> circle is typed here, the spawner is placed in the map editor, and nothing had compared them).
+> The game's P12 world was built entirely through this panel: the Dawnlands generated whole-world
+> from island masks, five settlements and nine shrines placed, and **50 enemy types across 124
+> camps** — each camp resolved against the real terrain by `pnpm world:bestiary` rather than typed
+> as a coordinate, then counted back out of the running game. `pnpm world:nodes` did the same for
+> the gathering catalogue: **362 resource nodes** across all six zones, every one of the 21
+> definitions with a place to stand, and publish now warns when one node id's placements straddle
+> a zone border — the check that caught 39 nodes standing in a region they were never authored for.
+> **The Map
 > Editor is done**: open the island in 3D, sculpt and paint it, generate a new one, scatter a
 > forest, place props, camps, discovery points, chests and shrines, keep a group as a reusable
 > prefab, draw a zone and re-shape one you already drew corner by corner, then validate and

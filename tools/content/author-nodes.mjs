@@ -28,8 +28,18 @@
 
 import pg from 'pg';
 import argon2 from 'argon2';
-import { CHUNK_SIZE_M, WORLD_ORIGIN_M } from '@dawned/shared';
-import { ITEM_DEFS, NODE_CLUSTERS, NODE_DEFS } from './node-data.mjs';
+import { CHUNK_SIZE_M, WORLD_CHUNKS, WORLD_ORIGIN_M, pointInPolygon } from '@dawned/shared';
+import { ITEM_DEFS, NODE_DEFS } from './node-data.mjs';
+import { buildNodeClusters } from './node-clusters.mjs';
+
+/**
+ * Cluster centres are RESOLVED against the real height field (P12-E), not typed:
+ * the P10 list was hand-placed on the dev island and the Dawnlands put open
+ * water there. The per-node ground check further down still gets the last word
+ * on each individual tree, because it reads the DRAFT CHUNKS — the authority on
+ * what was actually written — where this reads the synthesis.
+ */
+const NODE_CLUSTERS = buildNodeClusters();
 
 const BASE_URL = process.argv.find((arg) => arg.startsWith('http')) ?? 'http://localhost:8082';
 const SKIP_MAP = process.argv.includes('--no-map');
@@ -200,33 +210,69 @@ const main = async () => {
   // publish will bake, and a script that consulted a different source could
   // plant a forest the editor does not agree exists.
 
-  // One call per cluster would be dozens of round trips; the clusters all sit
-  // inside the shipped island, so a single wide pull covers them.
+  // The P10 clusters all sat on one island and a single wide pull covered them.
+  // P12's do not — they span the whole 32×32 world — so this walks the region
+  // in bands: the endpoint clamps its bounds to the world (a `maxCy` of 32 is a
+  // 500, which is exactly how this was found) and 1024 chunks of Float32 heights
+  // in one response is ~23 MB of base64 nobody needs at once.
   const chunkOf = (metres) => Math.floor((metres - WORLD_ORIGIN_M) / CHUNK_SIZE_M);
+  const clamp = (value) => Math.min(WORLD_CHUNKS - 1, Math.max(0, value));
   const cxs = NODE_CLUSTERS.map((c) => chunkOf(c.x));
   const cys = NODE_CLUSTERS.map((c) => chunkOf(c.z));
-  const bounds = {
-    minCx: Math.max(0, Math.min(...cxs) - 1),
-    minCy: Math.max(0, Math.min(...cys) - 1),
-    maxCx: Math.max(...cxs) + 1,
-    maxCy: Math.max(...cys) + 1,
-  };
-  const query = new URLSearchParams(Object.entries(bounds).map(([k, v]) => [k, String(v)]));
-  const regionResponse = await fetch(`${BASE_URL}/api/map/chunks?${query}`, { headers });
-  if (!regionResponse.ok) fail(`map chunk fetch failed (${regionResponse.status})`);
-  const region = await regionResponse.json();
-  const chunks = new Map(
-    region.chunks.map((chunk) => [
-      `${chunk.cx},${chunk.cy}`,
-      {
+  const minCx = clamp(Math.min(...cxs) - 1);
+  const maxCx = clamp(Math.max(...cxs) + 1);
+  const minCy = clamp(Math.min(...cys) - 1);
+  const maxCy = clamp(Math.max(...cys) + 1);
+  const chunks = new Map();
+  for (let bandStart = minCy; bandStart <= maxCy; bandStart += 4) {
+    const bandEnd = Math.min(maxCy, bandStart + 3);
+    const query = new URLSearchParams({
+      minCx: String(minCx),
+      maxCx: String(maxCx),
+      minCy: String(bandStart),
+      maxCy: String(bandEnd),
+    });
+    const regionResponse = await fetch(`${BASE_URL}/api/map/chunks?${query}`, { headers });
+    if (!regionResponse.ok) {
+      fail(`map chunk fetch failed (${regionResponse.status}) for rows ${bandStart}–${bandEnd}`);
+    }
+    const region = await regionResponse.json();
+    for (const chunk of region.chunks) {
+      chunks.set(`${chunk.cx},${chunk.cy}`, {
         ...chunk,
         // The wire carries heights as base64 Float32 — the same bytes the
         // editor decodes, so this reads exactly what the viewport draws.
         heights: new Float32Array(Buffer.from(chunk.heights, 'base64').buffer.slice(0)),
-      },
-    ]),
-  );
+      });
+    }
+  }
   ok(`pulled ${chunks.size} draft chunks around the clusters`);
+
+  // The DRAFT's zones, not the synthesis's — same argument as the chunks above.
+  // `world:author` writes these rings from `world-data.ts`, but the owner can
+  // drag a corner afterwards, and then the offline copy is stale while this is
+  // what the bake will read.
+  const zoneResponse = await fetch(`${BASE_URL}/api/map/objects?layers=zone`, { headers });
+  if (!zoneResponse.ok) fail(`zone fetch failed (${zoneResponse.status})`);
+  const zoneRings = (await zoneResponse.json()).objects.map((row) => row.def);
+  if (zoneRings.length === 0)
+    fail('the map draft carries no zones — run `pnpm world:author` first');
+  // Smallest ring first, ties on id: `bakeDraft`'s `orderZones` rule, so "which
+  // zone is this tree in?" gets ONE answer across the script and the bake. The
+  // Dawnsea's ring covers the whole map, so without this every land node would
+  // resolve to the ocean.
+  const ringArea = (polygon) => {
+    let sum = 0;
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+      sum += polygon[j][0] * polygon[i][1] - polygon[i][0] * polygon[j][1];
+    }
+    return Math.abs(sum) / 2;
+  };
+  zoneRings.sort(
+    (a, b) => ringArea(a.polygon) - ringArea(b.polygon) || String(a.id).localeCompare(String(b.id)),
+  );
+  const zoneAt = (x, z) => zoneRings.find((ring) => pointInPolygon(x, z, ring.polygon))?.id ?? null;
+  ok(`pulled ${zoneRings.length} draft zones (smallest ring first, as the bake orders them)`);
 
   /** Sample the DRAFT's ground: height + this chunk's water level, or null. */
   const groundAt = (x, z) => {
@@ -242,13 +288,23 @@ const main = async () => {
     return { height: chunk.heights[iz * verts + ix], water: chunk.waterLevel };
   };
 
-  /** Does this spot suit the cluster? Wet for a shoal, dry and gentle else. */
+  /**
+   * Does this spot suit the cluster? Wet for a shoal, dry and gentle else —
+   * and, for anything on land, INSIDE the zone the cluster was wished into.
+   *
+   * The zone is not decoration: PROFESSIONS §4 gives each zone a tier band, so
+   * a node standing one zone over is a T5 vein a level-19 player can walk up to
+   * in the T4 savanna. Water clusters are exempt because open water is the
+   * Dawnsea by definition — a shoal off Dawnshore's beach legitimately falls
+   * inside Dawnshore's ring, which reaches out over the sea.
+   */
   const suits = (cluster, x, z) => {
     const ground = groundAt(x, z);
     if (!ground) return false;
     const submerged = ground.water !== null && ground.height < ground.water;
     if (cluster.water) return submerged;
     if (submerged) return false;
+    if (zoneAt(x, z) !== cluster.zone) return false;
     const around = [
       groundAt(x + 2, z),
       groundAt(x - 2, z),
@@ -281,7 +337,7 @@ const main = async () => {
   };
 
   const placements = [];
-  const rejected = { offMap: 0, wetLand: 0, dryWater: 0, steep: 0 };
+  const rejected = { offMap: 0, wetLand: 0, dryWater: 0, steep: 0, zone: 0 };
   const homeless = [];
   let nudged = 0;
   NODE_CLUSTERS.forEach((hint, clusterIndex) => {
@@ -293,50 +349,77 @@ const main = async () => {
     if (settled.moved > 0) nudged++;
     const cluster = { ...hint, x: settled.x, z: settled.z };
     for (let member = 0; member < cluster.count; member++) {
-      const angle = jitter(clusterIndex + 1, member * 3 + 1) * Math.PI * 2;
-      const distance = Math.sqrt(jitter(clusterIndex + 1, member * 3 + 2)) * cluster.spread;
-      const x = Math.round((cluster.x + Math.cos(angle) * distance) * 100) / 100;
-      const z = Math.round((cluster.z + Math.sin(angle) * distance) * 100) / 100;
-      const ground = groundAt(x, z);
-      if (!ground) {
-        rejected.offMap++;
+      // Try the member's own spot, then a few re-jitters pulling steadily
+      // closer to the cluster centre — which the resolver already verified.
+      // Without this a shoal loses half its spots to the shoreline it sits
+      // next to, and the count silently comes out at 3 of 8.
+      let chosen = null;
+      let why = null;
+      for (let attempt = 0; attempt < 6 && !chosen; attempt++) {
+        const salt = member * 3 + attempt * 97;
+        const angle = jitter(clusterIndex + 1, salt + 1) * Math.PI * 2;
+        const shrink = 1 - attempt * 0.15;
+        const distance = Math.sqrt(jitter(clusterIndex + 1, salt + 2)) * cluster.spread * shrink;
+        const x = Math.round((cluster.x + Math.cos(angle) * distance) * 100) / 100;
+        const z = Math.round((cluster.z + Math.sin(angle) * distance) * 100) / 100;
+        const ground = groundAt(x, z);
+        if (!ground) {
+          why = 'offMap';
+          continue;
+        }
+        const submerged = ground.water !== null && ground.height < ground.water;
+        if (cluster.water && !submerged) {
+          why = 'dryWater';
+          continue;
+        }
+        if (!cluster.water && submerged) {
+          why = 'wetLand';
+          continue;
+        }
+        // Slope check: a tree on a 45° face reads as stuck through the hill.
+        const around = [
+          groundAt(x + 2, z),
+          groundAt(x - 2, z),
+          groundAt(x, z + 2),
+          groundAt(x, z - 2),
+        ].filter(Boolean);
+        const drop = Math.max(...around.map((g) => Math.abs(g.height - ground.height)), 0);
+        if (!cluster.water && drop > 3.5) {
+          why = 'steep';
+          continue;
+        }
+        // The centre is in the right zone; a member scattered `spread` metres
+        // off it need not be. This was 39 of 322 land nodes across the world —
+        // whole handfuls of Ashcrag's T5 veins standing in Sungraze, and 4 of
+        // the 12 Dawnpetal, the bloom the Elder Grove exists for, growing in
+        // Emberwood. The shrinking retry above is the fix: it pulls a stray
+        // back toward a centre already known to be inside the ring.
+        if (!cluster.water && zoneAt(x, z) !== cluster.zone) {
+          why = 'zone';
+          continue;
+        }
+        chosen = { x, z, salt };
+      }
+      if (!chosen) {
+        rejected[why ?? 'offMap']++;
         continue;
       }
-      const submerged = ground.water !== null && ground.height < ground.water;
-      if (cluster.water && !submerged) {
-        rejected.dryWater++;
-        continue;
-      }
-      if (!cluster.water && submerged) {
-        rejected.wetLand++;
-        continue;
-      }
-      // Slope check: a tree on a 45° face reads as stuck through the hill.
-      const around = [
-        groundAt(x + 2, z),
-        groundAt(x - 2, z),
-        groundAt(x, z + 2),
-        groundAt(x, z - 2),
-      ].filter(Boolean);
-      const drop = Math.max(...around.map((g) => Math.abs(g.height - ground.height)), 0);
-      if (!cluster.water && drop > 3.5) {
-        rejected.steep++;
-        continue;
-      }
+      const { x, z, salt } = chosen;
       placements.push({
         id: `node_${clusterIndex}_${member}`,
         nodeId: cluster.nodeId,
         x,
         z,
-        rotation: Math.round(jitter(clusterIndex + 1, member * 3 + 3) * 628) / 100,
-        scale: Math.round((0.85 + jitter(clusterIndex + 1, member * 7 + 5) * 0.4) * 100) / 100,
+        rotation: Math.round(jitter(clusterIndex + 1, salt + 3) * 628) / 100,
+        scale: Math.round((0.85 + jitter(clusterIndex + 1, salt + 5) * 0.4) * 100) / 100,
       });
     }
   });
   ok(
     `${placements.length} placements survived the ground check ` +
       `(${nudged} cluster(s) nudged onto suitable ground; dropped: ${rejected.offMap} off-map, ` +
-      `${rejected.wetLand} in water, ${rejected.dryWater} on land, ${rejected.steep} too steep)`,
+      `${rejected.wetLand} in water, ${rejected.dryWater} on land, ${rejected.steep} too steep, ` +
+      `${rejected.zone} outside their zone)`,
   );
   if (homeless.length > 0) {
     fail(
@@ -420,6 +503,18 @@ const main = async () => {
   console.log('\nPlanted:');
   for (const [nodeId, count] of [...counts].sort())
     console.log(`   ${String(count).padStart(3)} × ${nodeId}`);
+
+  // Where they actually STAND, resolved the way the bake resolves it. A count
+  // per definition says the catalogue is complete; this says the tier ladder is
+  // where the design put it, which is the part geometry can quietly break.
+  const perZone = new Map();
+  for (const placement of placements) {
+    const zone = zoneAt(placement.x, placement.z) ?? 'NO ZONE';
+    perZone.set(zone, (perZone.get(zone) ?? 0) + 1);
+  }
+  console.log('\nStanding in:');
+  for (const [zone, count] of [...perZone].sort((a, b) => b[1] - a[1]))
+    console.log(`   ${String(count).padStart(3)} in ${zone}`);
   console.log('\n🌿 The gathering catalogue is live content.\n');
 };
 

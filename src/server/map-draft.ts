@@ -26,6 +26,7 @@ import {
   chunkIndexOf,
   interactableSchema,
   nodePlacementSchema,
+  npcPlacementSchema,
   poiSchema,
   propPlacementSchema,
   scatterSetSchema,
@@ -85,25 +86,19 @@ export const scatterPatchSchema = z
  * `content_resource_nodes`, and this says only which definition and where.
  */
 
-/** NPC placement with a walk routine (P11 quests consume these). */
-export const npcPlacementSchema = z
-  .object({
-    id: z.string().min(3).max(64),
-    name: z.string().min(1).max(64),
-    modelRef: z.string().min(1).max(64),
-    x: z.number(),
-    z: z.number(),
-    rotation: z.number().default(0),
-    idleClip: z.string().max(64).default('Idle'),
-    /** Waypoints with a wait at each; empty = stands still. */
-    routine: z
-      .array(
-        z.object({ x: z.number(), z: z.number(), waitMs: z.number().int().min(0).max(120_000) }),
-      )
-      .max(32)
-      .default([]),
-  })
-  .strict();
+/**
+ * NPC placements are validated by the SHARED `npcPlacementSchema` (imported
+ * above), like every other layer here.
+ *
+ * A2 shipped a local guess at this row while P11 was still unwritten — `name`,
+ * `modelRef` and a walk `routine` — and P11 defined the real one differently:
+ * an NPC points at a definition (`npcId`) and wears a COMPOSED appearance, so
+ * it has no `modelRef` at all, and there is no patrol state to walk. Nothing
+ * caught the divergence, because the draft store and the bake each parsed with
+ * the schema they had: the editor refused the row the bake was written to emit.
+ * The comment directly above is the rule that was broken — this file may not
+ * hold its own idea of a row the game will read.
+ */
 
 /** Which zod schema validates a given layer's `def`. */
 export const layerSchemas = {
@@ -314,10 +309,22 @@ export const deleteObjects = async (db: Db, ids: string[]): Promise<number> => {
   return deleted.length;
 };
 
+/**
+ * Every object, or just some layers. **Ordered by id** — without it Postgres
+ * returns rows in physical order, which changes whenever a row is updated, and
+ * anything downstream that depends on order becomes a coin flip between
+ * publishes. The zone list is the one that bites (see `bakeDraft`), but a
+ * stable order also makes two publishes of the same draft produce the same
+ * bytes, which is what makes a diff readable.
+ */
 export const listObjects = async (db: Db, layers?: MapLayer[]): Promise<DraftObject[]> => {
   const rows = layers?.length
-    ? await db.select().from(mapDraftObjects).where(inArray(mapDraftObjects.layer, layers))
-    : await db.select().from(mapDraftObjects);
+    ? await db
+        .select()
+        .from(mapDraftObjects)
+        .where(inArray(mapDraftObjects.layer, layers))
+        .orderBy(mapDraftObjects.id)
+    : await db.select().from(mapDraftObjects).orderBy(mapDraftObjects.id);
   return rows.map((row) => ({
     id: row.id,
     layer: row.layer,

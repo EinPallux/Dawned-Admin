@@ -28,6 +28,7 @@ import {
   placementsFileSchema,
   pointInPolygon,
   nodePlacementSchema,
+  npcPlacementSchema,
   poiSchema,
   propPlacementSchema,
   resolveScatter,
@@ -92,6 +93,8 @@ interface DraftBundle {
   knownLootTableIds: Set<string>;
   /** Published resource-node definition ids (P10) — placements must resolve. */
   knownNodeIds: Set<string>;
+  /** Published NPC definition ids (P11) — same rule, same failure mode. */
+  knownNpcIds: Set<string>;
   knownModelRefs: Set<string>;
 }
 
@@ -165,7 +168,25 @@ interface SolidFootprint {
  * cannot reach is content nobody will ever see, which MAP_EDITOR.md §4 calls an
  * error rather than a warning — and rightly: it is invisible in the viewport.
  */
-const reachableFrom = (grid: Walkgrid, spawnX: number, spawnZ: number): Uint8Array => {
+const reachableFrom = (
+  grid: Walkgrid,
+  spawnX: number,
+  spawnZ: number,
+  /**
+   * Portals, as directed edges.
+   *
+   * A portal is a way to GET somewhere — that is the whole of what it is — so a
+   * reachability fill that only walks the walkgrid is wrong about everything
+   * behind one. WORLD.md §3.6 makes this concrete: the Elder Grove is an islet
+   * with no causeway, reachable by a long swim or "a one-way ancient portal in
+   * Ashcrag", and without this every POI, chest and NPC on it is unpublishable
+   * — the validator refusing exactly the design the world doc specifies.
+   *
+   * Consumed to a fixpoint so portals can chain: reaching one seeds its
+   * destination, which may put a second portal in range.
+   */
+  portals: readonly { x: number; z: number; destX: number | null; destZ: number | null }[] = [],
+): Uint8Array => {
   const seen = new Uint8Array(WORLD_SIZE_M * WORLD_SIZE_M);
   const startX = cellOf(spawnX);
   const startZ = cellOf(spawnZ);
@@ -183,15 +204,34 @@ const reachableFrom = (grid: Walkgrid, spawnX: number, spawnZ: number): Uint8Arr
     seen[index] = 1;
     queue[tail++] = index;
   };
+  const drain = (): void => {
+    while (head < tail) {
+      const index = queue[head++]!;
+      const ix = index % WORLD_SIZE_M;
+      const iz = (index / WORLD_SIZE_M) | 0;
+      if (ix > 0) push(ix - 1, iz);
+      if (ix < WORLD_SIZE_M - 1) push(ix + 1, iz);
+      if (iz > 0) push(ix, iz - 1);
+      if (iz < WORLD_SIZE_M - 1) push(ix, iz + 1);
+    }
+  };
   push(startX, startZ);
-  while (head < tail) {
-    const index = queue[head++]!;
-    const ix = index % WORLD_SIZE_M;
-    const iz = (index / WORLD_SIZE_M) | 0;
-    if (ix > 0) push(ix - 1, iz);
-    if (ix < WORLD_SIZE_M - 1) push(ix + 1, iz);
-    if (iz > 0) push(ix, iz - 1);
-    if (iz < WORLD_SIZE_M - 1) push(ix, iz + 1);
+  drain();
+
+  const pending = portals.filter((portal) => portal.destX !== null && portal.destZ !== null);
+  const used = new Set<number>();
+  for (;;) {
+    let opened = false;
+    for (const [index, portal] of pending.entries()) {
+      if (used.has(index)) continue;
+      // The portal's own mouth has to be walkable-to before it is a way in.
+      if (!isReachable(seen, portal.x, portal.z)) continue;
+      used.add(index);
+      opened = true;
+      push(cellOf(portal.destX!), cellOf(portal.destZ!));
+      drain();
+    }
+    if (!opened) break;
   }
   return seen;
 };
@@ -213,13 +253,30 @@ const isReachable = (seen: Uint8Array, x: number, z: number): boolean => {
   return false;
 };
 
-/** Pick the spawn: the authored settlement zone's centre, else first walkable. */
+/**
+ * Pick the spawn: the STARTER settlement's centre, else the first walkable
+ * metre.
+ *
+ * "Starter" is the settlement zone with the lowest `levelMin`, ties broken on
+ * id. It used to be `zones.find(zone => zone.settlement !== null)` — the first
+ * one in the list — which was fine while exactly one zone had a settlement and
+ * became a coin flip the moment P12 gave all five of them one: `listObjects`
+ * returned Postgres's physical row order, so a new character could have opened
+ * their eyes in Rustpick Camp, in the level 24–30 zone, and the only symptom
+ * would have been a very short first session.
+ *
+ * The level band is the right answer rather than a name or a flag because it is
+ * already the thing that makes Dawnshore the starter zone.
+ */
 const findSpawn = (
   sampler: DraftSampler,
   zones: Zone[],
   grid: Walkgrid,
 ): { x: number; y: number; z: number; yaw: number } | null => {
-  const settlement = zones.find((zone) => zone.settlement !== null) ?? zones[0];
+  const settlement =
+    [...zones]
+      .filter((zone) => zone.settlement !== null)
+      .sort((a, b) => a.levelMin - b.levelMin || a.id.localeCompare(b.id))[0] ?? zones[0];
   const candidates: { x: number; z: number }[] = [];
   if (settlement) {
     let sumX = 0;
@@ -268,6 +325,42 @@ const findSpawn = (
  * intentional scenery, so it warns rather than blocks — but a POI you cannot
  * discover is dead content and blocks).
  */
+/**
+ * Zone priority: the SMALLEST zone containing a point wins.
+ *
+ * `zoneAt` returns the first polygon that contains the point, so the order this
+ * list is emitted in decides which zone a player is standing in — and until
+ * P12 that never mattered, because no two zones overlapped. The Dawnsea does:
+ * WORLD.md §2 lists it as the ocean, the beaches and the sandbars, so its ring
+ * covers the whole map and every land point is inside two zones.
+ *
+ * Sorting by polygon area ascending makes "the more specific zone wins" a
+ * property of the data rather than of the row order Postgres happened to
+ * return. A containing zone is always the larger one, so the sea can never
+ * shadow an isle; two land zones that clip at their edges get an arbitrary but
+ * STABLE answer, which is the part that matters — the alternative was a world
+ * that could rename Dawnshore to "The Dawnsea" between two publishes of an
+ * unchanged draft.
+ *
+ * Ties break on id so the order is total.
+ */
+export const orderZones = <
+  T extends { id: string; polygon: readonly (readonly [number, number])[] },
+>(
+  zones: T[],
+): T[] => {
+  const area = (polygon: readonly (readonly [number, number])[]): number => {
+    let sum = 0;
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+      const [xi, zi] = polygon[i]!;
+      const [xj, zj] = polygon[j]!;
+      sum += xj * zi - xi * zj;
+    }
+    return Math.abs(sum) / 2;
+  };
+  return [...zones].sort((a, b) => area(a.polygon) - area(b.polygon) || a.id.localeCompare(b.id));
+};
+
 export const validateDraft = (bundle: DraftBundle): ValidationReport => {
   const problems: string[] = [];
   const warnings: string[] = [];
@@ -275,7 +368,7 @@ export const validateDraft = (bundle: DraftBundle): ValidationReport => {
   const enabled = bundle.chunks.filter((chunk) => chunk.enabled);
 
   const props = byLayer(bundle.objects, 'prop').map((def) => propPlacementSchema.parse(def));
-  const zones = byLayer(bundle.objects, 'zone').map((def) => zoneSchema.parse(def));
+  const zones = orderZones(byLayer(bundle.objects, 'zone').map((def) => zoneSchema.parse(def)));
   const pois = byLayer(bundle.objects, 'poi').map((def) => poiSchema.parse(def));
   const interactables = byLayer(bundle.objects, 'interactable').map((def) =>
     interactableSchema.parse(def),
@@ -364,6 +457,8 @@ export const validateDraft = (bundle: DraftBundle): ValidationReport => {
   // checking is therefore about the definition RESOLVING — a birch pointing at
   // a node row someone renamed is a tree nobody can chop, and invisible in the
   // viewport because the marker draws either way.
+  /** nodeId → zone id → how many of its placements stand there. */
+  const nodeZones = new Map<string, Map<string, number>>();
   for (const object of nodes) {
     const row = nodePlacementSchema.safeParse(object.def);
     if (!row.success) {
@@ -375,6 +470,54 @@ export const validateDraft = (bundle: DraftBundle): ValidationReport => {
     }
     if (sampler.heightAt(row.data.x, row.data.z) === null) {
       problems.push(`node ${row.data.id} sits on a disabled chunk`);
+    }
+    const home = zones.find((zone) => pointInPolygon(row.data.x, row.data.z, zone.polygon));
+    const seen = nodeZones.get(row.data.nodeId) ?? new Map<string, number>();
+    const key = home?.id ?? 'no zone';
+    seen.set(key, (seen.get(key) ?? 0) + 1);
+    nodeZones.set(row.data.nodeId, seen);
+  }
+  // A definition belongs to a place: PROFESSIONS §4 gives every zone a tier
+  // band, so a vein one zone over is a T5 material standing in the T4 savanna
+  // where nobody is gated from it. The definition carries a tier and no zone,
+  // so the panel cannot check it against a design mapping without inventing
+  // one — but it can check the data against ITSELF: placements of one node id
+  // that are mostly in one zone and partly in another are strays, which is
+  // exactly what a cluster scattered across a border produces.
+  //
+  // Found by game P12-E: 39 of 322 land nodes stood outside the zone they were
+  // authored for, including 4 of the 12 Dawnpetal — the bloom the Elder Grove
+  // exists for — growing in Emberwood. A warning rather than a block, for the
+  // same reason `questHintCoverage` warns: a material that genuinely grows in
+  // two regions is a design choice, and 5 of 19 across a line is not.
+  for (const [nodeId, spread] of nodeZones) {
+    if (spread.size < 2) continue;
+    const ranked = [...spread].sort((a, b) => b[1] - a[1]);
+    const [home, ...strays] = ranked;
+    const stray = strays.reduce((sum, [, count]) => sum + count, 0);
+    const total = stray + (home?.[1] ?? 0);
+    warnings.push(
+      `node ${nodeId}: ${stray} of ${total} placements stand outside ${home?.[0]} ` +
+        `(${strays.map(([zone, count]) => `${count} in ${zone}`).join(', ')})`,
+    );
+  }
+
+  // --- NPCs (P11) ----------------------------------------------------------
+  // Identical rule to resource nodes, for an identical reason: the placement is
+  // thin, the marker draws whatever the definition says, and a villager whose
+  // row was renamed is simply not there in-game — silent in the viewport, and
+  // silent in the diff.
+  for (const object of npcs) {
+    const row = npcPlacementSchema.safeParse(object.def);
+    if (!row.success) {
+      problems.push(`npc ${object.id}: ${row.error.issues[0]?.message ?? 'invalid'}`);
+      continue;
+    }
+    if (!bundle.knownNpcIds.has(row.data.npcId)) {
+      problems.push(`npc ${row.data.id}: "${row.data.npcId}" is not a published NPC`);
+    }
+    if (sampler.heightAt(row.data.x, row.data.z) === null) {
+      problems.push(`npc ${row.data.id} sits on a disabled chunk`);
     }
   }
 
@@ -413,7 +556,12 @@ export const validateDraft = (bundle: DraftBundle): ValidationReport => {
   if (!spawn) {
     problems.push('no walkable spawn point could be found — the world cannot be entered');
   } else {
-    const seen = reachableFrom(grid, spawn.x, spawn.z);
+    const seen = reachableFrom(
+      grid,
+      spawn.x,
+      spawn.z,
+      interactables.filter((row) => row.kind === 'portal'),
+    );
     for (const poi of pois) {
       if (!isReachable(seen, poi.x, poi.z)) {
         unreachable++;
@@ -632,7 +780,7 @@ const bakeInto = async (
 
   // --- zones ---------------------------------------------------------------
   onProgress({ step: 'zones', done: 0, total: 1 });
-  const zones = byLayer(bundle.objects, 'zone').map((def) => zoneSchema.parse(def));
+  const zones = orderZones(byLayer(bundle.objects, 'zone').map((def) => zoneSchema.parse(def)));
   const zonesFile = zonesFileSchema.parse({
     defaultAmbience: DEFAULT_OCEAN_AMBIENCE,
     zones,
@@ -685,6 +833,7 @@ const bakeInto = async (
     // looks right type-checks and then throws inside a `.strict()` schema half
     // way through a publish, with nothing on screen to say why.
     nodes: byLayer(bundle.objects, 'node').map((def) => nodePlacementSchema.parse(def)),
+    npcs: byLayer(bundle.objects, 'npc').map((def) => npcPlacementSchema.parse(def)),
   });
   const placementsJson = JSON.stringify(placements);
   await writeFile(path.join(stageDir, 'placements.json'), placementsJson);

@@ -102,6 +102,19 @@ checks — not a game client).
   scale. Markers take the placement's scale and are ringed at the definition's radius × that
   scale — the placement cannot answer its own size, so the viewport looks the definition up. A map
   publish refuses a placement whose definition is not published.
+- **As built (game P12-E, 2026-08-06) — a node's placements are checked against each other's
+  zone.** Publish warns when one node id's placements are split across zones, naming the split and
+  the counts. PROFESSIONS §4 gives every zone a tier band, so a vein one zone over is a T5 material
+  standing where nothing gates a player from it — but a node definition carries a `tier` and no
+  `zone`, so this page cannot compare it to a design mapping without inventing and then owning one.
+  It compares the data to ITSELF instead: placements mostly in one zone and partly in another are
+  strays, which is exactly what a cluster scattered across a border produces. It **warns rather
+  than blocks**, on the same reasoning as §1 rule 4's quest hints — a material that genuinely grows
+  in two regions is a design choice, and 5 of 19 across a line is not.
+  Found when game P12-E's authoring run planted 362 nodes and 39 of the 322 land ones came out in a
+  region they were never authored for: the placement resolver validates a cluster's CENTRE and the
+  members scatter metres past it, so nothing had ever compared the result to the zone layer. Two
+  pages that had never met, again.
 - Overlays: aggro radii, leash radii, patrol paths, spawn density heat (per-zone counts vs.
   CONTENT_0.1 targets — a live "content budget" meter per zone in the panel!).
 - "Simulate populate" preview: ghost-render one spawn resolution to eyeball camp compositions.
@@ -298,6 +311,32 @@ UI; typical incremental bake target <60 s (changed chunks only), full-map <10 mi
 
 - **The lock renews itself.** While the tab holds it, the 15 s poll POSTs (renew) instead of
   GETting — a lease that lapsed mid-session would start refusing saves with no warning.
+
+### 5.0 The layer schemas are the game's, not ours (P11-C, 2026-08-05)
+
+Every `map_draft_objects` layer validates its `def` with the schema `@dawned/shared` exports —
+`propPlacementSchema`, `zoneSchema`, `poiSchema`, `interactableSchema`, `spawnerDefSchema`,
+`nodePlacementSchema`, `npcPlacementSchema` — with exactly one panel-local exception,
+`scatterPatchSchema`, because a draft scatter row carries a row `id` the baked format has no
+place for (which is its own scar; see §4.1).
+
+This was broken once and is worth the paragraph. A2 needed an `npc` layer before game P11 existed,
+so it wrote a **local guess** at the row: `name`, `modelRef`, and a walk `routine`. P11 then
+defined the real one differently — an NPC points at a definition (`npcId`) and wears a COMPOSED
+appearance, so it has no mesh of its own, and the AI has no patrol state to walk. The draft store
+and the bake each kept validating with the schema they had. The result: the editor refused, with
+a 500 and nothing readable on screen, **exactly the row the bake was written to emit**. Nothing
+typechecked it, because both were real zod schemas sitting behind the same `parse` call.
+
+Two guards now: `map-draft.ts` imports the shared row, and `map-bake.test.ts` asserts the
+_property_ rather than the shapes — a def the BAKE accepts must survive the DRAFT store, for
+every layer. That test fails the moment either side grows a field the other does not know about,
+which is the only version of this check that keeps working as the game adds layers.
+
+The related emission bug found in the same run: the bake report **counted** npcs and the
+`placements.json` writer never included them, so every villager placed in the editor vanished at
+publish. A count in the report is not evidence a row was written — the same lesson scatter taught
+in §4.1, and the reason both now have a bake-and-read-it-back test.
 
 ## 5. Play-test Bridge
 

@@ -10,7 +10,7 @@
 | A1    | Content editors (items→curves) + publish v1   | L    | A0; serves P5–P10     | 🟨 abilities · progression · items · enemies · professions live |
 | A2    | Map Editor I: viewport, terrain, publish/bake | XL   | game P2 formats       | ✅ done (2026-08-05)                                            |
 | A3    | Map Editor II: placement, spawns, zones, POIs | XL   | A2 + game P9 systems  | ✅ built (2026-08-05) — owner run open                          |
-| A4    | Quest & dialogue editor                       | M    | A1; serves P11        | 🔲                                                              |
+| A4    | Quest & dialogue editor                       | M    | A1; serves P11        | ✅ built (2026-08-05) — owner run open                          |
 | A5    | Live Ops: players, moderation, server, audit  | M    | game P13 ops API      | 🔲                                                              |
 | A6    | Publish polish, validation depth, backups UI  | M    | with game P14         | 🔲                                                              |
 
@@ -291,6 +291,120 @@ metadata/rewards builders with ƒ-suggests, flow validation + chain graph, journ
 grant-to-GM test hook.
 **DoD:** game P11's pilot chain ("The Loggers' Silence") authored 100% in-editor by a non-coder
 flow (owner drives, we watch); validation catches seeded errors in a fixture quest.
+
+**Status (2026-08-05): built; the owner's own unassisted run is the last word.**
+
+- [x] Content → Quests with two tabs (quests, NPCs) on ONE publish rail — they reference each
+      other, and shipping them apart guarantees a window where a live quest points at an NPC
+      that is not there yet.
+- [x] Flow validation is the GAME's `validateQuestFlow`, not a copy, plus cross-checks the row
+      cannot see: every NPC, item, enemy and prerequisite a quest names must be in the
+      would-be-published set. Advisory: a quest that pays nothing, a chain link nothing
+      unlocks, a quest giver no quest names, and a `zoneId` no zone on the map carries.
+- [x] Journal preview (the prose + tracker lines a player will read) and the chain graph, built
+      from **prerequisites** rather than from `chainId` — the label groups, the prerequisites
+      gate, and drawing the label would draw a graph the game disagrees with.
+- [x] ƒ-suggests for XP and gold from the shared `suggestedQuestXp`/`suggestedQuestGold`.
+- [x] Grant-to-GM test hook, proxied to the game's `/ops/quest` (rule 3 — the panel never
+      reaches into game memory).
+- [x] `node tools/smoke/quest-editor.mjs` drives it in a real browser: seeds a two-link chain
+      through the real endpoints, checks the ƒ-suggests against the shared formulas, proves an
+      explore step shows its clue and no map hint, reads the chain graph back, proves publish
+      refuses an unpublished giver BY NAME, and cleans up its `zz_probe` rows in a `finally`.
+- [x] **The whole P11 pilot set went through this surface** —
+      `tools/content/author-quests.mjs`: 4 NPCs, 8 quests, then 4 NPC / 7 interactable / 6 POI
+      placements into the map draft and a map publish the game hot-swapped onto. That run is
+      what found the NPC schema split below.
+- [x] **Publish checks that a hint circle contains what it points at** (2026-08-05, from the
+      game's P11-E DoD run, which walks to the circle the map draws): each step's real targets
+      are resolved — spawners for a kill, node placements for a gather, NPC/interactable
+      placements for the rest — and a circle that misses them all warns with the distance
+      quoted. Four of the pilot's five kill hints were 85–170 m outside their only spawner and
+      both gather steps had no circle at all; neither row was wrong alone, and the two pages
+      had never met. `questHintCoverage` lives in `@dawned/shared` (the game's map draws the
+      same circle), and it WARNS rather than blocks — QUESTS_POI §1 rule 4 says the map hints
+      _roughly_ where, so a loose circle is a choice and a 170 m one is not.
+
+### A2 addendum — whole-world generation (2026-08-06, for game P12)
+
+MAP_EDITOR §2.1 always promised the island-mask synth would "seed the base world (game P12)". The
+editor's own island button cannot: it generates into the RESIDENT region, capped at 13×13 chunks,
+and the world is 32×32.
+
+- [x] `GET /api/map/generate-stream` — admin-only, lock-held, **checkpoint taken first**, SSE
+      progress. Rewrites terrain and only terrain; placed objects re-sit on the new heights, which
+      is what §2.1's "non-destructive to placed props" means.
+- [x] Masks **combine** (overlapping isles become an isthmus) and `carve` masks **subtract** (a
+      strait severs one). That pairing is what lets a world be 55–60 % land and still have bridges
+      that gate the path.
+- [x] Erosion over ONE world-sized height field — the per-chunk pass must skip the border rows
+      adjacent chunks share, which leaves an un-eroded lattice every 64 m.
+- [x] A splat rule names a **`zoneId`**, resolved against the draft's zone layer, rather than
+      carrying a copy of the ring that goes stale when a corner moves.
+- [x] `pnpm world:preview` (offline: coverage, per-isle area, landmass flood fill, land in no
+      zone, unpainted texels, an ASCII map) and `pnpm world:author` (for real, through the panel,
+      then asks the GAME which map it serves).
+- [x] **Ran it:** 1024 chunks, 766 carrying land, 57.6 % coverage, 0 unclaimed texels — identical
+      to the preview's offline figures. The preview's flood fill found the bug that mattered:
+      three of five straits severed NOTHING while a centre-depth probe called them all open water.
+
+### A2/A4 addendum — the world's population passes (2026-08-06, for game P12-B/C)
+
+The panel is where P12's content is authored, so its scripts carry the phase. Two new pieces of
+tooling that later passes (nodes, POIs, NPCs) reuse:
+
+- [x] `tools/content/world-sample.ts` — ONE in-memory synthesis of the Dawnlands every content
+      script can ask "is there land at (x, z), how steep, which landmass, which zone". It runs the
+      same `synthWorld` + `erodeField` the generate endpoint runs, so it reports what the server
+      made rather than a model of it.
+- [x] `tools/content/placement.ts` — a placement is a **wish** (zone, bearing, distance), resolved
+      by spiralling outward until the ground satisfies every constraint, and it reports WHY each
+      candidate was rejected. Capped at 120 m on purpose: an unbounded search always succeeds and
+      quietly moves a camp a third of an isle away, which reads as "it worked".
+- [x] `pnpm world:bestiary` — 50 enemies, 7 zone loot stubs and 124 camps, published on the
+      Enemies rail AND written into the map's `spawner` layer, because Q23 makes the map the owner
+      of where a camp stands and a map publish delete-then-inserts that whole set.
+- [x] **The Enemies page's prune-on-match was broken** since A1-d: it compared the RAW jsonb
+      column, whose key order Postgres normalises, so an identical draft could never prune and
+      re-running a content script republished the entire bestiary — 174 rows in a diff review
+      whose only job is to say what changed. The A1-c fix had landed on the item and progression
+      editors and this one kept the comment without the code. Parsed-against-parsed now.
+- [x] **`world:author` clears the zone layer first.** The draft was seeded from the dev island by
+      `import-live`, so `ashen_reach` survived a whole world regeneration and — being a smaller
+      ring, which is the order `zoneAt` resolves in — WON inside the savanna and the canyons.
+      Found by the GAME's new `/ops/camps`, not by anything here.
+
+### A1-c addendum — the deep catalogue (2026-08-06, for game P12-D)
+
+- [x] `author-items.mjs` publishes the WHOLE catalogue (T1–T2 + T3–T5): **182 item rows, 21 loot
+      tables, 16 vendors**, all through the Items page's rail. The Items editor's first real load
+      since P8's 62 rows, and it held.
+- [x] Every vendor re-anchored: the P8 shops sat on the dev island, which the Dawnlands put under
+      open water. Four settlements gained their own.
+- [x] **A content-ownership bug**: one item id authored in two scripts at different ilvls, so the
+      last script to run silently reverted the other's content fix. Gathering materials belong to
+      the node catalogue.
+
+### A1-e/A2 addendum — the gathering catalogue is planted (2026-08-06, for game P12-E)
+
+- [x] `pnpm world:nodes` re-authors the 21 definitions and plants **362 placements** across all six
+      zones (from 65 on the dev island), with the layout held as 73 wishes in
+      `node-clusters.mjs` rather than 362 typed coordinates. Re-run safe. All five fishing bands
+      have water for the first time — the gap game P10-G reported and declined to fake.
+- [x] **The bug that mattered: a zone constraint that reached the cluster centre and not its
+      members.** `placeAll` checks the centre; the members scattered `spread` metres off it and
+      were asked only about the GROUND, so **39 of 322 land nodes stood in a zone they were never
+      authored for** — the T5 canyon band in the T4 savanna, and 4 of the 12 Dawnpetal outside the
+      Grove. The member loop asks the DRAFT's zone layer now, ordered as `bakeDraft` orders it, and
+      the existing retry absorbed every stray: 362 placed, 0 dropped, per zone 70/70/70/70/70 + 12.
+- [x] **Publish cross-check**: one node id whose placements split across zones warns, with the
+      split named. A definition carries a tier and no zone, so the panel checks the data against
+      itself rather than inventing a design mapping. Warns, never blocks — `questHintCoverage`'s
+      precedent. +2 tests.
+- [x] **`WORLD_GEN_PLAN.waterLevel` was `null`**, so every generated chunk declared no water: 42 %
+      of the map was an invisible hole and a fishing spot could not be authored at all, because
+      "submerged" is ground below its own chunk's water. Two phases passed without it because
+      nothing had needed water to exist.
 
 ## A5 — Live Ops (M) — with game P13
 

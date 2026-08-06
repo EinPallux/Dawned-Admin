@@ -16,6 +16,7 @@ import { AbilitiesPage } from '../pages/AbilitiesPage.js';
 import { ProgressionPage } from '../pages/ProgressionPage.js';
 import { ItemsPage } from '../pages/ItemsPage.js';
 import { EnemiesPage } from '../pages/EnemiesPage.js';
+import { QuestsPage } from '../pages/QuestsPage.js';
 import { ProfessionsPage } from '../pages/ProfessionsPage.js';
 import { MapEditorPage } from '../map-editor/MapEditorPage.js';
 
@@ -65,6 +66,7 @@ export const App = () => {
           <Route path="content/items" element={<ItemsPage user={user} />} />
           <Route path="content/enemies" element={<EnemiesPage user={user} />} />
           <Route path="content/professions" element={<ProfessionsPage user={user} />} />
+          <Route path="content/quests" element={<QuestsPage user={user} />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
