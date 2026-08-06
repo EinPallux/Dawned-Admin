@@ -5,6 +5,17 @@ versions track the game's release trains (0.1.0 = tooling that shipped Dawned 0.
 
 ## [Unreleased]
 
+### Fixed — the panel stops locking you out of itself (2026-08-06)
+
+- **Login limiting counted successful sign-ins.** On one household address the owner and a GM
+  share the budget, so ten ordinary logins in a minute locked both out — with a missing cookie
+  rather than a message. Only failed attempts count now, a correct password clears the address, and
+  the refusal says how many seconds to wait.
+- `progression.ts` uses the shared reload helper instead of its own copy, and three private copies
+  of "publishing an unchanged set is success" became one.
+- The **owner-edit guard now covers every content rail** — abilities, skill nodes, enemies,
+  spawners and NPCs join items, loot, vendors, resource nodes and quests.
+
 ### Added — World Settings publishes, and scripts never revert your edits (2026-08-06)
 
 - **`POST /api/publish/world-settings`** — the rail A0 documented and A1 never built. The game reads

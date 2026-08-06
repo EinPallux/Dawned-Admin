@@ -662,6 +662,22 @@ of `xpRate` and every other lever sat at their compiled-in defaults. Fixed with 
   adopt 218 → silent re-run → a hand-edited row named and preserved → `--force-authored` restores the
   authored value. **266 tests green.**
 
+**The QA sweep's panel findings are closed (2026-08-06).** (1) **Login limiting counted SUCCESSFUL
+sign-ins**, and on a private server the owner and a GM sit behind one address — ten ordinary logins
+a minute locked both out of their own panel, with a missing cookie instead of a message (the panel's
+own suite tripped it, which is how three unrelated suites once failed on "expected undefined to be
+defined"). Only failures count now, a correct password clears the address, a banned/role-less
+account with the right password is not counted (it is not a guess), and the 429 says how long to
+wait. (2) `progression.ts` hand-rolled the reload poke with its own timeout — it uses
+`reloadGameContent`. (3) Three private copies of "nothing to publish is success" became one
+(`publish.mjs`), which is the same drift that let the typed loot-stub list go stale. (4) The
+owner-edit guard now covers EVERY content rail: abilities, skill nodes, enemies, spawners and NPCs
+join items, loot, vendors, nodes and quests. Proven on two more rails against a real database — an
+ability retuned to cooldown 77777 is named and kept; an enemy's `aggroRadius` set to 99 is kept and
+`--force-authored` puts the authored 10 back. **A test artifact worth keeping:** the first bestiary
+attempt edited `level`, which that def does not carry at all, so "restore" had no target and the run
+looked broken — the guard was fine, the question had no answer. **266 tests green.**
+
 ### Running it locally
 
 ```bash
