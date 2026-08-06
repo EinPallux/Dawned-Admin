@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { worldSettingsSchema, type WorldSettings } from '@dawned/shared';
-import { apiGet, apiPut, ApiRequestError } from '../api.js';
+import { apiGet, apiPost, apiPut, ApiRequestError } from '../api.js';
 import type { AdminUser, WorldSettingsData } from '../../shared-ext/api-types.js';
 import { buildFormModel, type FieldEnhancement } from '../schema-form/model.js';
 import { SchemaForm } from '../schema-form/SchemaForm.js';
@@ -51,6 +51,23 @@ export const WorldSettingsPage = ({ user }: { user: AdminUser }) => {
   );
   const parsed = worldSettingsSchema.safeParse(form);
   const canWrite = user.role === 'admin';
+
+  /**
+   * The rail A0 documented and A1 never built: without it the game — which reads
+   * `content_world_settings` WHERE status = 'published' — never saw a single one
+   * of these edits, so every lever on this page sat at its compiled-in default.
+   */
+  const publish = useMutation({
+    mutationFn: async () =>
+      apiPost<{ published: number; reload: { ok: boolean; note: string } }>(
+        '/publish/world-settings',
+        {},
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['world-settings'] });
+      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+  });
 
   const save = useMutation({
     mutationFn: async (next: WorldSettings) => apiPut<WorldSettingsData>('/world-settings', next),
@@ -100,10 +117,23 @@ export const WorldSettingsPage = ({ user }: { user: AdminUser }) => {
     <>
       <h1 className="page-title">World Settings</h1>
       <p className="page-sub">
-        Live feature flags and global tuning. Edits save as a <b>draft</b> — the game only changes
-        when a publish runs (pipeline arrives with A1).
+        Live feature flags and global tuning. Edits save as a <b>draft</b>; <b>Publish</b> copies
+        them onto the live rows and hot-reloads the running game — no restart, no deploy.
       </p>
       {saveError && <div className="error-banner">{saveError}</div>}
+      {publish.isError && (
+        <div className="error-banner">
+          {publish.error instanceof ApiRequestError ? publish.error.message : 'Publish failed.'}
+        </div>
+      )}
+      {publish.isSuccess && (
+        <div className="ws-help" style={{ marginBottom: 12 }}>
+          Published {publish.data.published} setting(s) —{' '}
+          {publish.data.reload.ok
+            ? 'the running game picked them up.'
+            : `the game did not reload (${publish.data.reload.note}).`}
+        </div>
+      )}
       {!canWrite && (
         <div className="ws-help" style={{ marginBottom: 12 }}>
           Signed in as <b>gm</b> — world settings are read-only; drafts need an admin.
@@ -131,6 +161,22 @@ export const WorldSettingsPage = ({ user }: { user: AdminUser }) => {
           {save.isPending ? 'Saving…' : 'Save draft'} <span className="ws-kbd">Ctrl S</span>
         </button>
         {dirty && <span className="dirty-note">Unsaved changes</span>}
+        <button
+          className="ws-btn ws-btn--primary"
+          disabled={draftKeys.length === 0 || dirty || !canWrite || publish.isPending}
+          title={
+            dirty
+              ? 'Save the draft first.'
+              : draftKeys.length === 0
+                ? 'No draft changes to publish.'
+                : `Publish ${draftKeys.length} changed setting(s) to the live game.`
+          }
+          onClick={() => {
+            publish.mutate();
+          }}
+        >
+          {publish.isPending ? 'Publishing…' : `Publish ${draftKeys.length || ''}`.trim()}
+        </button>
         <div className="spacer" />
         {draftKeys.length > 0 && (
           <button
