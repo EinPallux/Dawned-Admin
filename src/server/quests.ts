@@ -18,12 +18,13 @@
  * next server boot rather than at the publish button.
  */
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import {
   contentEnemies,
   contentItems,
   contentNpcs,
   contentQuests,
+  contentResourceNodes,
   mapDraftObjects,
 } from '@dawned/shared/schema';
 import {
@@ -31,9 +32,11 @@ import {
   itemDefSchema,
   npcDefSchema,
   questDefSchema,
+  questHintCoverage,
   questItemRefs,
   questNpcRefs,
   questTurnInNpc,
+  resourceNodeDefSchema,
   stepTarget,
   suggestedQuestGold,
   suggestedQuestXp,
@@ -304,6 +307,80 @@ export const diffQuests = async (db: Db): Promise<QuestDiff> => ({
 });
 
 /**
+ * Everything a hint circle could legitimately be pointing at, resolved from the
+ * placements that actually exist. Assembled by `loadHintWorld`; a plain object
+ * so the cross-checks stay drivable without a database.
+ */
+export interface QuestHintWorld {
+  /** Spawn points per enemy id, from the published spawner rows. */
+  spawns: ReadonlyMap<string, readonly { x: number; z: number }[]>;
+  /** Interactables — matched by id AND by `name`, which is what an objectTag is. */
+  objects: readonly { id: string; name: string; x: number; z: number }[];
+  /** Resource-node placements, already resolved to the items they hand over. */
+  nodes: readonly { itemIds: readonly string[]; x: number; z: number }[];
+  /** NPC placements per npcId. */
+  npcs: ReadonlyMap<string, readonly { x: number; z: number }[]>;
+}
+
+const EMPTY_HINT_WORLD: QuestHintWorld = {
+  spawns: new Map(),
+  objects: [],
+  nodes: [],
+  npcs: new Map(),
+};
+
+/**
+ * Where the thing a step is about actually STANDS.
+ *
+ * A hint circle is the only pointer the world map gives for a kill, collect,
+ * interact or deliver step. It is typed by hand on this page while the thing it
+ * points at is placed somewhere else entirely — spawners on the enemies page,
+ * props and nodes and villagers on the map — so nothing has ever compared the
+ * two, and the P11 pilot set shipped with four kill circles 85–170 m from their
+ * only spawner. You could open the map, walk to the ring and find bare ground.
+ *
+ * Returning `[]` (nothing placed) is deliberately different from returning a
+ * far-away point: the first is "not built yet", the second is "wrong".
+ */
+export const stepHintTargets = (
+  step: QuestDef['steps'][number],
+  world: QuestHintWorld,
+): { x: number; z: number }[] => {
+  switch (step.type) {
+    case 'kill': {
+      if (step.enemyId) return [...(world.spawns.get(step.enemyId) ?? [])];
+      // A tag step wants every spawner that rolls anything carrying the tag,
+      // which the spawner rows cannot answer alone — leave it uncheckable
+      // rather than guess and warn about a circle that is fine.
+      return [];
+    }
+    case 'interact':
+      return world.objects
+        .filter(
+          (object) =>
+            (step.objectId && object.id === step.objectId) ||
+            (step.objectTag && object.name === step.objectTag),
+        )
+        .map((object) => ({ x: object.x, z: object.z }));
+    case 'collect':
+      // Only a GATHER step: "any" or "loot" can come from anywhere, so a circle
+      // on one is a route marker rather than a claim about a location.
+      return step.source === 'gather'
+        ? world.nodes
+            .filter((node) => node.itemIds.includes(step.itemId))
+            .map((node) => ({ x: node.x, z: node.z }))
+        : [];
+    case 'deliver':
+    case 'talk':
+      return [...(world.npcs.get(step.npcId) ?? [])];
+    default:
+      // `explore` defines its own place, and `discover`/`escort` have no
+      // placement to resolve against.
+      return [];
+  }
+};
+
+/**
  * The cross-checks, factored out so tests can drive them without a database.
  *
  * Fatal (publish refuses):
@@ -322,6 +399,8 @@ export const diffQuests = async (db: Db): Promise<QuestDiff> => ({
  *    quests and the map publish on separate rails and a zone can legitimately
  *    be sculpted after the quest that names it — but the journal GROUPS by this
  *    id, so a typo silently files a quest under a heading nothing else uses.
+ *  - a HINT CIRCLE that contains none of the thing its step is about. See
+ *    `stepHintTargets` for why this is the check that most needed writing.
  */
 export const crossCheckQuests = (
   quests: ReadonlyMap<string, QuestDef>,
@@ -329,6 +408,7 @@ export const crossCheckQuests = (
   itemIds: ReadonlySet<string>,
   enemyIds: ReadonlySet<string>,
   zoneIds: ReadonlySet<string> = new Set(),
+  world: QuestHintWorld = EMPTY_HINT_WORLD,
 ): { problems: string[]; warnings: string[] } => {
   const problems: string[] = [];
   const warnings: string[] = [];
@@ -345,11 +425,28 @@ export const crossCheckQuests = (
         problems.push(`${def.id}: references item "${itemId}", which is not a published item`);
       }
     }
-    for (const step of def.steps) {
-      if (step.type !== 'kill' || !step.enemyId) continue;
-      if (enemyIds.size > 0 && !enemyIds.has(step.enemyId)) {
+    for (const [index, step] of def.steps.entries()) {
+      if (
+        step.type === 'kill' &&
+        step.enemyId &&
+        enemyIds.size > 0 &&
+        !enemyIds.has(step.enemyId)
+      ) {
         problems.push(`${def.id}: kills "${step.enemyId}", which is not a published enemy`);
       }
+      const hint = 'hint' in step ? step.hint : null;
+      if (!hint) continue;
+      const coverage = questHintCoverage(hint, stepHintTargets(step, world));
+      // `null` means nothing is placed to compare against — the map draft may
+      // simply not be loaded (tests, a fresh checkout). Silence beats a warning
+      // that fires for everyone the first time they open the page.
+      if (!coverage || coverage.covered) continue;
+      warnings.push(
+        `${def.id} step ${index + 1} (${step.type}): the hint circle at ` +
+          `(${hint.x}, ${hint.z}) r${hint.radius} contains none of what the step is about — ` +
+          `the nearest is ${Math.round(coverage.nearestM)} m away, ` +
+          `${Math.round(coverage.shortfallM)} m outside the ring`,
+      );
     }
     for (const questId of def.prerequisites.questIds) {
       if (!quests.has(questId)) {
@@ -436,6 +533,83 @@ const mapZoneIds = async (db: Db): Promise<Set<string>> => {
   return ids;
 };
 
+/**
+ * Assemble `QuestHintWorld` from the map draft plus the published spawners.
+ *
+ * The DRAFT for placements, for the same reason `mapZoneIds` reads it: the
+ * editor's layers are what the next map publish will ship, and an author who
+ * has just moved a camp should be checked against where they moved it. Spawners
+ * come from the published `content_spawners` rows, which the map publish
+ * mirrors — the same set the game rolls from.
+ *
+ * Everything is best-effort: a row that will not parse is the map publish's
+ * problem to report, and losing one placement here can only weaken an advisory.
+ */
+const loadHintWorld = async (db: Db): Promise<QuestHintWorld> => {
+  const rows = await db
+    .select({ layer: mapDraftObjects.layer, def: mapDraftObjects.def })
+    .from(mapDraftObjects)
+    .where(inArray(mapDraftObjects.layer, ['spawner', 'node', 'npc', 'interactable']));
+
+  // nodeId → the items that node can hand over, so a `collect` step resolves to
+  // the patches that actually grow the thing rather than to every node.
+  const nodeItems = new Map<string, string[]>();
+  const nodeRows = await db.select().from(contentResourceNodes);
+  for (const row of nodeRows) {
+    const parsed = resourceNodeDefSchema.safeParse(row.def);
+    if (!parsed.success) continue;
+    nodeItems.set(parsed.data.id, [
+      ...parsed.data.yields.map((entry) => entry.itemId),
+      ...parsed.data.procs.map((entry) => entry.itemId),
+    ]);
+  }
+
+  const spawns = new Map<string, { x: number; z: number }[]>();
+  const npcs = new Map<string, { x: number; z: number }[]>();
+  const objects: { id: string; name: string; x: number; z: number }[] = [];
+  const nodes: { itemIds: readonly string[]; x: number; z: number }[] = [];
+
+  for (const row of rows) {
+    const def = row.def as Record<string, unknown>;
+    const x = typeof def.x === 'number' ? def.x : null;
+    const z = typeof def.z === 'number' ? def.z : null;
+    if (x === null || z === null) continue;
+    switch (row.layer) {
+      case 'spawner': {
+        const entries = Array.isArray(def.entries) ? def.entries : [];
+        for (const entry of entries) {
+          const enemyId = (entry as { enemyId?: unknown }).enemyId;
+          if (typeof enemyId !== 'string') continue;
+          spawns.set(enemyId, [...(spawns.get(enemyId) ?? []), { x, z }]);
+        }
+        break;
+      }
+      case 'npc': {
+        const npcId = def.npcId;
+        if (typeof npcId !== 'string') break;
+        npcs.set(npcId, [...(npcs.get(npcId) ?? []), { x, z }]);
+        break;
+      }
+      case 'interactable': {
+        const id = def.id;
+        const name = def.name;
+        if (typeof id !== 'string') break;
+        objects.push({ id, name: typeof name === 'string' ? name : '', x, z });
+        break;
+      }
+      case 'node': {
+        const nodeId = def.nodeId;
+        if (typeof nodeId !== 'string') break;
+        nodes.push({ itemIds: nodeItems.get(nodeId) ?? [], x, z });
+        break;
+      }
+      default:
+        break;
+    }
+  }
+  return { spawns, objects, nodes, npcs };
+};
+
 export const publishQuests = async (db: Db, config: Config): Promise<QuestPublishResult> => {
   const questSets = await loadQuestRows(db);
   const npcSets = await loadNpcRows(db);
@@ -470,6 +644,7 @@ export const publishQuests = async (db: Db, config: Config): Promise<QuestPublis
     itemIds,
     enemyIds,
     zoneIds,
+    await loadHintWorld(db),
   );
   if (checked.problems.length > 0) {
     return {

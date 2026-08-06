@@ -5,6 +5,34 @@ versions track the game's release trains (0.1.0 = tooling that shipped Dawned 0.
 
 ## [Unreleased]
 
+### Added — publish checks that a hint circle contains the thing it points at (2026-08-05, game P11-E)
+
+- A hint circle is the only pointer the world map gives for a kill, collect, interact or deliver
+  step. It is typed by hand on **this** page while the thing it points at is placed on the enemies
+  page or on the map, so nothing had ever compared the two — and the P11 pilot set shipped with
+  **four kill circles 85–170 m from their only spawner**. You could open the map, walk to the ring,
+  and find bare ground. Publish now resolves every step's targets from the published spawners plus
+  the map draft's own prop, node and villager layers, and warns with the distance: _"the hint circle
+  at (−150, 60) r60 contains none of what the step is about — the nearest is 170 m away, 110 m
+  outside the ring"_.
+- It **warns rather than blocks**, because a circle can legitimately mark a route rather than a
+  spawn, and it stays silent when nothing is placed yet — "not built" and "built somewhere else"
+  are different states and only the second is a mistake. A tagged kill step is left alone: a
+  spawner row cannot answer for a campTag.
+- The geometry itself is `questHintCoverage` in `@dawned/shared`, not a copy here — same reason the
+  TTK simulator runs the game's own `selectableEnemyAbilities`.
+
+### Fixed — the pilot quest content the check found (2026-08-05, game P11-E)
+
+- Re-authored all four kill hints onto the spawners that actually roll the enemy, gave the two
+  gather steps circles (a player with no profession levels cannot be expected to know where birch
+  stands), and stopped Hesta claiming mossbloom grows in the Weald when the placed mossbloom is
+  360 m north of it.
+- **Nothing a quest step needs is one-shot any more.** The crate and the four marked stumps carried
+  `respawnMs: 0`, so a player who opened the crate before Torv offered the quest could never
+  complete it — and neither could a run that had already measured it once. Both come back on a
+  five-minute timer.
+
 ### Fixed — the pilot NPCs were authored with a clip that does not exist (2026-08-05, game P11-D)
 
 - All four pilot villagers carried `idleClip: 'Idle'`. The animation library's name for standing

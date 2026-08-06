@@ -152,7 +152,11 @@ const stump = (index, dx, dz) => ({
   rotation: index * 1.3,
   modelRef: 'world_nature_wood_log_b',
   lootTableId: null,
-  respawnMs: 0,
+  // NOT one-shot. `respawnMs: 0` means "used, forever", and a player who wanders
+  // up here and inspects a stump BEFORE Hesta gives them "What Took Them" can
+  // then never count that stump: the quest is soft-locked with no way back.
+  // Every interactable a quest step needs has to come back.
+  respawnMs: 300_000,
   text: 'Cut clean, mid-swing. The axe is still in it.',
   destX: null,
   destZ: null,
@@ -190,7 +194,10 @@ export const INTERACTABLES = [
     rotation: 0.7,
     modelRef: 'world_props_crate_wooden',
     lootTableId: 'loot_dawnshore_gear',
-    respawnMs: 0,
+    // Same soft-lock as the stumps: "The Lost Crate" asks you to open this, and
+    // finding it on your own first used to end the quest before it started.
+    // Spent state is per-character, so this is not a shared-loot question.
+    respawnMs: 300_000,
     text: '',
     destX: null,
     destZ: null,
@@ -314,7 +321,12 @@ export const QUEST_DEFS = [
         enemyTag: null,
         count: 5,
         trackerText: 'Shore Glubs cleared',
-        hint: { x: 40, z: 250, radius: 70 },
+        // Every hint circle here is centred on the SPAWNERS that actually roll
+        // the enemy (`spawner_shore_glub_camp` + `_west`), not on a guess about
+        // where the shore feels like it is. The first pass guessed, and all
+        // four kill hints in this file landed 85–170 m from their target: a
+        // circle you can walk to and find nothing in is worse than no circle.
+        hint: { x: -6, z: 322, radius: 32 },
         hooks: [],
       },
     ],
@@ -356,7 +368,7 @@ export const QUEST_DEFS = [
         enemyTag: null,
         count: 8,
         trackerText: 'Bog Blobs slain',
-        hint: { x: -70, z: 210, radius: 80 },
+        hint: { x: -20, z: 290, radius: 30 },
         hooks: [],
       },
     ],
@@ -419,7 +431,11 @@ export const QUEST_DEFS = [
         // buying six logs at a vendor would make it a gold check instead.
         source: 'gather',
         trackerText: 'Birchwood cut',
-        hint: null,
+        // A gather step CAN carry a circle, and this one should: a player who
+        // has never chopped anything has no idea where birch stands, and the
+        // 13 placements are three clusters 180 m apart. This is the one nearest
+        // Dawnhaven (`node_1`), so the notice board's job stays a shore errand.
+        hint: { x: 61, z: 198, radius: 30 },
         hooks: [],
       },
       {
@@ -580,7 +596,11 @@ export const QUEST_DEFS = [
         enemyTag: null,
         count: 3,
         trackerText: 'Stalkers driven off',
-        hint: { x: -104, z: 104, radius: 40 },
+        // NOT the cut: stalkers roll out of `spawner_stalker_thicket` and the
+        // hexer circle, both ~120 m east of the stumps. The step before this
+        // one legitimately points at the cut, which is exactly how the wrong
+        // circle survived — it was copied from the line above.
+        hint: { x: 4, z: 161, radius: 40 },
         hooks: [],
       },
     ],
@@ -626,7 +646,7 @@ export const QUEST_DEFS = [
         count: 5,
         source: 'gather',
         trackerText: 'Mossbloom gathered',
-        hint: null,
+        hint: { x: -143, z: -257, radius: 30 },
         hooks: [],
       },
       {
@@ -658,9 +678,15 @@ export const QUEST_DEFS = [
         ),
       ],
       inProgress: [
-        line('wait', 'npc_hesta', 'Mossbloom. The Weald is full of it if you look down.', [
-          { text: 'Going.', action: 'close', goto: '' },
-        ]),
+        // Was "the Weald is full of it if you look down" — the placed mossbloom
+        // is 360 m NORTH of the cut, so the game's answer to "where does it
+        // grow?" pointed at ground with none on it. Prose is an affordance too.
+        line(
+          'wait',
+          'npc_hesta',
+          'Deep north, past the cut, where the light gives out. Look down.',
+          [{ text: 'Going.', action: 'close', goto: '' }],
+        ),
       ],
       complete: [
         line('done', 'npc_hesta', 'He talked, then. Thank the roots for that.', [
@@ -687,7 +713,7 @@ export const QUEST_DEFS = [
         enemyTag: null,
         count: 1,
         trackerText: 'The Mushroom King',
-        hint: { x: -150, z: 60, radius: 60 },
+        hint: { x: 0, z: 140, radius: 30 },
         hooks: [{ hook: 'toast', text: 'The Weald is quiet again. Properly, this time.' }],
       },
     ],
