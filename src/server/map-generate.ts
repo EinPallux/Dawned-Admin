@@ -38,6 +38,7 @@ import {
   WORLD_ORIGIN_M,
   baseSplat,
   setSplatTexel,
+  zoneSchema,
 } from '@dawned/shared';
 import {
   DEFAULT_WORLD_EROSION,
@@ -46,11 +47,12 @@ import {
   type SplatRule,
   WorldHeightField,
   erodeField,
+  resolveSplatZones,
   slopeAt,
   splatLayerAt,
   synthWorld,
 } from '../shared-ext/terrain-synth.js';
-import { type DraftChunk, emptyChunk, loadAllChunks, saveChunk } from './map-draft.js';
+import { type DraftChunk, emptyChunk, listObjects, loadAllChunks, saveChunk } from './map-draft.js';
 import type { Db } from './db.js';
 
 /** Chunk upserts per batch — the same 64 the editor's own save endpoint takes. */
@@ -111,6 +113,18 @@ export const generateWorld = async (
     }
   }
 
+  // A palette names its zone; the zone's real polygon comes from the draft's
+  // own `zone` layer, so the paint and the region cannot describe different
+  // ground. Resolved BEFORE anything is written — an unknown zone id is an
+  // error, and it should be one before 1024 chunks have been rewritten.
+  const zoneRows = await listObjects(db, ['zone']);
+  const zonePolygons = new Map<string, readonly (readonly [number, number])[]>();
+  for (const row of zoneRows) {
+    const parsed = zoneSchema.safeParse(row.def);
+    if (parsed.success) zonePolygons.set(parsed.data.id, parsed.data.polygon);
+  }
+  const splatRules = resolveSplatZones(request.splatRules, zonePolygons);
+
   onProgress('Synthesising islands…', 0.08);
   const field = new WorldHeightField(WORLD_CHUNKS, WORLD_ORIGIN_M);
   const synth = synthWorld(field, request.masks, request.seaLevel, OCEAN_FLOOR_Y);
@@ -155,7 +169,7 @@ export const generateWorld = async (
         const gz = Math.min(field.side - 1, Math.round(baseGz + (iz + 0.5) * texelSize));
         const height = field.get(gx, gz);
         const layer = splatLayerAt(
-          request.splatRules,
+          splatRules,
           height,
           slopeAt(field, gx, gz),
           field.worldX(gx),

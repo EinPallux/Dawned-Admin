@@ -26,6 +26,7 @@ import {
   erodeField,
   insidePolygon,
   slopeAt,
+  resolveSplatZones,
   splatLayerAt,
   synthWorld,
 } from '../../src/shared-ext/terrain-synth.js';
@@ -200,6 +201,12 @@ for (const strait of STRAITS) {
 console.log('');
 
 // --- unpainted texels -----------------------------------------------------
+// The same resolution the server does: a palette names its zone, and the ring
+// comes from the zone itself rather than from a copy inside the rule.
+const resolvedRules = resolveSplatZones(
+  SPLAT_RULES,
+  new Map(ZONES.map((zone) => [zone.id, zone.polygon])),
+);
 let unpainted = 0;
 let painted = 0;
 for (let gz = 0; gz < field.side; gz += 2) {
@@ -207,7 +214,7 @@ for (let gz = 0; gz < field.side; gz += 2) {
     const h = field.get(gx, gz);
     if (h <= SEA_LEVEL + 0.2) continue;
     const layer = splatLayerAt(
-      SPLAT_RULES,
+      resolvedRules,
       h,
       slopeAt(field, gx, gz),
       field.worldX(gx),

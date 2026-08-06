@@ -110,6 +110,11 @@ const splatRuleSchema = z
       .array(z.tuple([z.number(), z.number()]))
       .min(3)
       .optional(),
+    // Preferred over `polygon` for authoring: the server resolves it against
+    // the draft's own zone layer, so the paint and the region cannot describe
+    // different ground. Also the only thing that FITS — six rings of 28 corners
+    // is 15 kB of JSON, and this plan rides in the URL of an SSE request.
+    zoneId: z.string().min(1).max(64).optional(),
   })
   .strict();
 

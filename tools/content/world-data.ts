@@ -419,16 +419,16 @@ function ring(
  * editor and obvious in the game.
  */
 const palette = (
-  polygon: readonly [number, number][],
+  zoneId: string,
   ground: number,
   highland: number,
   steepLayer: number = SPLAT.ROCK,
 ): SplatRule[] => [
-  { layer: SPLAT.SAND, minSlopeDeg: 0, maxSlopeDeg: 90, minHeight: -999, maxHeight: 999, polygon },
-  { layer: ground, minSlopeDeg: 0, maxSlopeDeg: 30, minHeight: 2.5, maxHeight: 999, polygon },
-  { layer: SPLAT.DIRT, minSlopeDeg: 22, maxSlopeDeg: 34, minHeight: 2.5, maxHeight: 999, polygon },
-  { layer: steepLayer, minSlopeDeg: 34, maxSlopeDeg: 90, minHeight: -999, maxHeight: 999, polygon },
-  { layer: highland, minSlopeDeg: 0, maxSlopeDeg: 26, minHeight: 34, maxHeight: 999, polygon },
+  { layer: SPLAT.SAND, minSlopeDeg: 0, maxSlopeDeg: 90, minHeight: -999, maxHeight: 999, zoneId },
+  { layer: ground, minSlopeDeg: 0, maxSlopeDeg: 30, minHeight: 2.5, maxHeight: 999, zoneId },
+  { layer: SPLAT.DIRT, minSlopeDeg: 22, maxSlopeDeg: 34, minHeight: 2.5, maxHeight: 999, zoneId },
+  { layer: steepLayer, minSlopeDeg: 34, maxSlopeDeg: 90, minHeight: -999, maxHeight: 999, zoneId },
+  { layer: highland, minSlopeDeg: 0, maxSlopeDeg: 26, minHeight: 34, maxHeight: 999, zoneId },
 ];
 
 export const SPLAT_RULES: SplatRule[] = [
@@ -438,12 +438,12 @@ export const SPLAT_RULES: SplatRule[] = [
   { layer: SPLAT.GRASS, minSlopeDeg: 0, maxSlopeDeg: 30, minHeight: 2.5, maxHeight: 999 },
   { layer: SPLAT.ROCK, minSlopeDeg: 34, maxSlopeDeg: 90, minHeight: -999, maxHeight: 999 },
   // Then each zone paints its own.
-  ...palette(ZONE_RINGS.dawnshore, SPLAT.GRASS, SPLAT.LUSH),
-  ...palette(ZONE_RINGS.verdant_weald, SPLAT.LUSH, SPLAT.LUSH),
-  ...palette(ZONE_RINGS.emberwood, SPLAT.REDLEAF, SPLAT.REDLEAF),
-  ...palette(ZONE_RINGS.sungraze, SPLAT.DIRT, SPLAT.SAND),
-  ...palette(ZONE_RINGS.ashcrag, SPLAT.ASH, SPLAT.ASH, SPLAT.ASH),
-  ...palette(ZONE_RINGS.elder_grove, SPLAT.LUSH, SPLAT.LUSH),
+  ...palette('dawnshore', SPLAT.GRASS, SPLAT.LUSH),
+  ...palette('verdant_weald', SPLAT.LUSH, SPLAT.LUSH),
+  ...palette('emberwood', SPLAT.REDLEAF, SPLAT.REDLEAF),
+  ...palette('sungraze', SPLAT.DIRT, SPLAT.SAND),
+  ...palette('ashcrag', SPLAT.ASH, SPLAT.ASH, SPLAT.ASH),
+  ...palette('elder_grove', SPLAT.LUSH, SPLAT.LUSH),
   // The Dawnsea gets no palette of its own. Its ring exists so the sandbars
   // have a zone to stand in, and the world-wide base rules above — sand at the
   // waterline, grass on a gentle crown, rock where it is steep — are already

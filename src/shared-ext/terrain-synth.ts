@@ -344,7 +344,41 @@ export interface SplatRule {
    * be wrong.
    */
   readonly polygon?: readonly (readonly [number, number])[];
+  /**
+   * Names a zone in the map draft, whose polygon becomes this rule's ring.
+   *
+   * This is how a palette is authored: a rule saying "the Weald's ground cover"
+   * rather than carrying 28 corners of its own. Two reasons it is not just a
+   * convenience — a plan carrying six zone rings is 15 kB, which does not fit
+   * in the URL an SSE endpoint has to be requested with; and a copied polygon
+   * is a copy that can go stale the first time somebody drags a zone corner,
+   * leaving the paint and the zone describing different ground.
+   */
+  readonly zoneId?: string;
 }
+
+/**
+ * Resolve every `zoneId` into the polygon that zone really has.
+ *
+ * Throws rather than skipping: a rule pointing at a zone that is not there
+ * would silently apply to the WHOLE WORLD (no polygon means no restriction),
+ * repainting five zones with a sixth one's palette.
+ */
+export const resolveSplatZones = (
+  rules: readonly SplatRule[],
+  zonePolygons: ReadonlyMap<string, readonly (readonly [number, number])[]>,
+): SplatRule[] =>
+  rules.map((rule) => {
+    if (rule.zoneId === undefined) return rule;
+    const polygon = zonePolygons.get(rule.zoneId);
+    if (!polygon) {
+      throw new Error(
+        `splat rule names zone "${rule.zoneId}", which is not in the map draft — ` +
+          'an unresolved rule would paint the entire world',
+      );
+    }
+    return { ...rule, polygon };
+  });
 
 /** Even-odd point-in-polygon — the same rule as shared's `pointInPolygon`. */
 export const insidePolygon = (
