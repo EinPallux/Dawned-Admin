@@ -21,6 +21,7 @@ import {
   WORLD_GEN_PLAN,
   ZONES,
 } from './world-data.js';
+import { SETTLEMENTS, SHRINES, buildingWorldPos } from './settlement-data.js';
 import {
   type IslandMask,
   WorldHeightField,
@@ -230,6 +231,62 @@ for (const strait of STRAITS) {
   console.log(
     `${strait.id.padEnd(28)} ${deepest.toFixed(1).padStart(8)} m   ` +
       (deepest < SEA_LEVEL ? 'open water' : '❌ walkable all along — the bridge gates nothing'),
+  );
+}
+console.log('');
+
+// --- can you build there? --------------------------------------------------
+// The whole point of a plateau is that a house does not stand on a slope. That
+// is not visible in the mask numbers, so it is measured: the height spread
+// under a settlement's own buildings, and the steepest ground any of them sits
+// on. WORLD.md §6 makes anything past 55° unwalkable — a building there is a
+// building you cannot reach the door of.
+const groundAt = (x: number, z: number): number =>
+  field.get(
+    Math.min(field.side - 1, Math.max(0, Math.round(x - ORIGIN))),
+    Math.min(field.side - 1, Math.max(0, Math.round(z - ORIGIN))),
+  );
+const slopeAtWorld = (x: number, z: number): number =>
+  slopeAt(
+    field,
+    Math.min(field.side - 1, Math.max(0, Math.round(x - ORIGIN))),
+    Math.min(field.side - 1, Math.max(0, Math.round(z - ORIGIN))),
+  );
+
+console.log('settlement        buildings  ground spread   steepest  verdict');
+for (const town of SETTLEMENTS) {
+  let lo = Infinity;
+  let hi = -Infinity;
+  let steepest = 0;
+  let drowned = 0;
+  for (const building of town.buildings) {
+    const at = buildingWorldPos(town, building);
+    const y = groundAt(at.x, at.z);
+    lo = Math.min(lo, y);
+    hi = Math.max(hi, y);
+    steepest = Math.max(steepest, slopeAtWorld(at.x, at.z));
+    if (y <= SEA_LEVEL) drowned++;
+  }
+  const spread = hi - lo;
+  // A jetty is SUPPOSED to reach past the waterline; anything else under water
+  // is a mistake. Dawnhaven's dock is the one building allowed to be wet.
+  const wetOk = town.id === 'dawnshore' ? 1 : 0;
+  const ok = spread < 6 && steepest < 25 && drowned <= wetOk + 1;
+  console.log(
+    `${town.name.padEnd(16)} ${String(town.buildings.length).padStart(9)}  ` +
+      `${spread.toFixed(1).padStart(9)} m  ${steepest.toFixed(0).padStart(7)}°  ` +
+      (ok ? '✅ buildable' : `⚠️  ${drowned} in water, spread ${spread.toFixed(1)} m`),
+  );
+}
+console.log('');
+
+console.log('shrine                      ground   in a settlement');
+for (const shrine of SHRINES) {
+  const y = groundAt(shrine.x, shrine.z);
+  console.log(
+    `${shrine.name.padEnd(26)} ${y.toFixed(1).padStart(6)} m   ` +
+      (shrine.town ?? '—').padEnd(12) +
+      (y > SEA_LEVEL + 0.5 ? '' : '  ❌ under water'),
   );
 }
 console.log('');

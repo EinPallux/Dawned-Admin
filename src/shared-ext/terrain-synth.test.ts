@@ -436,3 +436,56 @@ describe('point in polygon', () => {
     expect(insidePolygon(cw, 15, 5)).toBe(false);
   });
 });
+
+describe('plateaus — buildable ground for settlements', () => {
+  const shelf = (over: Partial<IslandMask> = {}): IslandMask =>
+    island({ id: 'square', kind: 'plateau', radius: 60, peak: 20, roughness: 0, ...over });
+
+  it('levels its core to the target height', () => {
+    const f = field(6);
+    synthWorld(f, [island({ id: 'a', radius: 220, peak: 40 }), shelf()], SEA, FLOOR);
+    const mid = Math.floor(f.side / 2);
+    // Everything inside the flat core reads exactly the target, which is what
+    // "you can put a house here" means.
+    for (let d = 0; d <= 30; d += 6) {
+      expect(f.get(mid + d, mid)).toBeCloseTo(20, 4);
+      expect(f.get(mid, mid + d)).toBeCloseTo(20, 4);
+    }
+  });
+
+  it('eases out to a slope you can still walk up', () => {
+    const f = field(6);
+    synthWorld(f, [island({ id: 'a', radius: 220, peak: 40, roughness: 0 }), shelf()], SEA, FLOOR);
+    const mid = Math.floor(f.side / 2);
+    // The bar is WORLD.md §6's auto-unwalkable line, not a number picked for
+    // the test: a shelf whose edge is a cliff is a quarry, and a village you
+    // cannot walk out of is worse than one on a slope. Same trade the carve
+    // makes — steepness is the height difference over the easing band, so a
+    // deeper cut into steeper ground needs a wider plateau.
+    let worst = 0;
+    for (let d = 0; d < 90; d++) {
+      worst = Math.max(worst, Math.abs(f.get(mid + d + 1, mid) - f.get(mid + d, mid)));
+    }
+    expect((Math.atan(worst) * 180) / Math.PI).toBeLessThan(55);
+  });
+
+  it('lowers ground as readily as it raises it', () => {
+    // A plateau BLENDS toward its target — a settlement on a shoulder needs the
+    // knoll taken off as much as the dip filled in.
+    const f = field(6);
+    synthWorld(
+      f,
+      [island({ id: 'a', radius: 220, peak: 60, roughness: 0 }), shelf({ peak: 8 })],
+      SEA,
+      FLOOR,
+    );
+    const mid = Math.floor(f.side / 2);
+    expect(f.get(mid, mid)).toBeCloseTo(8, 4);
+  });
+
+  it('is not a landmass of its own', () => {
+    const f = field(6);
+    const report = synthWorld(f, [island({ id: 'a', radius: 220, peak: 40 }), shelf()], SEA, FLOOR);
+    expect(report.perIsland['square']).toBeUndefined();
+  });
+});

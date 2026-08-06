@@ -41,7 +41,8 @@ export interface IslandMask {
   /**
    * `land` raises (default); `carve` cuts a channel through whatever is there;
    * `causeway` raises a neck back up AFTER the carves, which is how a bridge
-   * gets built.
+   * gets built; `plateau` LEVELS what is there toward `peak`, which is how a
+   * settlement gets ground it can be built on.
    *
    * Walkability comes from the terrain heightfield, not from props — a bridge
    * model laid across a channel is scenery you swim underneath. So a crossing
@@ -49,7 +50,7 @@ export interface IslandMask {
    * dressed with plank props on top. The game repo's USER_QUESTIONS Q30 carries
    * that decision and its alternative (giving props real collision).
    */
-  readonly kind?: 'land' | 'carve' | 'causeway';
+  readonly kind?: 'land' | 'carve' | 'causeway' | 'plateau';
   readonly seed: number;
   readonly centerX: number;
   readonly centerZ: number;
@@ -160,6 +161,46 @@ export const maskHeightAt = (
 };
 
 /**
+ * How strongly a `plateau` pulls the ground toward its target, 0–1, or `null`
+ * outside it.
+ *
+ * A flat core with a soft edge, not a dome: `1 - d²` alone would only fully
+ * level the single vertex at the centre and leave a bowl. So the inner 55 % is
+ * pulled all the way and the rest eases out — a village square you can build on,
+ * with the hillside running off it.
+ *
+ * `roughness` still buys a little noise on the EDGE so the shelf's outline is
+ * not a perfect ellipse from the air.
+ */
+export const plateauFalloffAt = (
+  mask: IslandMask,
+  noise: (x: number, z: number) => number,
+  x: number,
+  z: number,
+): number | null => {
+  let dx = x - mask.centerX;
+  let dz = z - mask.centerZ;
+  if (mask.rotation) {
+    const cos = Math.cos(-mask.rotation);
+    const sin = Math.sin(-mask.rotation);
+    const rx = dx * cos - dz * sin;
+    const rz = dx * sin + dz * cos;
+    dx = rx;
+    dz = rz;
+  }
+  dx /= mask.stretchX ?? 1;
+  dz /= mask.stretchZ ?? 1;
+  const wobble = mask.roughness * 0.25 * (noise(x * 0.05, z * 0.05) - 0.5);
+  const d = Math.hypot(dx, dz) / mask.radius + wobble;
+  if (d >= 1) return null;
+  const CORE = 0.55;
+  if (d <= CORE) return 1;
+  const t = (d - CORE) / (1 - CORE);
+  // Smoothstep out, so the shelf meets the slope without a crease.
+  return 1 - t * t * (3 - 2 * t);
+};
+
+/**
  * The whole world as one height field, so erosion and slope reads do not have to
  * care where the chunk boundaries are.
  *
@@ -245,9 +286,11 @@ export const synthWorld = (
   const lands = masks.filter((mask) => (mask.kind ?? 'land') === 'land');
   const carves = masks.filter((mask) => mask.kind === 'carve');
   const causeways = masks.filter((mask) => mask.kind === 'causeway');
+  const plateaus = masks.filter((mask) => mask.kind === 'plateau');
   const landNoises = lands.map((mask) => makeNoise(mask.seed));
   const carveNoises = carves.map((mask) => makeNoise(mask.seed));
   const causewayNoises = causeways.map((mask) => makeNoise(mask.seed));
+  const plateauNoises = plateaus.map((mask) => makeNoise(mask.seed));
   const perIsland: Record<string, number> = {};
   for (const mask of lands) perIsland[mask.id] = 0;
   let land = 0;
@@ -295,6 +338,16 @@ export const synthWorld = (
       // takes the max rather than adding, so a deck laid over dry land leaves
       // the hill alone instead of stacking a ramp on it.
       if (deck > best) best = deck;
+      // Last of all: level the ground for anything built on it. A plateau
+      // BLENDS toward its target rather than setting it — full at the centre,
+      // nothing at the rim — so a village sits on a shelf with slopes running
+      // off it instead of inside a cylinder punched out of the hillside.
+      for (let i = 0; i < plateaus.length; i++) {
+        const mask = plateaus[i]!;
+        const pull = plateauFalloffAt(mask, plateauNoises[i]!, x, z);
+        if (pull === null) continue;
+        best += (mask.peak - best) * pull;
+      }
       field.set(gx, gz, best);
       if (best > seaLevel + 0.2) {
         land++;

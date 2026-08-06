@@ -28,6 +28,7 @@
  */
 
 import type { IslandMask, SplatRule } from '../../src/shared-ext/terrain-synth.js';
+import { SETTLEMENT_PLATEAUS } from './settlement-data.js';
 import type { Zone } from '@dawned/shared';
 
 /** Sea level. The water plane sits at y = 0 and everything is measured from it. */
@@ -672,7 +673,10 @@ export const ZONES: Zone[] = [
 export const WORLD_GEN_PLAN = {
   // Order matters only for the carves, which are applied after every land mask
   // whatever their position in this list — see `synthWorld`.
-  masks: [...ISLANDS, ...ISLETS, ...STRAITS, ...BRIDGES],
+  // Order in this list does not matter — `synthWorld` runs land, then carves,
+  // then causeways, then plateaus, whatever order they arrive in. It is written
+  // in that order anyway so the file reads the way the world is built.
+  masks: [...ISLANDS, ...ISLETS, ...STRAITS, ...BRIDGES, ...SETTLEMENT_PLATEAUS],
   splatRules: SPLAT_RULES,
   seaLevel: SEA_LEVEL,
   erosion: { passes: 4, minSlopeDeg: 24, strength: 0.5 },
