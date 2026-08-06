@@ -5,6 +5,24 @@ versions track the game's release trains (0.1.0 = tooling that shipped Dawned 0.
 
 ## [Unreleased]
 
+### Added — the world's places and people, placed through this panel (2026-08-06, game P12-F)
+
+- **`pnpm world:places`** resolves 45 POIs, 47 interactables (chests, campfires, signposts, the
+  Elder Arch) and 68 settlement dressing props against the real height field, then publishes.
+- **`pnpm world:folk`** authors 37 NPC definitions on the Quests rail and places 41 of them.
+  **Vendor NPCs stand on their vendor's `anchor`** — that radius is the proximity lease the game
+  checks before it will trade, so a shopkeeper anywhere else offers a trade the server refuses.
+- Both scripts report **where their output stands**, zone by zone, resolved the way `bakeDraft`
+  resolves it — not only how many rows they wrote. A count cannot see a border.
+
+### Fixed — the reachability check could not see a portal (2026-08-06, game P12-F)
+
+- `reachableFrom` flood-filled the walkgrid only, so every POI, chest and camp on the Elder Grove
+  was unpublishable — the validator refusing exactly what WORLD.md §3.6 specifies, a hidden islet
+  reached by "a one-way ancient portal in Ashcrag". A portal is a way to GET somewhere; the fill
+  consumes them as directed edges now, to a fixpoint so they chain, and only once the portal's own
+  mouth is reachable (otherwise a portal sealed inside the far side declares itself the way in).
+
 ### Added — the gathering catalogue is placed through this panel (2026-08-06, game P12-E)
 
 - **`pnpm world:nodes`** re-authors the 21 resource-node definitions and plants **362 placements**

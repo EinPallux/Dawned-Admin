@@ -528,6 +528,35 @@ declares one, so 42 % of the map was an invisible hole and **no fishing node cou
 all**, because "submerged" means ground below its own chunk's water. Two phases passed without it
 because nothing had needed water to EXIST. **261 tests green here.**
 
+**Game P12-F peopled the world through this panel (2026-08-06)** — `pnpm world:places` and
+`pnpm world:folk`: 45 POIs, 47 interactables, 68 settlement dressing props and 41 NPC placements,
+with 37 NPC definitions on the Quests rail. The game reports **41 NPCs, 61 interactables, 46 POIs,
+0 orphans**. Both scripts resolve WISHES through the same `placeAll` the camps and gathering
+clusters use, and both report **where their output STANDS** (zone by zone, resolved the way
+`bakeDraft` resolves it) rather than only how much of it there is — P12-E's lesson, since a count
+cannot see a border.
+**A vendor NPC's position is not a free choice.** A vendor row carries an `anchor` whose radius is
+the proximity lease the GAME checks before it will open a trade, and the schema's own comment says
+that anchor exists "until P12 places the real NPC". So `world:folk` reads the published anchors and
+stands each shopkeeper on theirs. Put the body anywhere else and `F` offers a trade the server then
+refuses — which looks like it works, which is the worst kind of wrong.
+**The bug that mattered is this panel's, and it is the clearest case yet of a check modelling the
+wrong thing.** Publish refused all five Elder Grove rows as "cannot be walked to from the spawn".
+That was RIGHT — the Grove has no causeway and the ocean around it is disabled chunks — but the
+fix is not to soften the check. `reachableFrom` only walked the walkgrid, and **a portal is a way
+to GET somewhere; that is the whole of what it is**. So the fill was wrong about everything behind
+any portal, and would have refused exactly what WORLD.md §3.6 specifies ("a one-way ancient portal
+in Ashcrag"). It consumes portals as directed edges now, to a fixpoint so they can chain, and only
+once the portal's own mouth is reachable — otherwise a portal sealed inside the far side would
+declare itself the way in. +3 tests. (The content was also authored backwards: the arch had been
+placed in the Grove pointing out. It stands in Ashcrag now.)
+**Two script rules re-confirmed.** Layer ownership still decides clearing: `npc` is the script's
+alone so `world:folk` clears it, while `poi`, `interactable` and `prop` are shared with hand
+placement and are upserted by id with the owned ids printed. And the publish cross-checks earn
+their keep — the run caught a `vendor`-role NPC with no `vendorId` (her `F` would have opened
+nothing) and warns, correctly, that eleven new quest givers are named by no quest yet.
+**Still owed on the game side: the ~20 remaining side quests.** **264 tests green here.**
+
 ### Running it locally
 
 ```bash
@@ -540,4 +569,6 @@ node tools/smoke/quest-editor.mjs   # the quest editor, in a real browser (clean
 node tools/content/author-quests.mjs  # re-author + re-place the P11 pilot set (PUBLISHES a map)
 pnpm world:bestiary                 # 50 enemies + 124 camps (PUBLISHES content, writes the map layer)
 pnpm world:nodes                    # 21 node definitions + 362 placements (PUBLISHES content + a map)
+pnpm world:places                   # 45 POIs + 47 interactables + 68 town props (PUBLISHES a map)
+pnpm world:folk                     # 37 NPC defs + 41 placements (PUBLISHES content + a map)
 ```
