@@ -28,6 +28,7 @@
  */
 
 import { openAdminSession } from './admin-session.mjs';
+import { ownerEditGuards } from './owner-edits.mjs';
 import { CHUNK_SIZE_M, WORLD_ORIGIN_M } from '@dawned/shared';
 import { INTERACTABLES, NPC_DEFS, NPC_PLACEMENTS, POIS, QUEST_DEFS } from './quest-data.mjs';
 
@@ -68,9 +69,16 @@ const main = async () => {
 
   // --- 1. NPCs + quests ----------------------------------------------------
 
-  for (const def of NPC_DEFS) await put('npcs', def);
+  // Never revert something the owner retuned in the panel (owner-edits.mjs).
+  const guard = await ownerEditGuards([
+    ['npcs', 'content_npcs'],
+    ['quests', 'content_quests'],
+  ]);
+
+  for (const def of NPC_DEFS) if (guard.mayWrite('npcs', def.id, def)) await put('npcs', def);
   ok(`${NPC_DEFS.length} NPCs saved as drafts`);
-  for (const def of QUEST_DEFS) await put('quests', def);
+  for (const def of QUEST_DEFS) if (guard.mayWrite('quests', def.id, def)) await put('quests', def);
+  guard.report();
   ok(`${QUEST_DEFS.length} quests saved as drafts`);
 
   /**
@@ -101,6 +109,11 @@ const main = async () => {
         : `game NOT reloaded: ${result.payload.reload?.note}`,
     );
   }
+
+  // AFTER the publish: recording before it would claim ownership of rows a
+  // refused publish never wrote, and the next run would then overwrite the
+  // owner's version believing it had written that value itself.
+  await guard.commit();
 
   if (SKIP_MAP) {
     console.log('\n📜 Quests are live content. Placements skipped (--no-map).\n');

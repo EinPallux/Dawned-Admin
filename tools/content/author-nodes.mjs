@@ -27,6 +27,7 @@
  */
 
 import { openAdminSession } from './admin-session.mjs';
+import { ownerEditGuards } from './owner-edits.mjs';
 import { CHUNK_SIZE_M, WORLD_CHUNKS, WORLD_ORIGIN_M, pointInPolygon } from '@dawned/shared';
 import { ITEM_DEFS, NODE_DEFS } from './node-data.mjs';
 import { buildNodeClusters } from './node-clusters.mjs';
@@ -89,7 +90,13 @@ const main = async () => {
 
   // --- 1. items -----------------------------------------------------------
 
-  for (const def of ITEM_DEFS) await put('items', def);
+  // Never revert something the owner retuned in the panel (owner-edits.mjs).
+  const guard = await ownerEditGuards([
+    ['items', 'content_items'],
+    ['nodes', 'content_resource_nodes'],
+  ]);
+
+  for (const def of ITEM_DEFS) if (guard.mayWrite('items', def.id, def)) await put('items', def);
   ok(`${ITEM_DEFS.length} materials, gems, procs and fish saved as drafts`);
 
   /**
@@ -158,7 +165,9 @@ const main = async () => {
 
   // --- 2. resource-node definitions ---------------------------------------
 
-  for (const def of NODE_DEFS) await put('resource-nodes', def);
+  for (const def of NODE_DEFS)
+    if (guard.mayWrite('nodes', def.id, def)) await put('resource-nodes', def);
+  guard.report();
   ok(`${NODE_DEFS.length} resource-node definitions saved as drafts`);
 
   const nodePublish = await publishOrAlreadyLive(
@@ -172,6 +181,11 @@ const main = async () => {
         : `game NOT reloaded: ${nodePublish.reload.note}`,
     );
   }
+
+  // AFTER the publishes: recording before them would claim ownership of rows a
+  // refused publish never wrote, and the next run would then overwrite the
+  // owner's version believing it had written that value itself.
+  await guard.commit();
 
   if (SKIP_MAP) {
     console.log('\n🌿 Definitions are live. Placements skipped (--no-map).\n');

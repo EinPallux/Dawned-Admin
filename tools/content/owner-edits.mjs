@@ -56,6 +56,35 @@ export const stableHash = (value) => {
 };
 
 /**
+ * One guard covering several tables at once — most scripts author more than one
+ * kind on a single rail (items + loot + vendors; enemies + spawners).
+ *
+ * @param {[string, string][]} pairs  [kind, published table] pairs
+ * @param {object} [opts]
+ * @returns {Promise<{ mayWrite: (kind: string, id: string, def: unknown) => boolean,
+ *                     commit: () => Promise<number>, report: () => void }>}
+ */
+export const ownerEditGuards = async (pairs, opts = {}) => {
+  const guards = new Map();
+  for (const [kind, table] of pairs) guards.set(kind, await ownerEditGuard(kind, table, opts));
+  return {
+    mayWrite(kind, id, def) {
+      const guard = guards.get(kind);
+      if (!guard) throw new Error(`ownerEditGuards: no guard for kind "${kind}"`);
+      return guard.mayWrite(id, def);
+    },
+    async commit() {
+      let total = 0;
+      for (const guard of guards.values()) total += await guard.commit();
+      return total;
+    },
+    report() {
+      for (const guard of guards.values()) guard.report();
+    },
+  };
+};
+
+/**
  * @param {string} kind   the publish rail: 'items' | 'enemies' | 'quests' | …
  * @param {string} table  the published table to read live rows from
  * @param {object} [opts]
@@ -132,24 +161,39 @@ export const ownerEditGuard = async (kind, table, opts = {}) => {
      * Record what this run actually published. Call AFTER a successful publish —
      * recording before it would claim ownership of rows a refused publish never
      * wrote, and the next run would then happily overwrite the owner's version.
+     *
+     * It re-reads the LIVE rows rather than hashing what the script sent, and
+     * that distinction is the whole thing working: the panel `.parse()`s every
+     * def on save, so defaults get filled in and the stored row is not byte-equal
+     * to what was posted. Hashing the sent version made the first re-run report
+     * **200 rows as owner-edited** on a database nobody had touched. The question
+     * being asked is "does the row still look the way it did when the script last
+     * wrote it", so both sides of the comparison have to be the stored row.
      */
     async commit() {
       if (pending.size === 0) return 0;
       const client = new pg.Client({ connectionString: databaseUrl });
       await client.connect();
       try {
-        for (const [id, hash] of pending) {
+        const stored = await client.query(
+          `select id, def from ${table} where status = 'published' and id = any($1::text[])`,
+          [[...pending.keys()]],
+        );
+        let written = 0;
+        for (const row of stored.rows) {
+          const def = typeof row.def === 'string' ? JSON.parse(row.def) : row.def;
           await client.query(
             `insert into content_authored (kind, row_id, hash, authored_at)
              values ($1, $2, $3, now())
              on conflict (kind, row_id) do update set hash = $3, authored_at = now()`,
-            [kind, id, hash],
+            [kind, row.id, stableHash(def)],
           );
+          written++;
         }
+        return written;
       } finally {
         await client.end();
       }
-      return pending.size;
     },
     report() {
       if (adopted.length > 0) {
