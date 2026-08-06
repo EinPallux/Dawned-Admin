@@ -449,6 +449,61 @@ describe('reachability', () => {
     expect(report.problems.join(' ')).toContain('poi_far cannot be walked to');
     expect(report.problems.join(' ')).not.toContain('poi_near');
   });
+
+  it('walks through a portal — it is a way to get somewhere', () => {
+    // WORLD.md §3.6: the Elder Grove is an islet with no causeway, reached by a
+    // long swim or "a one-way ancient portal in Ashcrag". A fill that only walks
+    // the walkgrid refuses every POI, chest and camp on it — the validator
+    // rejecting exactly the design the world doc specifies.
+    const grid = Walkgrid.empty(WalkClass.Blocked);
+    for (let i = 0; i < 10; i++) grid.setClassAtCell(100 + i, 100, WalkClass.Walkable);
+    // A second, entirely disconnected patch 200 m away.
+    for (let i = 0; i < 10; i++) grid.setClassAtCell(300 + i, 300, WalkClass.Walkable);
+    const start = { x: WORLD_ORIGIN_M + 100.5, z: WORLD_ORIGIN_M + 100.5 };
+    const islet = { x: WORLD_ORIGIN_M + 303, z: WORLD_ORIGIN_M + 300 };
+
+    const withoutPortal = reachableFrom(grid, start.x, start.z);
+    expect(isReachable(withoutPortal, islet.x, islet.z)).toBe(false);
+
+    const withPortal = reachableFrom(grid, start.x, start.z, [
+      { x: WORLD_ORIGIN_M + 105, z: WORLD_ORIGIN_M + 100, destX: islet.x, destZ: islet.z },
+    ]);
+    expect(isReachable(withPortal, islet.x, islet.z)).toBe(true);
+  });
+
+  it('ignores a portal whose own mouth cannot be reached', () => {
+    // Otherwise a portal placed inside the sealed area would declare itself the
+    // way in, and the check would pass for content nobody can get to at all.
+    const grid = Walkgrid.empty(WalkClass.Blocked);
+    for (let i = 0; i < 10; i++) grid.setClassAtCell(100 + i, 100, WalkClass.Walkable);
+    for (let i = 0; i < 10; i++) grid.setClassAtCell(300 + i, 300, WalkClass.Walkable);
+    const start = { x: WORLD_ORIGIN_M + 100.5, z: WORLD_ORIGIN_M + 100.5 };
+    const seen = reachableFrom(grid, start.x, start.z, [
+      // Mouth on the FAR patch, destination further out still.
+      {
+        x: WORLD_ORIGIN_M + 305,
+        z: WORLD_ORIGIN_M + 300,
+        destX: WORLD_ORIGIN_M + 500,
+        destZ: WORLD_ORIGIN_M + 500,
+      },
+    ]);
+    expect(isReachable(seen, WORLD_ORIGIN_M + 500, WORLD_ORIGIN_M + 500)).toBe(false);
+  });
+
+  it('chains portals to a fixpoint', () => {
+    const grid = Walkgrid.empty(WalkClass.Blocked);
+    for (const base of [100, 300, 500]) {
+      for (let i = 0; i < 10; i++) grid.setClassAtCell(base + i, base, WalkClass.Walkable);
+    }
+    const at = (n: number) => ({ x: WORLD_ORIGIN_M + n + 3, z: WORLD_ORIGIN_M + n });
+    // Declared out of order on purpose: the second hop is listed FIRST, so a
+    // single pass over the list would miss it.
+    const seen = reachableFrom(grid, WORLD_ORIGIN_M + 100.5, WORLD_ORIGIN_M + 100.5, [
+      { ...at(300), destX: at(500).x, destZ: at(500).z },
+      { ...at(100), destX: at(300).x, destZ: at(300).z },
+    ]);
+    expect(isReachable(seen, at(500).x, at(500).z)).toBe(true);
+  });
 });
 
 describe('scatter', () => {

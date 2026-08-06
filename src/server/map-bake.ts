@@ -168,7 +168,25 @@ interface SolidFootprint {
  * cannot reach is content nobody will ever see, which MAP_EDITOR.md §4 calls an
  * error rather than a warning — and rightly: it is invisible in the viewport.
  */
-const reachableFrom = (grid: Walkgrid, spawnX: number, spawnZ: number): Uint8Array => {
+const reachableFrom = (
+  grid: Walkgrid,
+  spawnX: number,
+  spawnZ: number,
+  /**
+   * Portals, as directed edges.
+   *
+   * A portal is a way to GET somewhere — that is the whole of what it is — so a
+   * reachability fill that only walks the walkgrid is wrong about everything
+   * behind one. WORLD.md §3.6 makes this concrete: the Elder Grove is an islet
+   * with no causeway, reachable by a long swim or "a one-way ancient portal in
+   * Ashcrag", and without this every POI, chest and NPC on it is unpublishable
+   * — the validator refusing exactly the design the world doc specifies.
+   *
+   * Consumed to a fixpoint so portals can chain: reaching one seeds its
+   * destination, which may put a second portal in range.
+   */
+  portals: readonly { x: number; z: number; destX: number | null; destZ: number | null }[] = [],
+): Uint8Array => {
   const seen = new Uint8Array(WORLD_SIZE_M * WORLD_SIZE_M);
   const startX = cellOf(spawnX);
   const startZ = cellOf(spawnZ);
@@ -186,15 +204,34 @@ const reachableFrom = (grid: Walkgrid, spawnX: number, spawnZ: number): Uint8Arr
     seen[index] = 1;
     queue[tail++] = index;
   };
+  const drain = (): void => {
+    while (head < tail) {
+      const index = queue[head++]!;
+      const ix = index % WORLD_SIZE_M;
+      const iz = (index / WORLD_SIZE_M) | 0;
+      if (ix > 0) push(ix - 1, iz);
+      if (ix < WORLD_SIZE_M - 1) push(ix + 1, iz);
+      if (iz > 0) push(ix, iz - 1);
+      if (iz < WORLD_SIZE_M - 1) push(ix, iz + 1);
+    }
+  };
   push(startX, startZ);
-  while (head < tail) {
-    const index = queue[head++]!;
-    const ix = index % WORLD_SIZE_M;
-    const iz = (index / WORLD_SIZE_M) | 0;
-    if (ix > 0) push(ix - 1, iz);
-    if (ix < WORLD_SIZE_M - 1) push(ix + 1, iz);
-    if (iz > 0) push(ix, iz - 1);
-    if (iz < WORLD_SIZE_M - 1) push(ix, iz + 1);
+  drain();
+
+  const pending = portals.filter((portal) => portal.destX !== null && portal.destZ !== null);
+  const used = new Set<number>();
+  for (;;) {
+    let opened = false;
+    for (const [index, portal] of pending.entries()) {
+      if (used.has(index)) continue;
+      // The portal's own mouth has to be walkable-to before it is a way in.
+      if (!isReachable(seen, portal.x, portal.z)) continue;
+      used.add(index);
+      opened = true;
+      push(cellOf(portal.destX!), cellOf(portal.destZ!));
+      drain();
+    }
+    if (!opened) break;
   }
   return seen;
 };
@@ -519,7 +556,12 @@ export const validateDraft = (bundle: DraftBundle): ValidationReport => {
   if (!spawn) {
     problems.push('no walkable spawn point could be found — the world cannot be entered');
   } else {
-    const seen = reachableFrom(grid, spawn.x, spawn.z);
+    const seen = reachableFrom(
+      grid,
+      spawn.x,
+      spawn.z,
+      interactables.filter((row) => row.kind === 'portal'),
+    );
     for (const poi of pois) {
       if (!isReachable(seen, poi.x, poi.z)) {
         unreachable++;
